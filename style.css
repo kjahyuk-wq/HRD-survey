@@ -1,221 +1,334 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  font-family: 'Malgun Gothic', '맑은 고딕', sans-serif;
-  color: #222;
-  min-height: 100vh;
+  font-family: 'Malgun Gothic', '맑은 고딕', Apple SD Gothic Neo, sans-serif;
+  color: #1a1a2e;
 }
 
 /* ════════════════════════════
    로그인 페이지
 ════════════════════════════ */
-#page-login {
-  min-height: 100vh;
-  background: linear-gradient(160deg, #0a1628 0%, #0d2b6b 50%, #1565c0 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2rem 1rem;
-}
+#page-login { min-height: 100vh; background: #f0f4f9; }
 
-.login-bg {
-  width: 100%;
-  max-width: 420px;
+.lp-bg {
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
-  gap: 1.8rem;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5rem 1.2rem;
+  gap: 0;
+  background:
+    linear-gradient(180deg, #0b2560 0%, #1a56b0 55%, #f0f4f9 55%);
 }
 
-.login-top {
+.lp-header {
   text-align: center;
   color: #fff;
+  padding-bottom: 2.2rem;
+  width: 100%;
+  max-width: 400px;
 }
 
-.login-emblem {
-  font-size: 3.2rem;
-  display: block;
-  margin-bottom: 0.6rem;
-}
+.lp-seal { font-size: 3rem; margin-bottom: 0.5rem; }
 
-.login-org {
-  font-size: 0.85rem;
-  color: rgba(255,255,255,0.6);
-  letter-spacing: 1px;
-  margin-bottom: 0.4rem;
-}
-
-.login-title {
-  font-size: 1.55rem;
-  font-weight: 800;
-  color: #fff;
-  margin-bottom: 0.5rem;
-  line-height: 1.3;
-}
-
-.login-sub {
+.lp-org {
   font-size: 0.82rem;
-  color: rgba(255,255,255,0.5);
+  letter-spacing: 1.5px;
+  opacity: 0.75;
+  margin-bottom: 0.7rem;
+}
+
+.lp-title {
+  font-size: 1.75rem;
+  font-weight: 800;
+  line-height: 1.25;
+  margin-bottom: 0.9rem;
+}
+
+.lp-divider {
+  width: 36px;
+  height: 3px;
+  background: rgba(255,255,255,0.5);
+  border-radius: 2px;
+  margin: 0 auto 0.8rem;
+}
+
+.lp-desc {
+  font-size: 0.8rem;
+  opacity: 0.6;
   line-height: 1.5;
 }
 
-.login-form-card {
+.lp-card {
   background: #fff;
   border-radius: 20px;
-  padding: 2rem 1.8rem;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+  padding: 2rem 1.8rem 1.6rem;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: 0 16px 48px rgba(11,37,96,0.18);
+  margin-top: -1rem;
 }
 
-.form-title {
-  font-size: 1.05rem;
-  font-weight: 800;
-  color: #0a1628;
-  margin-bottom: 0.3rem;
+.lp-card-label {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #0b2560;
+  margin-bottom: 1.3rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid #edf0f7;
 }
 
-.form-desc {
-  font-size: 0.82rem;
-  color: #888;
-  margin-bottom: 1.4rem;
-  line-height: 1.5;
-}
-
-.field {
+.lp-field {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
   margin-bottom: 1rem;
 }
 
-.field label {
-  font-size: 0.8rem;
+.lp-field label {
+  font-size: 0.78rem;
   font-weight: 700;
-  color: #444;
+  color: #555;
+  letter-spacing: 0.3px;
 }
 
-.field input {
+.lp-field input {
   padding: 0.82rem 1rem;
-  border: 2px solid #e4eaf3;
-  border-radius: 11px;
-  font-size: 0.98rem;
+  border: 1.5px solid #dce4f0;
+  border-radius: 10px;
+  font-size: 1rem;
   font-family: inherit;
-  color: #222;
-  outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  color: #1a1a2e;
   background: #f7f9fc;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
 }
 
-.field input:focus {
-  border-color: #0066cc;
+.lp-field input:focus {
+  border-color: #1a56b0;
   background: #fff;
-  box-shadow: 0 0 0 3px rgba(0,102,204,0.1);
+  box-shadow: 0 0 0 3px rgba(26,86,176,0.1);
 }
 
-.field input::placeholder { color: #bbb; }
+.lp-field input::placeholder { color: #c0c8d8; }
 
-.form-error {
-  background: #fff0f0;
+.lp-error {
+  background: #fff2f2;
   border: 1px solid #fcc;
   color: #c00;
-  border-radius: 10px;
-  padding: 0.7rem 1rem;
-  font-size: 0.84rem;
+  border-radius: 9px;
+  padding: 0.65rem 0.9rem;
+  font-size: 0.82rem;
   margin-bottom: 1rem;
-  line-height: 1.5;
+  line-height: 1.55;
   white-space: pre-line;
 }
 
 #login-btn {
   width: 100%;
-  padding: 0.9rem;
-  background: linear-gradient(135deg, #003d99, #0066cc);
+  padding: 0.88rem;
+  background: linear-gradient(135deg, #0b2560, #1a56b0);
   color: #fff;
   border: none;
-  border-radius: 12px;
-  font-size: 1rem;
+  border-radius: 11px;
+  font-size: 0.97rem;
   font-weight: 700;
   font-family: inherit;
   cursor: pointer;
-  box-shadow: 0 6px 20px rgba(0,102,204,0.35);
-  transition: transform 0.15s, box-shadow 0.15s;
+  box-shadow: 0 6px 18px rgba(26,86,176,0.35);
+  transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
   margin-bottom: 1rem;
+  letter-spacing: 0.3px;
 }
 
-#login-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(0,102,204,0.4); }
+#login-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 26px rgba(26,86,176,0.4); }
 #login-btn:active { transform: translateY(0); }
-#login-btn:disabled { opacity: 0.7; cursor: not-allowed; transform: none; }
+#login-btn:disabled { opacity: 0.65; cursor: not-allowed; transform: none; }
 
-.form-notice {
-  font-size: 0.73rem;
-  color: #bbb;
+.lp-notice {
   text-align: center;
+  font-size: 0.72rem;
+  color: #bbb;
   line-height: 1.5;
 }
 
 /* ════════════════════════════
    설문 페이지
 ════════════════════════════ */
-#page-survey {
-  background: #f0f4f8;
-  min-height: 100vh;
-  padding: 2rem 1rem;
-}
+#page-survey { background: #f0f4f9; min-height: 100vh; padding: 1.5rem 1rem 3rem; }
 
-.container {
-  max-width: 680px;
-  margin: 0 auto;
-}
+.sv-wrap { max-width: 640px; margin: 0 auto; }
 
-/* 헤더 */
-header {
-  background: linear-gradient(135deg, #003d99, #0066cc);
+.sv-header {
+  background: linear-gradient(135deg, #0b2560, #1a56b0);
   color: #fff;
-  padding: 1.5rem 2rem;
   border-radius: 16px;
-  margin-bottom: 1.5rem;
-  box-shadow: 0 4px 20px rgba(0,61,153,0.25);
+  padding: 1.4rem 1.6rem;
+  margin-bottom: 1.2rem;
+  box-shadow: 0 4px 20px rgba(11,37,96,0.2);
 }
 
-.logo-area { display: flex; align-items: center; gap: 1rem; }
-.logo-icon { font-size: 2.2rem; }
-.org-name { font-size: 0.8rem; opacity: 0.8; margin-bottom: 0.2rem; }
-h1 { font-size: 1.25rem; font-weight: 700; }
+.sv-org { font-size: 0.75rem; opacity: 0.7; margin-bottom: 0.2rem; letter-spacing: 0.5px; }
+.sv-htitle { font-size: 1.15rem; font-weight: 800; }
+.sv-badge {
+  display: inline-block;
+  margin-top: 0.6rem;
+  background: rgba(255,255,255,0.2);
+  font-size: 0.78rem;
+  padding: 3px 12px;
+  border-radius: 20px;
+  font-weight: 600;
+}
 
-/* 과정 확인 */
-.confirm-card {
+.sv-guide {
+  font-size: 0.84rem;
+  color: #667;
+  margin-bottom: 1rem;
+  line-height: 1.6;
+}
+
+/* 과정 확인 박스 */
+.confirm-box {
   background: #fff;
   border-radius: 16px;
-  padding: 2.5rem 2rem;
+  padding: 2.2rem 1.8rem;
   text-align: center;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.07);
   margin-bottom: 1rem;
 }
 
-.confirm-icon { font-size: 2.8rem; margin-bottom: 0.7rem; }
-.confirm-greeting { font-size: 1.15rem; font-weight: 700; margin-bottom: 1.2rem; }
-.confirm-label { font-size: 0.78rem; color: #888; margin-bottom: 0.35rem; }
-.confirm-course {
-  font-size: 1.1rem;
+.cb-wave { font-size: 2.5rem; margin-bottom: 0.6rem; }
+.cb-greet { font-size: 1.1rem; font-weight: 800; margin-bottom: 1.2rem; color: #0b2560; }
+.cb-clabel { font-size: 0.75rem; color: #999; margin-bottom: 0.35rem; }
+.cb-course {
+  font-size: 1.05rem;
   font-weight: 800;
-  color: #003d99;
-  background: #eef4ff;
-  border-radius: 12px;
-  padding: 0.85rem 1rem;
+  color: #0b2560;
+  background: #edf2ff;
+  border-radius: 10px;
+  padding: 0.8rem 1rem;
   margin-bottom: 0.7rem;
+  line-height: 1.4;
 }
 
-.confirm-notice {
-  font-size: 0.82rem;
+.cb-note {
+  font-size: 0.8rem;
   color: #888;
-  line-height: 1.6;
+  line-height: 1.65;
   margin-bottom: 1.5rem;
 }
 
-/* 설문 폼 공통 버튼 */
+/* 문항 카드 */
+.q-card {
+  background: #fff;
+  border-radius: 14px;
+  padding: 1.4rem 1.4rem 1.2rem;
+  margin-bottom: 0.9rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  border-left: 4px solid #1a56b0;
+}
+
+.q-card.optional { border-left-color: #ccc; }
+
+.q-tag {
+  display: inline-block;
+  background: #1a56b0;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: 20px;
+  margin-bottom: 0.55rem;
+  letter-spacing: 0.3px;
+}
+
+.q-tag.opt { background: #aaa; }
+.q-tag em { font-style: normal; font-size: 0.65rem; margin-left: 4px; opacity: 0.85; }
+
+.q-txt {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 1.1rem;
+  line-height: 1.55;
+  color: #1a1a2e;
+}
+
+/* 별점 선택 */
+.stars { display: flex; gap: 7px; }
+
+.stars label { flex: 1; cursor: pointer; }
+.stars input[type="radio"] { display: none; }
+
+.stars label span {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0.55rem 0.2rem 0.45rem;
+  border: 1.5px solid #dce4f0;
+  border-radius: 10px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.2;
+  background: #f7f9fc;
+  color: #666;
+  transition: all 0.15s;
+  text-align: center;
+}
+
+.stars label span small {
+  display: block;
+  font-size: 0.58rem;
+  font-weight: 400;
+  color: #aaa;
+  margin-top: 3px;
+  line-height: 1.3;
+}
+
+.stars input[type="radio"]:checked + span {
+  background: #1a56b0;
+  border-color: #1a56b0;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(26,86,176,0.35);
+  transform: translateY(-2px);
+}
+
+.stars input[type="radio"]:checked + span small { color: rgba(255,255,255,0.8); }
+.stars label:hover span { border-color: #1a56b0; color: #1a56b0; }
+
+textarea {
+  width: 100%;
+  border: 1.5px solid #dce4f0;
+  border-radius: 10px;
+  padding: 0.8rem;
+  font-family: inherit;
+  font-size: 0.88rem;
+  resize: vertical;
+  outline: none;
+  background: #f7f9fc;
+  transition: border-color 0.2s;
+  color: #1a1a2e;
+}
+
+textarea:focus { border-color: #1a56b0; background: #fff; }
+
+.sv-error {
+  background: #fff2f2;
+  border: 1px solid #fcc;
+  color: #c00;
+  border-radius: 9px;
+  padding: 0.7rem 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+}
+
+/* 제출/시작 버튼 */
 button {
   display: block;
   width: 100%;
   padding: 0.95rem;
-  background: linear-gradient(135deg, #003d99, #0066cc);
+  background: linear-gradient(135deg, #0b2560, #1a56b0);
   color: #fff;
   border: none;
   border-radius: 12px;
@@ -223,147 +336,27 @@ button {
   font-weight: 700;
   font-family: inherit;
   cursor: pointer;
-  box-shadow: 0 4px 15px rgba(0,102,204,0.3);
+  box-shadow: 0 4px 16px rgba(26,86,176,0.3);
   transition: transform 0.1s, box-shadow 0.1s;
+  letter-spacing: 0.3px;
 }
 
-button:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,102,204,0.4); }
+button:hover { transform: translateY(-1px); box-shadow: 0 7px 22px rgba(26,86,176,0.38); }
 button:active { transform: translateY(0); }
-
-/* 과정 배지 */
-.course-badge-wrap { margin-bottom: 0.8rem; }
-.course-badge {
-  background: #003d99;
-  color: #fff;
-  font-size: 0.82rem;
-  font-weight: 600;
-  padding: 4px 14px;
-  border-radius: 20px;
-}
-
-.survey-desc {
-  color: #555;
-  font-size: 0.88rem;
-  margin-bottom: 1.2rem;
-  line-height: 1.6;
-}
-
-/* 문항 카드 */
-.question-card {
-  background: #fff;
-  border-radius: 12px;
-  padding: 1.5rem;
-  margin-bottom: 1rem;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.07);
-  border-left: 4px solid #0066cc;
-}
-
-.question-card.optional { border-left-color: #aaa; }
-
-.q-number {
-  display: inline-block;
-  background: #0066cc;
-  color: #fff;
-  font-size: 0.75rem;
-  font-weight: 700;
-  padding: 2px 10px;
-  border-radius: 20px;
-  margin-bottom: 0.6rem;
-}
-
-.q-number.opt { background: #888; }
-
-.q-text {
-  font-size: 0.97rem;
-  font-weight: 600;
-  margin-bottom: 1.2rem;
-  line-height: 1.5;
-}
-
-.optional-tag {
-  font-size: 0.73rem;
-  background: #eee;
-  color: #888;
-  padding: 1px 8px;
-  border-radius: 10px;
-  font-weight: 400;
-  margin-left: 6px;
-}
-
-/* 별점 */
-.rating-group { display: flex; gap: 8px; }
-.rating-label { flex: 1; cursor: pointer; }
-.rating-label input[type="radio"] { display: none; }
-
-.rating-btn {
-  display: block;
-  text-align: center;
-  padding: 0.6rem 0.2rem;
-  border: 2px solid #dde3ea;
-  border-radius: 10px;
-  font-size: 1.05rem;
-  font-weight: 700;
-  line-height: 1.4;
-  transition: all 0.15s;
-  background: #f8f9fb;
-  color: #555;
-}
-
-.rating-btn small {
-  display: block;
-  font-size: 0.62rem;
-  font-weight: 400;
-  color: #888;
-  margin-top: 2px;
-}
-
-.rating-label input[type="radio"]:checked + .rating-btn {
-  background: #0066cc;
-  border-color: #0066cc;
-  color: #fff;
-  box-shadow: 0 3px 10px rgba(0,102,204,0.35);
-  transform: translateY(-2px);
-}
-
-.rating-label input[type="radio"]:checked + .rating-btn small { color: rgba(255,255,255,0.85); }
-.rating-btn:hover { border-color: #0066cc; color: #0066cc; }
-
-textarea {
-  width: 100%;
-  border: 2px solid #dde3ea;
-  border-radius: 10px;
-  padding: 0.8rem;
-  font-family: inherit;
-  font-size: 0.9rem;
-  resize: vertical;
-  outline: none;
-  transition: border-color 0.2s;
-}
-
-textarea:focus { border-color: #0066cc; }
-
-.error-msg {
-  background: #fff3f3;
-  color: #d00;
-  border: 1px solid #fcc;
-  border-radius: 8px;
-  padding: 0.75rem 1rem;
-  margin-bottom: 1rem;
-  font-size: 0.88rem;
-}
+button:disabled { opacity: 0.65; cursor: not-allowed; transform: none; }
 
 /* 완료 */
-.result {
+.done-box {
   background: #fff;
   border-radius: 16px;
   padding: 3rem 2rem;
   text-align: center;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.07);
 }
 
-.result-icon { font-size: 4rem; margin-bottom: 1rem; }
-.result h2 { font-size: 1.35rem; color: #003d99; margin-bottom: 0.8rem; }
-.result p { color: #555; line-height: 1.7; font-size: 0.93rem; }
+.done-icon { font-size: 4rem; margin-bottom: 1rem; }
+.done-box h2 { font-size: 1.3rem; color: #0b2560; margin-bottom: 0.7rem; font-weight: 800; }
+.done-box p { color: #666; line-height: 1.7; font-size: 0.92rem; }
 
 /* 공통 */
 .loading, .no-data {
@@ -373,15 +366,14 @@ textarea:focus { border-color: #0066cc; }
   text-align: center;
   color: #888;
   margin-bottom: 1rem;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   line-height: 1.6;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
 }
 
 @media (max-width: 480px) {
-  .rating-group { gap: 5px; }
-  .rating-btn { font-size: 0.95rem; padding: 0.5rem 0.1rem; }
-  .rating-btn small { font-size: 0.58rem; }
-  h1 { font-size: 1.1rem; }
-  .login-form-card { padding: 1.6rem 1.4rem; }
+  .lp-title { font-size: 1.45rem; }
+  .stars { gap: 5px; }
+  .stars label span { font-size: 0.95rem; padding: 0.5rem 0.1rem; }
+  .stars label span small { font-size: 0.54rem; }
 }
