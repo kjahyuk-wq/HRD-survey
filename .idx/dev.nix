@@ -7,13 +7,13 @@
   packages = [
     pkgs.nodejs_20
     pkgs.python3
+    pkgs.git
   ];
   # Sets environment variables in the workspace
   env = {};
   idx = {
     # Search for the extensions you want on https://open-vsx.org/ and use "publisher.id"
     extensions = [
-      # "vscodevim.vim"
       "google.gemini-cli-vscode-ide-companion"
     ];
     # Enable previews and customize configuration
@@ -30,15 +30,11 @@
     workspace = {
       # Runs when a workspace is first created
       onCreate = {
-        # Example: install JS dependencies from NPM
-        # npm-install = "npm install";
-        # Open editors for the following files by default, if they exist:
-        default.openFiles = [ "style.css" "main.js" "index.html" ];
+        default.openFiles = [ "index.html" "admin.html" "main.js" "admin.js" ];
       };
-      # Runs when the workspace is (re)started
+      # Runs when the workspace is (re)started - git config 자동 설정
       onStart = {
-        # Example: start a background task to watch and re-build backend code
-        # watch-backend = "npm run watch-backend";
+        git-setup = "git config user.name 'kjahyuk' && git config user.email 'kjahyuk@gmail.com'";
       };
     };
   };
