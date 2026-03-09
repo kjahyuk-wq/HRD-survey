@@ -1,12 +1,7 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, collection, getDocs, orderBy, query } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycby_hKmeisOvpYazP5ovZuYTUR_0F7wiPMHsjuY2YzxAaHyEcGdmtgk2fj_QSQypYhb4/exec";
 
-// ⚠️ 관리자 비밀번호 (배포 전 변경하세요)
+// ⚠️ 관리자 비밀번호 (변경 가능)
 const ADMIN_PASSWORD = "hrd2024!";
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
 
 const Q_LABELS = [
   'Q1. 교육 내용의 업무 역량 도움',
@@ -16,7 +11,6 @@ const Q_LABELS = [
   'Q5. 동료 추천 의향',
 ];
 
-// 로그인
 function checkLogin() {
   const pw = document.getElementById('pw-input').value;
   if (pw === ADMIN_PASSWORD) {
@@ -41,20 +35,16 @@ async function loadData() {
   document.getElementById('no-data').style.display = 'none';
 
   try {
-    const q = query(collection(db, "responses"), orderBy("submittedAt", "desc"));
-    const snapshot = await getDocs(q);
+    const res = await fetch(SCRIPT_URL);
+    const responses = await res.json();
 
-    if (snapshot.empty) {
+    if (!responses || responses.length === 0) {
       document.getElementById('loading').style.display = 'none';
       document.getElementById('no-data').style.display = 'block';
       return;
     }
 
-    const responses = [];
-    snapshot.forEach(doc => responses.push(doc.data()));
-
     renderStats(responses);
-
     document.getElementById('loading').style.display = 'none';
     document.getElementById('stats-area').style.display = 'block';
   } catch (e) {
@@ -67,9 +57,8 @@ function renderStats(responses) {
   const n = responses.length;
   const keys = ['q1', 'q2', 'q3', 'q4', 'q5'];
 
-  // 항목별 평균 계산
   const avgs = keys.map(k => {
-    const sum = responses.reduce((acc, r) => acc + (r[k] || 0), 0);
+    const sum = responses.reduce((acc, r) => acc + (Number(r[k]) || 0), 0);
     return sum / n;
   });
 
@@ -77,20 +66,16 @@ function renderStats(responses) {
   const bestIdx = avgs.indexOf(Math.max(...avgs));
   const worstIdx = avgs.indexOf(Math.min(...avgs));
 
-  // 요약 카드
   document.getElementById('total-count').textContent = n + '명';
   document.getElementById('overall-avg').textContent = overallAvg.toFixed(2);
   document.getElementById('best-q').textContent = `Q${bestIdx + 1} (${avgs[bestIdx].toFixed(1)})`;
   document.getElementById('worst-q').textContent = `Q${worstIdx + 1} (${avgs[worstIdx].toFixed(1)})`;
 
-  // 항목별 점수 바
   const qStatsEl = document.getElementById('question-stats');
   qStatsEl.innerHTML = avgs.map((avg, i) => {
     const pct = (avg / 5 * 100).toFixed(1);
     const color = avg >= 4.5 ? '#22c55e' : avg >= 3.5 ? '#0066cc' : avg >= 2.5 ? '#f59e0b' : '#ef4444';
-
-    // 점수 분포 계산
-    const dist = [1,2,3,4,5].map(v => responses.filter(r => r[keys[i]] === v).length);
+    const dist = [1,2,3,4,5].map(v => responses.filter(r => Number(r[keys[i]]) === v).length);
 
     return `
       <div class="q-stat-card">
@@ -116,8 +101,7 @@ function renderStats(responses) {
     `;
   }).join('');
 
-  // 의견 목록
-  const comments = responses.filter(r => r.comment && r.comment.trim());
+  const comments = responses.filter(r => r.comment && String(r.comment).trim());
   document.getElementById('comment-count').textContent = comments.length + '건';
   const commentsEl = document.getElementById('comments-list');
   if (comments.length === 0) {
@@ -126,15 +110,14 @@ function renderStats(responses) {
     commentsEl.innerHTML = comments.map(r => `
       <div class="comment-item">
         <div class="comment-date">${formatDate(r.submittedAt)}</div>
-        <div class="comment-text">${escapeHtml(r.comment)}</div>
+        <div class="comment-text">${escapeHtml(String(r.comment))}</div>
       </div>
     `).join('');
   }
 
-  // 응답 목록 테이블
   const tbody = document.getElementById('responses-body');
-  tbody.innerHTML = responses.map(r => {
-    const scores = keys.map(k => r[k] || 0);
+  tbody.innerHTML = [...responses].reverse().map(r => {
+    const scores = keys.map(k => Number(r[k]) || 0);
     const avg = (scores.reduce((a,b) => a+b, 0) / 5).toFixed(1);
     return `
       <tr>
@@ -146,9 +129,10 @@ function renderStats(responses) {
   }).join('');
 }
 
-function formatDate(ts) {
-  if (!ts) return '-';
-  const d = ts.toDate ? ts.toDate() : new Date(ts);
+function formatDate(val) {
+  if (!val) return '-';
+  const d = new Date(val);
+  if (isNaN(d)) return String(val);
   return d.toLocaleString('ko-KR', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
 }
 

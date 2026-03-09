@@ -1,9 +1,4 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js";
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycby_hKmeisOvpYazP5ovZuYTUR_0F7wiPMHsjuY2YzxAaHyEcGdmtgk2fj_QSQypYhb4/exec";
 
 async function submitSurvey() {
   const answers = [];
@@ -25,14 +20,15 @@ async function submitSurvey() {
   btnText.textContent = '제출 중...';
 
   try {
-    await addDoc(collection(db, "responses"), {
-      q1: answers[0],
-      q2: answers[1],
-      q3: answers[2],
-      q4: answers[3],
-      q5: answers[4],
-      comment: document.getElementById('comment').value.trim(),
-      submittedAt: serverTimestamp()
+    await fetch(SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        q1: answers[0], q2: answers[1], q3: answers[2],
+        q4: answers[3], q5: answers[4],
+        comment: document.getElementById('comment').value.trim()
+      })
     });
 
     document.getElementById('survey-form').style.display = 'none';
