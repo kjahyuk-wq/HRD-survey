@@ -7,8 +7,8 @@ async function doLogin() {
   const phone = document.getElementById('input-phone').value.trim();
   const errEl = document.getElementById('login-error');
 
-  if (!name) { showError('이름을 입력해 주세요.'); return; }
-  if (!/^\d{4}$/.test(phone)) { showError('휴대폰 번호 뒷 4자리를 숫자로 입력해 주세요.'); return; }
+  if (!name) { showLoginError('이름을 입력해 주세요.'); return; }
+  if (!/^\d{4}$/.test(phone)) { showLoginError('휴대폰 번호 뒷 4자리를 숫자로 입력해 주세요.'); return; }
 
   errEl.style.display = 'none';
   const btn = document.getElementById('login-btn');
@@ -20,36 +20,36 @@ async function doLogin() {
     const data = await res.json();
 
     if (!data.found) {
-      showError('등록된 수강생 정보를 찾을 수 없습니다.\n담당자에게 문의해 주세요.');
+      showLoginError('등록된 수강생 정보를 찾을 수 없습니다.\n담당자에게 문의해 주세요.');
       btn.disabled = false;
-      document.getElementById('login-btn-text').textContent = '확인';
+      document.getElementById('login-btn-text').textContent = '확인하기';
       return;
     }
 
     if (data.completed) {
-      showError('이미 설문에 참여하셨습니다. 감사합니다.');
+      showLoginError('이미 설문에 참여하셨습니다. 감사합니다.');
       btn.disabled = false;
-      document.getElementById('login-btn-text').textContent = '확인';
+      document.getElementById('login-btn-text').textContent = '확인하기';
       return;
     }
 
     currentUser = { name, phone, course: data.course };
 
-    document.getElementById('screen-login').style.display = 'none';
-    document.getElementById('survey-container').style.display = 'block';
+    document.getElementById('page-login').style.display = 'none';
+    document.getElementById('page-survey').style.display = 'block';
     document.getElementById('confirm-greeting').textContent = `${name}님, 안녕하세요!`;
     document.getElementById('confirm-course-name').textContent = data.course;
     document.getElementById('screen-confirm').style.display = 'block';
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
   } catch (e) {
-    showError('오류가 발생했습니다. 잠시 후 다시 시도해 주세요.');
+    showLoginError('오류가 발생했습니다. 잠시 후 다시 시도해 주세요.');
     btn.disabled = false;
-    document.getElementById('login-btn-text').textContent = '확인';
+    document.getElementById('login-btn-text').textContent = '확인하기';
   }
 }
 
-function showError(msg) {
+function showLoginError(msg) {
   const el = document.getElementById('login-error');
   el.textContent = msg;
   el.style.display = 'block';
