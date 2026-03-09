@@ -30,15 +30,7 @@ async function doLogin() {
       reset(); return;
     }
 
-    // 강사 목록 함께 불러오기
-    let instructors = [];
-    try {
-      const iRes = await fetch(`${SCRIPT_URL}?action=instructors&course=${encodeURIComponent(data.course)}`);
-      const iText = await iRes.text();
-      instructors = JSON.parse(iText);
-    } catch (_) {}
-
-    currentUser = { name, phone, course: data.course, instructors };
+    currentUser = { name, phone, course: data.course, instructors: [] };
 
     document.getElementById('page-login').style.display = 'none';
     document.getElementById('page-survey').style.display = 'block';
@@ -64,13 +56,21 @@ function showLoginError(msg) {
   el.style.display = 'block';
 }
 
-function startSurvey() {
+async function startSurvey() {
   document.getElementById('screen-confirm').style.display = 'none';
   document.getElementById('screen-survey').style.display = 'block';
 
   const badge = document.getElementById('survey-course-badge');
   badge.textContent = currentUser.course;
   badge.style.display = 'inline-block';
+
+  // 강사 목록 불러오기
+  try {
+    const res = await fetch(`${SCRIPT_URL}?action=instructors&course=${encodeURIComponent(currentUser.course)}`);
+    currentUser.instructors = await res.json();
+  } catch (_) {
+    currentUser.instructors = [];
+  }
 
   // 강사 문항 동적 생성
   renderInstructorQuestions(currentUser.instructors);
