@@ -7,7 +7,49 @@
   <link href="style.css" rel="stylesheet">
 </head>
 <body>
-  <div class="container">
+
+  <!-- 로그인 (풀스크린 오버레이) -->
+  <div id="screen-login" class="login-overlay">
+    <div class="login-hero">
+      <div class="login-emblem">🏛️</div>
+      <div class="login-org">대전광역시 인재개발원</div>
+      <div class="login-title">교육과정 만족도 조사</div>
+      <div class="login-sub">교육 품질 향상을 위한 소중한 의견을 부탁드립니다</div>
+    </div>
+
+    <div class="login-card">
+      <div class="login-card-header">
+        <div class="login-card-icon">🔐</div>
+        <div class="login-card-title">본인 확인</div>
+        <div class="login-card-desc">이름과 휴대폰 번호 뒷 4자리를 입력하세요</div>
+      </div>
+
+      <div class="login-fields">
+        <div class="input-wrap">
+          <span class="input-icon">👤</span>
+          <input type="text" id="input-name" placeholder="이름" maxlength="20" autocomplete="name">
+        </div>
+        <div class="input-wrap">
+          <span class="input-icon">📱</span>
+          <input type="tel" id="input-phone" placeholder="전화번호 뒷 4자리" maxlength="4"
+            pattern="[0-9]{4}" inputmode="numeric"
+            onkeydown="if(event.key==='Enter')doLogin()">
+        </div>
+      </div>
+
+      <div id="login-error" class="login-error" style="display:none;"></div>
+
+      <button type="button" id="login-btn" class="login-btn" onclick="doLogin()">
+        <span id="login-btn-text">본인 확인하기</span>
+        <span class="login-btn-arrow">→</span>
+      </button>
+    </div>
+
+    <div class="login-footer">본 설문은 익명으로 처리되며 교육 개선 목적으로만 활용됩니다</div>
+  </div>
+
+  <!-- 이하 설문 화면 (컨테이너) -->
+  <div id="survey-container" class="container" style="display:none;">
     <header>
       <div class="logo-area">
         <div class="logo-icon">🏛️</div>
@@ -18,41 +60,19 @@
       </div>
     </header>
 
-    <!-- 1단계: 로그인 -->
-    <div id="screen-login">
-      <div class="login-card">
-        <div class="login-card-title">본인 확인</div>
-        <p class="login-desc">이름과 휴대폰 번호 뒷 4자리를 입력해 주세요.</p>
-        <div class="login-fields">
-          <div class="field-group">
-            <label>이름</label>
-            <input type="text" id="input-name" placeholder="홍길동" maxlength="20">
-          </div>
-          <div class="field-group">
-            <label>휴대폰 번호 뒷 4자리</label>
-            <input type="tel" id="input-phone" placeholder="1234" maxlength="4" pattern="[0-9]{4}"
-              onkeydown="if(event.key==='Enter')doLogin()">
-          </div>
-        </div>
-        <div id="login-error" class="error-msg" style="display:none;"></div>
-        <button type="button" id="login-btn" onclick="doLogin()">
-          <span id="login-btn-text">확인</span>
-        </button>
-      </div>
-    </div>
-
-    <!-- 2단계: 과정 확인 -->
+    <!-- 과정 확인 -->
     <div id="screen-confirm" style="display:none;">
       <div class="confirm-card">
-        <div class="confirm-icon">✅</div>
+        <div class="confirm-icon">👋</div>
         <div class="confirm-greeting" id="confirm-greeting"></div>
         <div class="confirm-course-label">배정된 교육과정</div>
         <div class="confirm-course-name" id="confirm-course-name"></div>
+        <p class="confirm-notice">위 과정의 만족도 설문을 진행합니다.<br>총 5문항이며 약 2분이 소요됩니다.</p>
         <button type="button" onclick="startSurvey()">설문 시작하기 →</button>
       </div>
     </div>
 
-    <!-- 3단계: 설문 -->
+    <!-- 설문 폼 -->
     <div id="screen-survey" style="display:none;">
       <div class="course-badge-wrap">
         <span class="course-badge" id="survey-course-badge"></span>
@@ -61,7 +81,6 @@
 
       <form id="survey-form">
         <div class="questions">
-
           <div class="question-card">
             <div class="q-number">Q1</div>
             <div class="q-text">교육 내용은 업무 역량 향상에 도움이 되었습니까?</div>
@@ -73,7 +92,6 @@
               <label class="rating-label"><input type="radio" name="q1" value="5"><span class="rating-btn">5<br><small>매우 만족</small></span></label>
             </div>
           </div>
-
           <div class="question-card">
             <div class="q-number">Q2</div>
             <div class="q-text">강사의 강의 전문성 및 교수 능력에 만족하십니까?</div>
@@ -85,7 +103,6 @@
               <label class="rating-label"><input type="radio" name="q2" value="5"><span class="rating-btn">5<br><small>매우 만족</small></span></label>
             </div>
           </div>
-
           <div class="question-card">
             <div class="q-number">Q3</div>
             <div class="q-text">교육 일정 및 운영 방식(시간·진행 등)은 적절하였습니까?</div>
@@ -97,7 +114,6 @@
               <label class="rating-label"><input type="radio" name="q3" value="5"><span class="rating-btn">5<br><small>매우 만족</small></span></label>
             </div>
           </div>
-
           <div class="question-card">
             <div class="q-number">Q4</div>
             <div class="q-text">교육 시설(강의실·편의시설 등) 및 교육 환경에 만족하십니까?</div>
@@ -109,7 +125,6 @@
               <label class="rating-label"><input type="radio" name="q4" value="5"><span class="rating-btn">5<br><small>매우 만족</small></span></label>
             </div>
           </div>
-
           <div class="question-card">
             <div class="q-number">Q5</div>
             <div class="q-text">이 교육과정을 동료에게 추천하고 싶습니까?</div>
@@ -121,14 +136,12 @@
               <label class="rating-label"><input type="radio" name="q5" value="5"><span class="rating-btn">5<br><small>매우 그렇다</small></span></label>
             </div>
           </div>
-
           <div class="question-card optional">
             <div class="q-number opt">의견</div>
             <div class="q-text">기타 의견이 있으시면 자유롭게 작성해 주세요. <span class="optional-tag">선택</span></div>
             <textarea id="comment" placeholder="교육 개선을 위한 소중한 의견을 남겨주세요." rows="4"></textarea>
           </div>
         </div>
-
         <div id="error-msg" class="error-msg" style="display:none;">⚠️ 모든 문항(Q1~Q5)에 응답해 주세요.</div>
         <button type="button" id="submit-btn" onclick="submitSurvey()">
           <span id="btn-text">설문 제출하기</span>
@@ -136,7 +149,7 @@
       </form>
     </div>
 
-    <!-- 4단계: 완료 -->
+    <!-- 완료 -->
     <div id="screen-result" class="result" style="display:none;">
       <div class="result-icon">✅</div>
       <h2>설문이 완료되었습니다!</h2>

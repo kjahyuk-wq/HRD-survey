@@ -63,6 +63,7 @@
           <div id="course-manage-loading" class="loading">불러오는 중...</div>
           <div id="course-manage-list"></div>
           <div id="course-manage-empty" class="no-data" style="display:none;">등록된 교육과정이 없습니다.</div>
+          <button class="icon-refresh-btn" onclick="loadCourseList()" title="새로고침">🔄 새로고침</button>
         </div>
 
         <!-- 수강생 관리 -->
@@ -88,6 +89,7 @@
             <div id="student-loading" class="loading" style="display:none;">불러오는 중...</div>
             <div id="student-list"></div>
             <div id="student-empty" class="no-data" style="display:none;">등록된 수강생이 없습니다.</div>
+            <button class="icon-refresh-btn" onclick="loadStudents()" title="새로고침">🔄 새로고침</button>
           </div>
           <div id="student-placeholder" class="no-data">교육과정을 선택하면 수강생 목록이 표시됩니다.</div>
         </div>

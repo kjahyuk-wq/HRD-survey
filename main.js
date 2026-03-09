@@ -36,6 +36,7 @@ async function doLogin() {
     currentUser = { name, phone, course: data.course };
 
     document.getElementById('screen-login').style.display = 'none';
+    document.getElementById('survey-container').style.display = 'block';
     document.getElementById('confirm-greeting').textContent = `${name}님, 안녕하세요!`;
     document.getElementById('confirm-course-name').textContent = data.course;
     document.getElementById('screen-confirm').style.display = 'block';

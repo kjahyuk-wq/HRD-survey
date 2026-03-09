@@ -162,6 +162,32 @@
   margin-bottom: 1.5rem;
 }
 
+/* 새로고침 버튼 */
+.icon-refresh-btn {
+  margin-top: 0.8rem;
+  padding: 0.4rem 1rem !important;
+  background: #f0f4f8 !important;
+  border: 1px solid #dde3ea !important;
+  border-radius: 8px !important;
+  color: #555 !important;
+  font-size: 0.82rem !important;
+  font-weight: 600 !important;
+  cursor: pointer;
+  width: auto !important;
+  box-shadow: none !important;
+  display: inline-flex !important;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.icon-refresh-btn:hover {
+  background: #e0eaff !important;
+  border-color: #0066cc !important;
+  color: #0066cc !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
 /* 로그인 */
 .login-screen {
   min-height: 100vh;
