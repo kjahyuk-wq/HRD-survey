@@ -44,6 +44,129 @@
 }
 .pw-error { color: #d00; font-size: 0.85rem; margin-top: 0.6rem; }
 
+/* 탭 */
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.2rem;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 0.7rem;
+  background: #fff;
+  border: 2px solid #dde3ea;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.15s;
+  box-shadow: none;
+  width: auto;
+}
+
+.tab-btn.active {
+  background: linear-gradient(135deg, #003d99, #0066cc);
+  border-color: #0066cc;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(0,102,204,0.3);
+}
+
+.tab-btn:hover:not(.active) { border-color: #0066cc; color: #0066cc; transform: none; }
+
+/* 섹션 카드 */
+.section-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 1.3rem 1.4rem;
+  margin-bottom: 1rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+/* 교육과정 추가 */
+.add-course-row {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.add-course-row input {
+  flex: 1;
+  padding: 0.7rem 1rem;
+  border: 2px solid #dde3ea;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.add-course-row input:focus { border-color: #0066cc; }
+
+.add-btn {
+  padding: 0.7rem 1.2rem;
+  background: #0066cc;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  width: auto;
+  box-shadow: none;
+}
+
+.add-btn:hover { background: #0055aa; transform: none; }
+
+/* 교육과정 목록 */
+.course-manage-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.8rem 0;
+  border-bottom: 1px solid #f0f4f8;
+}
+
+.course-manage-item:last-child { border-bottom: none; }
+.course-manage-name { font-size: 0.95rem; font-weight: 600; color: #333; }
+
+.delete-btn {
+  padding: 0.3rem 0.8rem;
+  background: transparent;
+  border: 1px solid #fcc;
+  border-radius: 8px;
+  color: #d00;
+  font-size: 0.8rem;
+  cursor: pointer;
+  width: auto;
+  box-shadow: none;
+  font-weight: 600;
+}
+
+.delete-btn:hover { background: #fff0f0; transform: none; box-shadow: none; }
+
+/* 통계 과정 선택 */
+.course-select-row {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.course-select-row select {
+  flex: 1;
+  padding: 0.7rem 1rem;
+  border: 2px solid #dde3ea;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  outline: none;
+  background: #fff;
+  transition: border-color 0.2s;
+}
+
+.course-select-row select:focus { border-color: #0066cc; }
+
 /* 헤더 액션 */
 .header-actions { display: flex; gap: 0.5rem; margin-top: 0.8rem; }
 .refresh-btn, .logout-btn {
