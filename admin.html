@@ -15,7 +15,8 @@
       <div class="logo-icon" style="font-size:3rem;display:block;margin-bottom:.5rem;">🏛️</div>
       <div class="org-name" style="text-align:center;margin-bottom:4px;">대전광역시 인재개발원</div>
       <h2>관리자 로그인</h2>
-      <input type="password" id="pw-input" placeholder="비밀번호를 입력하세요" onkeydown="if(event.key==='Enter')checkLogin()">
+      <input type="password" id="pw-input" placeholder="비밀번호를 입력하세요"
+        onkeydown="if(event.key==='Enter')checkLogin()">
       <button onclick="checkLogin()">로그인</button>
       <div id="pw-error" class="pw-error" style="display:none;">비밀번호가 올바르지 않습니다.</div>
     </div>
@@ -39,24 +40,56 @@
 
       <!-- 탭 -->
       <div class="tabs">
-        <button class="tab-btn active" onclick="switchTab('courses')">📋 교육과정 관리</button>
+        <button class="tab-btn active" onclick="switchTab('courses')">📋 교육과정·수강생 관리</button>
         <button class="tab-btn" onclick="switchTab('stats')">📊 설문 통계</button>
       </div>
 
-      <!-- 교육과정 관리 탭 -->
+      <!-- 교육과정·수강생 관리 탭 -->
       <div id="tab-courses">
+
+        <!-- 교육과정 추가 -->
         <div class="section-card">
           <div class="section-title">교육과정 추가</div>
           <div class="add-course-row">
-            <input type="text" id="new-course-input" placeholder="교육과정명을 입력하세요" onkeydown="if(event.key==='Enter')addCourse()">
+            <input type="text" id="new-course-input" placeholder="교육과정명을 입력하세요"
+              onkeydown="if(event.key==='Enter')addCourse()">
             <button class="add-btn" onclick="addCourse()">+ 추가</button>
           </div>
         </div>
+
+        <!-- 교육과정 목록 -->
         <div class="section-card">
           <div class="section-title">등록된 교육과정 <span id="course-count" class="badge"></span></div>
           <div id="course-manage-loading" class="loading">불러오는 중...</div>
           <div id="course-manage-list"></div>
           <div id="course-manage-empty" class="no-data" style="display:none;">등록된 교육과정이 없습니다.</div>
+        </div>
+
+        <!-- 수강생 관리 -->
+        <div class="section-card">
+          <div class="section-title">수강생 관리</div>
+          <div class="course-select-row" style="margin-bottom:1rem;">
+            <select id="student-course-select" onchange="loadStudents()">
+              <option value="">-- 교육과정을 선택하세요 --</option>
+            </select>
+          </div>
+
+          <div id="student-section" style="display:none;">
+            <!-- 수강생 추가 -->
+            <div class="add-student-row">
+              <input type="text" id="new-student-name" placeholder="이름" maxlength="20">
+              <input type="tel" id="new-student-phone" placeholder="전화번호 뒷 4자리" maxlength="4"
+                onkeydown="if(event.key==='Enter')addStudent()">
+              <button class="add-btn" onclick="addStudent()">+ 등록</button>
+            </div>
+
+            <!-- 수강생 목록 -->
+            <div class="student-stats-bar" id="student-stats-bar"></div>
+            <div id="student-loading" class="loading" style="display:none;">불러오는 중...</div>
+            <div id="student-list"></div>
+            <div id="student-empty" class="no-data" style="display:none;">등록된 수강생이 없습니다.</div>
+          </div>
+          <div id="student-placeholder" class="no-data">교육과정을 선택하면 수강생 목록이 표시됩니다.</div>
         </div>
       </div>
 
@@ -78,10 +111,16 @@
 
         <div id="stats-area" style="display:none;">
           <div class="summary-cards">
-            <div class="summary-card"><div class="card-label">총 응답 수</div><div class="card-value" id="total-count">-</div></div>
-            <div class="summary-card highlight"><div class="card-label">전체 평균</div><div class="card-value" id="overall-avg">-</div><div class="card-sub">/ 5.0</div></div>
-            <div class="summary-card"><div class="card-label">최고 항목</div><div class="card-value" id="best-q">-</div></div>
-            <div class="summary-card"><div class="card-label">개선 필요</div><div class="card-value" id="worst-q">-</div></div>
+            <div class="summary-card"><div class="card-label">총 수강생</div><div class="card-value" id="total-students">-</div></div>
+            <div class="summary-card highlight"><div class="card-label">설문 참여율</div><div class="card-value" id="completion-rate">-</div><div class="card-sub" id="completion-detail"></div></div>
+            <div class="summary-card"><div class="card-label">전체 평균</div><div class="card-value" id="overall-avg">-</div><div class="card-sub">/ 5.0</div></div>
+            <div class="summary-card"><div class="card-label">미참여 수강생</div><div class="card-value" id="not-completed">-</div></div>
+          </div>
+
+          <!-- 미참여자 목록 -->
+          <div id="not-completed-section" style="display:none;">
+            <div class="section-title">⚠️ 미참여 수강생</div>
+            <div id="not-completed-list" class="not-completed-list"></div>
           </div>
 
           <div class="section-title">항목별 평균 점수</div>
@@ -94,7 +133,7 @@
           <div class="table-wrap">
             <table>
               <thead>
-                <tr><th>제출일시</th><th>Q1</th><th>Q2</th><th>Q3</th><th>Q4</th><th>Q5</th><th>평균</th></tr>
+                <tr><th>이름</th><th>제출일시</th><th>Q1</th><th>Q2</th><th>Q3</th><th>Q4</th><th>Q5</th><th>평균</th></tr>
               </thead>
               <tbody id="responses-body"></tbody>
             </table>

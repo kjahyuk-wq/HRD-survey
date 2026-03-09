@@ -1,58 +1,63 @@
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxUTvtAHRy8g1oSMlp3kJCEN6OUlhasmO1fR_9NWJQLPAJ3RCojRTyYXvKBJHVJI3hK/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzDbv0sR9TBZavmK01hkFB_Lz8uTHBYGkPMnvjaGxbtpqzb3RuBtNcr8PslpJVrliT-/exec";
 
-let selectedCourse = '';
+let currentUser = { name: '', phone: '', course: '' };
 
-// 페이지 로드 시 교육과정 목록 불러오기
-window.addEventListener('DOMContentLoaded', loadCourses);
+async function doLogin() {
+  const name = document.getElementById('input-name').value.trim();
+  const phone = document.getElementById('input-phone').value.trim();
+  const errEl = document.getElementById('login-error');
 
-async function loadCourses() {
+  if (!name) { showError('이름을 입력해 주세요.'); return; }
+  if (!/^\d{4}$/.test(phone)) { showError('휴대폰 번호 뒷 4자리를 숫자로 입력해 주세요.'); return; }
+
+  errEl.style.display = 'none';
+  const btn = document.getElementById('login-btn');
+  document.getElementById('login-btn-text').textContent = '확인 중...';
+  btn.disabled = true;
+
   try {
-    const res = await fetch(SCRIPT_URL + '?action=courses');
-    const courses = await res.json();
+    const res = await fetch(`${SCRIPT_URL}?action=login&name=${encodeURIComponent(name)}&phone=${encodeURIComponent(phone)}`);
+    const data = await res.json();
 
-    document.getElementById('course-loading').style.display = 'none';
-
-    if (!courses || courses.length === 0) {
-      document.getElementById('course-empty').style.display = 'block';
+    if (!data.found) {
+      showError('등록된 수강생 정보를 찾을 수 없습니다.\n담당자에게 문의해 주세요.');
+      btn.disabled = false;
+      document.getElementById('login-btn-text').textContent = '확인';
       return;
     }
 
-    const listEl = document.getElementById('course-list');
-    listEl.style.display = 'grid';
-    listEl.innerHTML = courses.map(name => `
-      <div class="course-card" onclick="selectCourse(this, '${escapeAttr(name)}')">
-        <div class="course-card-icon">📚</div>
-        <div class="course-card-name">${name}</div>
-      </div>
-    `).join('');
+    if (data.completed) {
+      showError('이미 설문에 참여하셨습니다. 감사합니다.');
+      btn.disabled = false;
+      document.getElementById('login-btn-text').textContent = '확인';
+      return;
+    }
+
+    currentUser = { name, phone, course: data.course };
+
+    document.getElementById('screen-login').style.display = 'none';
+    document.getElementById('confirm-greeting').textContent = `${name}님, 안녕하세요!`;
+    document.getElementById('confirm-course-name').textContent = data.course;
+    document.getElementById('screen-confirm').style.display = 'block';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
   } catch (e) {
-    document.getElementById('course-loading').textContent = '목록을 불러오지 못했습니다. 새로고침 해주세요.';
+    showError('오류가 발생했습니다. 잠시 후 다시 시도해 주세요.');
+    btn.disabled = false;
+    document.getElementById('login-btn-text').textContent = '확인';
   }
 }
 
-function selectCourse(el, name) {
-  document.querySelectorAll('.course-card').forEach(c => c.classList.remove('selected'));
-  el.classList.add('selected');
-  selectedCourse = name;
-  document.getElementById('course-selected-name').textContent = name;
-  document.getElementById('course-selected-area').style.display = 'block';
-  document.getElementById('course-selected-area').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+function showError(msg) {
+  const el = document.getElementById('login-error');
+  el.textContent = msg;
+  el.style.display = 'block';
 }
 
 function startSurvey() {
-  if (!selectedCourse) return;
-  document.getElementById('screen-course').style.display = 'none';
+  document.getElementById('screen-confirm').style.display = 'none';
   document.getElementById('screen-survey').style.display = 'block';
-  document.getElementById('survey-course-badge').textContent = selectedCourse;
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-function backToCourse() {
-  document.getElementById('screen-survey').style.display = 'none';
-  document.getElementById('screen-course').style.display = 'block';
-  document.querySelectorAll('input[type="radio"]').forEach(r => r.checked = false);
-  document.getElementById('comment').value = '';
-  document.getElementById('error-msg').style.display = 'none';
+  document.getElementById('survey-course-badge').textContent = currentUser.course;
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -70,9 +75,8 @@ async function submitSurvey() {
 
   document.getElementById('error-msg').style.display = 'none';
   const btn = document.getElementById('submit-btn');
-  const btnText = document.getElementById('btn-text');
+  document.getElementById('btn-text').textContent = '제출 중...';
   btn.disabled = true;
-  btnText.textContent = '제출 중...';
 
   try {
     await fetch(SCRIPT_URL, {
@@ -80,7 +84,9 @@ async function submitSurvey() {
       mode: 'no-cors',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        course: selectedCourse,
+        name: currentUser.name,
+        phone: currentUser.phone,
+        course: currentUser.course,
         q1: answers[0], q2: answers[1], q3: answers[2],
         q4: answers[3], q5: answers[4],
         comment: document.getElementById('comment').value.trim()
@@ -91,12 +97,8 @@ async function submitSurvey() {
     document.getElementById('screen-result').style.display = 'block';
     window.scrollTo({ top: 0, behavior: 'smooth' });
   } catch (e) {
-    btnText.textContent = '설문 제출하기';
+    document.getElementById('btn-text').textContent = '설문 제출하기';
     btn.disabled = false;
     alert('제출 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.');
   }
-}
-
-function escapeAttr(str) {
-  return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
 }

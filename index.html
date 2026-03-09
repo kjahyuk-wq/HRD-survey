@@ -18,24 +18,44 @@
       </div>
     </header>
 
-    <!-- 1단계: 교육과정 선택 -->
-    <div id="screen-course">
-      <p class="desc">수강하신 교육과정을 선택해 주세요.</p>
-      <div id="course-loading" class="loading">교육과정 목록을 불러오는 중...</div>
-      <div id="course-list" class="course-list" style="display:none;"></div>
-      <div id="course-empty" class="no-data" style="display:none;">등록된 교육과정이 없습니다.<br>관리자에게 문의해 주세요.</div>
-      <div id="course-selected-area" class="course-selected-area" style="display:none;">
-        <div class="selected-label">선택한 교육과정</div>
-        <div id="course-selected-name" class="selected-name"></div>
-        <button onclick="startSurvey()">설문 시작하기 →</button>
+    <!-- 1단계: 로그인 -->
+    <div id="screen-login">
+      <div class="login-card">
+        <div class="login-card-title">본인 확인</div>
+        <p class="login-desc">이름과 휴대폰 번호 뒷 4자리를 입력해 주세요.</p>
+        <div class="login-fields">
+          <div class="field-group">
+            <label>이름</label>
+            <input type="text" id="input-name" placeholder="홍길동" maxlength="20">
+          </div>
+          <div class="field-group">
+            <label>휴대폰 번호 뒷 4자리</label>
+            <input type="tel" id="input-phone" placeholder="1234" maxlength="4" pattern="[0-9]{4}"
+              onkeydown="if(event.key==='Enter')doLogin()">
+          </div>
+        </div>
+        <div id="login-error" class="error-msg" style="display:none;"></div>
+        <button type="button" id="login-btn" onclick="doLogin()">
+          <span id="login-btn-text">확인</span>
+        </button>
       </div>
     </div>
 
-    <!-- 2단계: 설문 -->
+    <!-- 2단계: 과정 확인 -->
+    <div id="screen-confirm" style="display:none;">
+      <div class="confirm-card">
+        <div class="confirm-icon">✅</div>
+        <div class="confirm-greeting" id="confirm-greeting"></div>
+        <div class="confirm-course-label">배정된 교육과정</div>
+        <div class="confirm-course-name" id="confirm-course-name"></div>
+        <button type="button" onclick="startSurvey()">설문 시작하기 →</button>
+      </div>
+    </div>
+
+    <!-- 3단계: 설문 -->
     <div id="screen-survey" style="display:none;">
       <div class="course-badge-wrap">
         <span class="course-badge" id="survey-course-badge"></span>
-        <button class="back-btn" onclick="backToCourse()">← 과정 재선택</button>
       </div>
       <p class="desc">각 문항에 대해 1(매우 불만족) ~ 5(매우 만족)으로 응답해 주세요.</p>
 
@@ -116,7 +136,7 @@
       </form>
     </div>
 
-    <!-- 3단계: 완료 -->
+    <!-- 4단계: 완료 -->
     <div id="screen-result" class="result" style="display:none;">
       <div class="result-icon">✅</div>
       <h2>설문이 완료되었습니다!</h2>

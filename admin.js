@@ -1,4 +1,4 @@
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxUTvtAHRy8g1oSMlp3kJCEN6OUlhasmO1fR_9NWJQLPAJ3RCojRTyYXvKBJHVJI3hK/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzDbv0sR9TBZavmK01hkFB_Lz8uTHBYGkPMnvjaGxbtpqzb3RuBtNcr8PslpJVrliT-/exec";
 const ADMIN_PASSWORD = "hrd2024!";
 
 const Q_LABELS = [
@@ -52,15 +52,21 @@ async function loadCourseList() {
 
     if (!courses.length) {
       document.getElementById('course-manage-empty').style.display = 'block';
-      return;
+    } else {
+      document.getElementById('course-manage-list').innerHTML = courses.map(name => `
+        <div class="course-manage-item">
+          <span class="course-manage-name">📚 ${name}</span>
+          <button class="delete-btn" onclick="deleteCourse('${escapeAttr(name)}', this)">삭제</button>
+        </div>`).join('');
     }
 
-    document.getElementById('course-manage-list').innerHTML = courses.map(name => `
-      <div class="course-manage-item">
-        <span class="course-manage-name">📚 ${name}</span>
-        <button class="delete-btn" onclick="deleteCourse('${escapeAttr(name)}', this)">삭제</button>
-      </div>
-    `).join('');
+    // 수강생 관리 드롭다운 업데이트
+    const sel = document.getElementById('student-course-select');
+    const prev = sel.value;
+    sel.innerHTML = '<option value="">-- 교육과정을 선택하세요 --</option>' +
+      courses.map(c => `<option value="${escapeAttr(c)}">${c}</option>`).join('');
+    if (prev) sel.value = prev;
+
   } catch (e) {
     document.getElementById('course-manage-loading').textContent = '불러오기 실패';
   }
@@ -72,45 +78,115 @@ async function addCourse() {
   if (!name) { input.focus(); return; }
 
   const btn = document.querySelector('.add-btn');
-  btn.disabled = true;
-  btn.textContent = '추가 중...';
+  btn.disabled = true; btn.textContent = '추가 중...';
 
   try {
-    await fetch(SCRIPT_URL, {
-      method: 'POST', mode: 'no-cors',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'addCourse', name })
-    });
+    await postData({ action: 'addCourse', name });
     input.value = '';
-    await new Promise(r => setTimeout(r, 800));
+    await delay(800);
     await loadCourseList();
-  } catch (e) {
-    alert('추가 중 오류가 발생했습니다.');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '+ 추가';
-  }
+  } catch (e) { alert('추가 중 오류가 발생했습니다.'); }
+  finally { btn.disabled = false; btn.textContent = '+ 추가'; }
 }
 
 async function deleteCourse(name, btnEl) {
   if (!confirm(`"${name}" 과정을 삭제하시겠습니까?\n(기존 설문 데이터는 유지됩니다)`)) return;
+  btnEl.disabled = true; btnEl.textContent = '삭제 중...';
+  try {
+    await postData({ action: 'deleteCourse', name });
+    await delay(800);
+    await loadCourseList();
+  } catch (e) { alert('삭제 중 오류가 발생했습니다.'); btnEl.disabled = false; btnEl.textContent = '삭제'; }
+}
 
-  btnEl.disabled = true;
-  btnEl.textContent = '삭제 중...';
+// ── 수강생 관리 ──────────────────────────────
+async function loadStudents() {
+  const course = document.getElementById('student-course-select').value;
+  document.getElementById('student-placeholder').style.display = course ? 'none' : 'block';
+  document.getElementById('student-section').style.display = course ? 'block' : 'none';
+  if (!course) return;
+
+  document.getElementById('student-loading').style.display = 'block';
+  document.getElementById('student-list').innerHTML = '';
+  document.getElementById('student-empty').style.display = 'none';
+  document.getElementById('student-stats-bar').innerHTML = '';
 
   try {
-    await fetch(SCRIPT_URL, {
-      method: 'POST', mode: 'no-cors',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'deleteCourse', name })
-    });
-    await new Promise(r => setTimeout(r, 800));
-    await loadCourseList();
+    const res = await fetch(`${SCRIPT_URL}?action=students&course=${encodeURIComponent(course)}`);
+    const students = await res.json();
+    document.getElementById('student-loading').style.display = 'none';
+
+    const total = students.length;
+    const done = students.filter(s => s.completed).length;
+
+    document.getElementById('student-stats-bar').innerHTML = `
+      <div class="stu-stat">
+        <span>전체 <strong>${total}명</strong></span>
+        <span class="stu-done">완료 <strong>${done}명</strong></span>
+        <span class="stu-pending">미완료 <strong>${total - done}명</strong></span>
+        <div class="stu-progress-wrap">
+          <div class="stu-progress-bar" style="width:${total > 0 ? (done/total*100) : 0}%"></div>
+        </div>
+      </div>`;
+
+    if (!students.length) {
+      document.getElementById('student-empty').style.display = 'block';
+      return;
+    }
+
+    document.getElementById('student-list').innerHTML = `
+      <div class="student-table-wrap">
+        <table class="student-table">
+          <thead><tr><th>이름</th><th>전화 뒷4자리</th><th>상태</th><th></th></tr></thead>
+          <tbody>
+            ${students.map(s => `
+              <tr>
+                <td>${s.name}</td>
+                <td>****${s.phone}</td>
+                <td>${s.completed
+                  ? `<span class="status-done">✅ 완료</span>`
+                  : `<span class="status-pending">⏳ 미완료</span>`}
+                </td>
+                <td><button class="delete-btn" onclick="deleteStudent('${escapeAttr(s.name)}','${escapeAttr(s.phone)}','${escapeAttr(course)}',this)">삭제</button></td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
   } catch (e) {
-    alert('삭제 중 오류가 발생했습니다.');
-    btnEl.disabled = false;
-    btnEl.textContent = '삭제';
+    document.getElementById('student-loading').textContent = '불러오기 실패';
   }
+}
+
+async function addStudent() {
+  const course = document.getElementById('student-course-select').value;
+  const name = document.getElementById('new-student-name').value.trim();
+  const phone = document.getElementById('new-student-phone').value.trim();
+
+  if (!course) { alert('교육과정을 먼저 선택해 주세요.'); return; }
+  if (!name) { document.getElementById('new-student-name').focus(); return; }
+  if (!/^\d{4}$/.test(phone)) { alert('전화번호 뒷 4자리를 숫자로 입력해 주세요.'); return; }
+
+  const addBtns = document.querySelectorAll('.add-btn');
+  addBtns.forEach(b => { b.disabled = true; b.textContent = '등록 중...'; });
+
+  try {
+    await postData({ action: 'addStudent', name, phone, course });
+    document.getElementById('new-student-name').value = '';
+    document.getElementById('new-student-phone').value = '';
+    await delay(800);
+    await loadStudents();
+  } catch (e) { alert('등록 중 오류가 발생했습니다.'); }
+  finally { addBtns.forEach(b => { b.disabled = false; b.textContent = '+ 등록'; }); }
+}
+
+async function deleteStudent(name, phone, course, btnEl) {
+  if (!confirm(`"${name}" 수강생을 삭제하시겠습니까?`)) return;
+  btnEl.disabled = true; btnEl.textContent = '삭제 중...';
+  try {
+    await postData({ action: 'deleteStudent', name, phone, course });
+    await delay(800);
+    await loadStudents();
+  } catch (e) { alert('삭제 중 오류가 발생했습니다.'); btnEl.disabled = false; btnEl.textContent = '삭제'; }
 }
 
 // ── 통계 ──────────────────────────────
@@ -134,8 +210,13 @@ async function loadStats() {
   document.getElementById('stats-no-data').style.display = 'none';
 
   try {
-    const res = await fetch(`${SCRIPT_URL}?action=responses&course=${encodeURIComponent(course)}`);
-    const responses = await res.json();
+    const [resResponses, resStudents] = await Promise.all([
+      fetch(`${SCRIPT_URL}?action=responses&course=${encodeURIComponent(course)}`),
+      fetch(`${SCRIPT_URL}?action=students&course=${encodeURIComponent(course)}`)
+    ]);
+    const responses = await resResponses.json();
+    const students = await resStudents.json();
+
     document.getElementById('stats-loading').style.display = 'none';
 
     if (!responses || responses.length === 0) {
@@ -143,26 +224,41 @@ async function loadStats() {
       return;
     }
 
-    renderStats(responses);
+    renderStats(responses, students);
     document.getElementById('stats-area').style.display = 'block';
   } catch (e) {
     document.getElementById('stats-loading').textContent = '데이터를 불러오지 못했습니다.';
   }
 }
 
-function renderStats(responses) {
+function renderStats(responses, students) {
   const n = responses.length;
-  const keys = ['q1', 'q2', 'q3', 'q4', 'q5'];
+  const totalStudents = students.length;
+  const completedStudents = students.filter(s => s.completed).length;
+  const rate = totalStudents > 0 ? Math.round(completedStudents / totalStudents * 100) : 0;
+  const notCompleted = students.filter(s => !s.completed);
 
+  document.getElementById('total-students').textContent = totalStudents + '명';
+  document.getElementById('completion-rate').textContent = rate + '%';
+  document.getElementById('completion-detail').textContent = `${completedStudents} / ${totalStudents}명`;
+  document.getElementById('not-completed').textContent = notCompleted.length + '명';
+
+  // 미참여자 목록
+  const ncSection = document.getElementById('not-completed-section');
+  if (notCompleted.length > 0) {
+    ncSection.style.display = 'block';
+    document.getElementById('not-completed-list').innerHTML = notCompleted.map(s =>
+      `<span class="nc-badge">${s.name}</span>`
+    ).join('');
+  } else {
+    ncSection.style.display = 'none';
+  }
+
+  // 항목별 평균
+  const keys = ['q1', 'q2', 'q3', 'q4', 'q5'];
   const avgs = keys.map(k => responses.reduce((acc, r) => acc + (Number(r[k]) || 0), 0) / n);
   const overallAvg = avgs.reduce((a, b) => a + b, 0) / 5;
-  const bestIdx = avgs.indexOf(Math.max(...avgs));
-  const worstIdx = avgs.indexOf(Math.min(...avgs));
-
-  document.getElementById('total-count').textContent = n + '명';
   document.getElementById('overall-avg').textContent = overallAvg.toFixed(2);
-  document.getElementById('best-q').textContent = `Q${bestIdx + 1} (${avgs[bestIdx].toFixed(1)})`;
-  document.getElementById('worst-q').textContent = `Q${worstIdx + 1} (${avgs[worstIdx].toFixed(1)})`;
 
   document.getElementById('question-stats').innerHTML = avgs.map((avg, i) => {
     const pct = (avg / 5 * 100).toFixed(1);
@@ -181,8 +277,7 @@ function renderStats(responses) {
               <div class="dist-bar-wrap"><div class="dist-bar" style="height:${n>0?(cnt/n*60):0}px;background:${color}"></div></div>
               <div class="dist-label">${j+1}점</div>
               <div class="dist-count">${cnt}명</div>
-            </div>
-          `).join('')}
+            </div>`).join('')}
         </div>
       </div>`;
   }).join('');
@@ -192,7 +287,7 @@ function renderStats(responses) {
   document.getElementById('comments-list').innerHTML = comments.length
     ? comments.map(r => `
         <div class="comment-item">
-          <div class="comment-date">${formatDate(r.submittedAt)}</div>
+          <div class="comment-date">${r.name} · ${formatDate(r.submittedAt)}</div>
           <div class="comment-text">${escapeHtml(String(r.comment))}</div>
         </div>`).join('')
     : '<div class="no-comment">작성된 의견이 없습니다.</div>';
@@ -201,12 +296,24 @@ function renderStats(responses) {
     const scores = keys.map(k => Number(r[k]) || 0);
     const avg = (scores.reduce((a,b) => a+b, 0) / 5).toFixed(1);
     return `<tr>
+      <td>${r.name || '-'}</td>
       <td>${formatDate(r.submittedAt)}</td>
       ${scores.map(s => `<td class="score-cell score-${s}">${s}</td>`).join('')}
       <td class="avg-cell">${avg}</td>
     </tr>`;
   }).join('');
 }
+
+// ── 유틸 ──────────────────────────────
+function postData(body) {
+  return fetch(SCRIPT_URL, {
+    method: 'POST', mode: 'no-cors',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+}
+
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 function formatDate(val) {
   if (!val) return '-';
@@ -228,4 +335,7 @@ window.logout = logout;
 window.switchTab = switchTab;
 window.addCourse = addCourse;
 window.deleteCourse = deleteCourse;
+window.loadStudents = loadStudents;
+window.addStudent = addStudent;
+window.deleteStudent = deleteStudent;
 window.loadStats = loadStats;
