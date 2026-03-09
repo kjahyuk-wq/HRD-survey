@@ -1,6 +1,6 @@
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycby2Uojv9p2W4kiyeAWLxkigb0hxysOU4nV2YTAr0zp0BfjQJlCsAhBLEloWNku8Ht98/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzMlJtsmYl6EjNWB9iIqCPKniX8j1_T0anZ9v4ufyQH18US3ubxuTUlcAIeQOqB3I8w/exec";
 
-let currentUser = { name: '', phone: '', course: '' };
+let currentUser = { name: '', phone: '', course: '', instructors: [] };
 
 async function doLogin() {
   const name = document.getElementById('input-name').value.trim();
@@ -17,25 +17,28 @@ async function doLogin() {
   try {
     const res = await fetch(`${SCRIPT_URL}?action=login&name=${encodeURIComponent(name)}&phone=${encodeURIComponent(phone)}`);
     const text = await res.text();
-
     let data;
     try { data = JSON.parse(text); }
-    catch (_) {
-      showLoginError('서버 연결에 문제가 발생했습니다.\n잠시 후 다시 시도해 주세요.');
-      reset(); return;
-    }
+    catch (_) { showLoginError('서버 연결에 문제가 발생했습니다.\n잠시 후 다시 시도해 주세요.'); reset(); return; }
 
     if (!data.found) {
       showLoginError('등록된 수강생 정보를 찾을 수 없습니다.\n이름 또는 전화번호를 확인하거나 담당자에게 문의해 주세요.');
       reset(); return;
     }
-
     if (data.completed) {
       showLoginError('이미 설문에 참여하셨습니다.\n감사합니다!');
       reset(); return;
     }
 
-    currentUser = { name, phone, course: data.course };
+    // 강사 목록 함께 불러오기
+    let instructors = [];
+    try {
+      const iRes = await fetch(`${SCRIPT_URL}?action=instructors&course=${encodeURIComponent(data.course)}`);
+      const iText = await iRes.text();
+      instructors = JSON.parse(iText);
+    } catch (_) {}
+
+    currentUser = { name, phone, course: data.course, instructors };
 
     document.getElementById('page-login').style.display = 'none';
     document.getElementById('page-survey').style.display = 'block';
@@ -64,10 +67,48 @@ function showLoginError(msg) {
 function startSurvey() {
   document.getElementById('screen-confirm').style.display = 'none';
   document.getElementById('screen-survey').style.display = 'block';
+
   const badge = document.getElementById('survey-course-badge');
   badge.textContent = currentUser.course;
   badge.style.display = 'inline-block';
+
+  // 강사 문항 동적 생성
+  renderInstructorQuestions(currentUser.instructors);
+
+  // 문항 수 안내 업데이트
+  const totalQ = 5 + currentUser.instructors.length;
+  document.getElementById('survey-q-count').textContent = `총 ${totalQ}문항`;
+
   window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function renderInstructorQuestions(instructors) {
+  const container = document.getElementById('instructor-questions');
+  if (!instructors || instructors.length === 0) { container.innerHTML = ''; return; }
+
+  container.innerHTML = instructors.map((inst, idx) => {
+    const qNum = 6 + idx;
+    const inputName = `instructor_${idx}`;
+    const instName = typeof inst === 'string' ? inst : inst.name;
+    const edu = typeof inst === 'string' ? '' : inst.education;
+    const label = edu
+      ? `[${escapeHtml(edu)}] ${escapeHtml(instName)} 강사의 강의 만족도는 어떠셨습니까?`
+      : `${escapeHtml(instName)} 강사의 강의 만족도는 어떠셨습니까?`;
+    return `
+      <div class="q-card">
+        <div class="q-num">Q${qNum}</div>
+        <div class="q-txt">${label}</div>
+        <div class="rating-group" data-question="${qNum}">
+          ${[1,2,3,4,5].map((v, i) => {
+            const labels = ['매우 불만족','불만족','보통','만족','매우 만족'];
+            return `<label class="rating-label">
+              <input type="radio" name="${inputName}" value="${v}">
+              <span class="rating-btn">${v}<br><small>${labels[i]}</small></span>
+            </label>`;
+          }).join('')}
+        </div>
+      </div>`;
+  }).join('');
 }
 
 async function submitSurvey() {
@@ -82,6 +123,22 @@ async function submitSurvey() {
     answers.push(parseInt(selected.value));
   }
 
+  // 강사 평가 수집
+  const instructorScores = {};
+  for (let idx = 0; idx < currentUser.instructors.length; idx++) {
+    const selected = document.querySelector(`input[name="instructor_${idx}"]:checked`);
+    if (!selected) {
+      document.getElementById('error-msg').style.display = 'block';
+      document.querySelector(`[data-question="${6 + idx}"]`).scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    const inst = currentUser.instructors[idx];
+    const instName = typeof inst === 'string' ? inst : inst.name;
+    const edu = typeof inst === 'string' ? '' : inst.education;
+    const key = edu ? `${edu}__${instName}` : instName;
+    instructorScores[key] = parseInt(selected.value);
+  }
+
   document.getElementById('error-msg').style.display = 'none';
   const btn = document.getElementById('submit-btn');
   document.getElementById('btn-text').textContent = '제출 중...';
@@ -94,6 +151,7 @@ async function submitSurvey() {
       body: JSON.stringify({
         name: currentUser.name, phone: currentUser.phone, course: currentUser.course,
         q1: answers[0], q2: answers[1], q3: answers[2], q4: answers[3], q5: answers[4],
+        instructors: instructorScores,
         comment: document.getElementById('comment').value.trim()
       })
     });
@@ -105,4 +163,8 @@ async function submitSurvey() {
     btn.disabled = false;
     alert('제출 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.');
   }
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }

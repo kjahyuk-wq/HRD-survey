@@ -1,4 +1,4 @@
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycby2Uojv9p2W4kiyeAWLxkigb0hxysOU4nV2YTAr0zp0BfjQJlCsAhBLEloWNku8Ht98/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzMlJtsmYl6EjNWB9iIqCPKniX8j1_T0anZ9v4ufyQH18US3ubxuTUlcAIeQOqB3I8w/exec";
 const ADMIN_PASSWORD = "hrd2024!";
 
 const Q_LABELS = [
@@ -53,10 +53,16 @@ async function loadCourseList() {
     if (!courses.length) {
       document.getElementById('course-manage-empty').style.display = 'block';
     } else {
-      document.getElementById('course-manage-list').innerHTML = courses.map(name => `
-        <div class="course-manage-item">
-          <span class="course-manage-name">📚 ${name}</span>
-          <button class="delete-btn" onclick="deleteCourse('${escapeAttr(name)}', this)">삭제</button>
+      document.getElementById('course-manage-list').innerHTML = courses.map((name, idx) => `
+        <div class="course-manage-item" id="course-item-${idx}">
+          <div class="course-manage-row">
+            <span class="course-manage-name">📚 ${name}</span>
+            <div class="course-manage-actions">
+              <button class="instructor-btn" onclick="toggleInstructors('${escapeAttr(name)}', ${idx})">👨‍🏫 강사 관리</button>
+              <button class="delete-btn" onclick="deleteCourse('${escapeAttr(name)}', this)">삭제</button>
+            </div>
+          </div>
+          <div class="instructor-panel" id="inst-panel-${idx}" style="display:none;"></div>
         </div>`).join('');
     }
 
@@ -96,6 +102,81 @@ async function deleteCourse(name, btnEl) {
     await postData({ action: 'deleteCourse', name });
     await delay(800);
     await loadCourseList();
+  } catch (e) { alert('삭제 중 오류가 발생했습니다.'); btnEl.disabled = false; btnEl.textContent = '삭제'; }
+}
+
+// ── 강사 관리 ──────────────────────────────
+async function toggleInstructors(courseName, idx) {
+  const panel = document.getElementById(`inst-panel-${idx}`);
+  if (panel.style.display === 'none') {
+    panel.style.display = 'block';
+    await loadInstructors(courseName, idx);
+  } else {
+    panel.style.display = 'none';
+  }
+}
+
+async function loadInstructors(courseName, panelIdx) {
+  const panel = document.getElementById(`inst-panel-${panelIdx}`);
+  panel.innerHTML = '<div class="inst-loading">불러오는 중...</div>';
+  try {
+    const res = await fetch(`${SCRIPT_URL}?action=instructors&course=${encodeURIComponent(courseName)}`);
+    const instructors = await res.json();
+    renderInstructorPanel(courseName, panelIdx, instructors);
+  } catch (e) {
+    panel.innerHTML = '<div class="inst-loading">불러오기 실패</div>';
+  }
+}
+
+function renderInstructorPanel(courseName, panelIdx, instructors) {
+  const panel = document.getElementById(`inst-panel-${panelIdx}`);
+  const ec = escapeAttr(courseName);
+  const listHtml = instructors.length === 0
+    ? '<div class="inst-empty">등록된 강사가 없습니다. 강사를 추가해 주세요.</div>'
+    : instructors.map((inst, i) => {
+        const name = typeof inst === 'string' ? inst : inst.name;
+        const edu  = typeof inst === 'string' ? '' : (inst.education || '');
+        const label = edu ? `<span class="inst-edu-tag">${escapeHtml(edu)}</span> ${escapeHtml(name)}` : escapeHtml(name);
+        const en = escapeAttr(name), ee = escapeAttr(edu);
+        return `<div class="inst-item">
+          <span class="inst-label">${label}</span>
+          <button class="delete-btn" onclick="deleteInstructor('${ec}', ${panelIdx}, '${en}', '${ee}', this)">삭제</button>
+        </div>`;
+      }).join('');
+
+  panel.innerHTML = `
+    <div class="inst-add-row">
+      <input type="text" id="inst-edu-${panelIdx}" placeholder="교육명 (예: AI 기초과정)" maxlength="50">
+      <input type="text" id="inst-name-${panelIdx}" placeholder="강사명 (예: 홍길동)" maxlength="20">
+      <button class="add-btn inst-add-btn" onclick="addInstructor('${ec}', ${panelIdx})">+ 추가</button>
+    </div>
+    <div class="inst-list" id="inst-list-${panelIdx}">${listHtml}</div>`;
+}
+
+async function addInstructor(courseName, panelIdx) {
+  const edu  = document.getElementById(`inst-edu-${panelIdx}`).value.trim();
+  const name = document.getElementById(`inst-name-${panelIdx}`).value.trim();
+  if (!edu)  { document.getElementById(`inst-edu-${panelIdx}`).focus(); return; }
+  if (!name) { document.getElementById(`inst-name-${panelIdx}`).focus(); return; }
+
+  const btn = document.querySelector(`#inst-panel-${panelIdx} .inst-add-btn`);
+  btn.disabled = true; btn.textContent = '추가 중...';
+  try {
+    await postData({ action: 'addInstructor', course: courseName, name, education: edu });
+    document.getElementById(`inst-edu-${panelIdx}`).value = '';
+    document.getElementById(`inst-name-${panelIdx}`).value = '';
+    await delay(800);
+    await loadInstructors(courseName, panelIdx);
+  } catch (e) { alert('추가 중 오류가 발생했습니다.'); btn.disabled = false; btn.textContent = '+ 추가'; }
+}
+
+async function deleteInstructor(courseName, panelIdx, name, education, btnEl) {
+  if (!confirm(`"${name}" 강사를 삭제하시겠습니까?`)) return;
+  btnEl.disabled = true; btnEl.textContent = '삭제 중...';
+  try {
+    await postData({ action: 'deleteInstructor', course: courseName, name, education });
+    await delay(800);
+    await loadInstructors(courseName, panelIdx);
   } catch (e) { alert('삭제 중 오류가 발생했습니다.'); btnEl.disabled = false; btnEl.textContent = '삭제'; }
 }
 
@@ -282,6 +363,55 @@ function renderStats(responses, students) {
       </div>`;
   }).join('');
 
+  // 강사별 만족도 통계
+  const instScoreMap = {}; // key → [scores]
+  responses.forEach(r => {
+    if (!r.instructors) return;
+    let obj = r.instructors;
+    if (typeof obj === 'string') { try { obj = JSON.parse(obj); } catch { return; } }
+    Object.entries(obj).forEach(([key, score]) => {
+      if (!instScoreMap[key]) instScoreMap[key] = [];
+      const v = Number(score);
+      if (v >= 1 && v <= 5) instScoreMap[key].push(v);
+    });
+  });
+
+  const instKeys = Object.keys(instScoreMap);
+  if (instKeys.length > 0) {
+    document.getElementById('instructor-stats-section').style.display = 'block';
+    document.getElementById('instructor-stats').innerHTML = instKeys.map(key => {
+      const scores = instScoreMap[key];
+      const cnt = scores.length;
+      const avg = scores.reduce((a, b) => a + b, 0) / cnt;
+      const pct = (avg / 5 * 100).toFixed(1);
+      const color = avg >= 4.5 ? '#22c55e' : avg >= 3.5 ? '#0066cc' : avg >= 2.5 ? '#f59e0b' : '#ef4444';
+      const dist = [1,2,3,4,5].map(v => scores.filter(s => s === v).length);
+      // key 형식: "교육명__강사명" 또는 "강사명"
+      const parts = key.split('__');
+      const label = parts.length === 2
+        ? `👨‍🏫 [${escapeHtml(parts[0])}] ${escapeHtml(parts[1])} 강사`
+        : `👨‍🏫 ${escapeHtml(key)} 강사`;
+      return `
+        <div class="q-stat-card">
+          <div class="q-stat-header">
+            <span class="q-stat-label">${label}</span>
+            <span class="q-stat-avg" style="color:${color}">${avg.toFixed(2)}점</span>
+          </div>
+          <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${color}"></div></div>
+          <div class="dist-row">
+            ${dist.map((c, j) => `
+              <div class="dist-item">
+                <div class="dist-bar-wrap"><div class="dist-bar" style="height:${cnt>0?(c/cnt*60):0}px;background:${color}"></div></div>
+                <div class="dist-label">${j+1}점</div>
+                <div class="dist-count">${c}명</div>
+              </div>`).join('')}
+          </div>
+        </div>`;
+    }).join('');
+  } else {
+    document.getElementById('instructor-stats-section').style.display = 'none';
+  }
+
   const comments = responses.filter(r => r.comment && String(r.comment).trim());
   document.getElementById('comment-count').textContent = comments.length + '건';
   document.getElementById('comments-list').innerHTML = comments.length
@@ -324,6 +454,9 @@ window.logout = logout;
 window.switchTab = switchTab;
 window.addCourse = addCourse;
 window.deleteCourse = deleteCourse;
+window.toggleInstructors = toggleInstructors;
+window.addInstructor = addInstructor;
+window.deleteInstructor = deleteInstructor;
 window.loadStudents = loadStudents;
 window.addStudent = addStudent;
 window.deleteStudent = deleteStudent;

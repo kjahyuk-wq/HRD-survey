@@ -63,7 +63,7 @@
           <div class="greet" id="confirm-greeting"></div>
           <div class="clabel">배정된 교육과정</div>
           <div class="cname" id="confirm-course-name"></div>
-          <p class="cnote">위 과정의 만족도를 평가해 주세요.<br>총 5문항, 약 2분이 소요됩니다.</p>
+          <p class="cnote">위 과정의 만족도를 평가해 주세요.<br><span id="survey-q-count">총 5문항</span>, 약 2분이 소요됩니다.</p>
           <button onclick="startSurvey()">설문 시작하기 →</button>
         </div>
       </div>
@@ -132,13 +132,16 @@
           </div>
         </div>
 
+        <!-- 강사별 만족도 문항 (동적 생성: Q6, Q7, ...) -->
+        <div id="instructor-questions"></div>
+
         <div class="q-card optional">
           <div class="q-num opt">의견 <em>선택</em></div>
           <div class="q-txt">기타 의견이 있으시면 자유롭게 작성해 주세요.</div>
           <textarea id="comment" placeholder="교육 개선을 위한 소중한 의견을 남겨주세요." rows="4"></textarea>
         </div>
 
-        <div id="error-msg" class="sv-error" style="display:none;">⚠️ 모든 문항(Q1~Q5)에 응답해 주세요.</div>
+        <div id="error-msg" class="sv-error" style="display:none;">⚠️ 모든 문항에 응답해 주세요.</div>
         <button id="submit-btn" onclick="submitSurvey()"><span id="btn-text">설문 제출하기</span></button>
       </div>
 
