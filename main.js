@@ -64,7 +64,9 @@ function showLoginError(msg) {
 function startSurvey() {
   document.getElementById('screen-confirm').style.display = 'none';
   document.getElementById('screen-survey').style.display = 'block';
-  document.getElementById('survey-course-badge').textContent = currentUser.course;
+  const badge = document.getElementById('survey-course-badge');
+  badge.textContent = currentUser.course;
+  badge.style.display = 'inline-block';
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
