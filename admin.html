@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>만족도 통계 - 대전광역시 인재개발원</title>
+  <link href="style.css" rel="stylesheet">
+  <link href="admin.css" rel="stylesheet">
+</head>
+<body>
+  <!-- 로그인 화면 -->
+  <div id="login-screen" class="login-screen">
+    <div class="login-box">
+      <div class="logo-icon">🏛️</div>
+      <div class="org-name" style="text-align:center;margin-bottom:4px;">대전광역시 인재개발원</div>
+      <h2>관리자 로그인</h2>
+      <input type="password" id="pw-input" placeholder="비밀번호를 입력하세요" onkeydown="if(event.key==='Enter')checkLogin()">
+      <button onclick="checkLogin()">로그인</button>
+      <div id="pw-error" class="pw-error" style="display:none;">비밀번호가 올바르지 않습니다.</div>
+    </div>
+  </div>
+
+  <!-- 관리자 대시보드 -->
+  <div id="dashboard" style="display:none;">
+    <div class="container">
+      <header>
+        <div class="logo-area">
+          <div class="logo-icon">📊</div>
+          <div>
+            <div class="org-name">대전광역시 인재개발원</div>
+            <h1>만족도 조사 통계</h1>
+          </div>
+        </div>
+        <div class="header-actions">
+          <button class="refresh-btn" onclick="loadData()">새로고침</button>
+          <button class="logout-btn" onclick="logout()">로그아웃</button>
+        </div>
+      </header>
+
+      <div id="loading" class="loading">데이터를 불러오는 중...</div>
+      <div id="no-data" class="no-data" style="display:none;">아직 제출된 설문이 없습니다.</div>
+
+      <div id="stats-area" style="display:none;">
+        <!-- 요약 카드 -->
+        <div class="summary-cards">
+          <div class="summary-card">
+            <div class="card-label">총 응답 수</div>
+            <div class="card-value" id="total-count">-</div>
+          </div>
+          <div class="summary-card highlight">
+            <div class="card-label">전체 평균</div>
+            <div class="card-value" id="overall-avg">-</div>
+            <div class="card-sub">/ 5.0</div>
+          </div>
+          <div class="summary-card">
+            <div class="card-label">최고 항목</div>
+            <div class="card-value" id="best-q">-</div>
+          </div>
+          <div class="summary-card">
+            <div class="card-label">개선 필요 항목</div>
+            <div class="card-value" id="worst-q">-</div>
+          </div>
+        </div>
+
+        <!-- 항목별 평균 -->
+        <div class="section-title">항목별 평균 점수</div>
+        <div class="question-stats" id="question-stats"></div>
+
+        <!-- 최근 의견 -->
+        <div class="section-title">교육생 의견 <span id="comment-count" class="badge"></span></div>
+        <div id="comments-list" class="comments-list"></div>
+
+        <!-- 최근 응답 목록 -->
+        <div class="section-title">최근 응답 목록</div>
+        <div class="table-wrap">
+          <table id="responses-table">
+            <thead>
+              <tr>
+                <th>제출일시</th>
+                <th>Q1</th><th>Q2</th><th>Q3</th><th>Q4</th><th>Q5</th>
+                <th>평균</th>
+              </tr>
+            </thead>
+            <tbody id="responses-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="admin.js"></script>
+</body>
+</html>

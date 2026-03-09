@@ -1,12 +1,11 @@
-const questions = [
-  'Q1. 교육 내용의 업무 역량 도움',
-  'Q2. 강사 전문성 및 교수 능력',
-  'Q3. 교육 일정 및 운영 방식',
-  'Q4. 교육 시설 및 환경',
-  'Q5. 동료 추천 의향',
-];
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { firebaseConfig } from "./firebase-config.js";
 
-function submitSurvey() {
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+async function submitSurvey() {
   const answers = [];
   for (let i = 1; i <= 5; i++) {
     const selected = document.querySelector(`input[name="q${i}"]:checked`);
@@ -20,33 +19,33 @@ function submitSurvey() {
 
   document.getElementById('error-msg').style.display = 'none';
 
-  const avg = (answers.reduce((a, b) => a + b, 0) / answers.length).toFixed(1);
-  const comment = document.getElementById('comment').value.trim();
+  const btn = document.getElementById('submit-btn');
+  const btnText = document.getElementById('btn-text');
+  btn.disabled = true;
+  btnText.textContent = '제출 중...';
 
-  // 결과 요약 렌더링
-  const summaryEl = document.getElementById('score-summary');
-  summaryEl.innerHTML =
-    questions.map((q, i) => `
-      <div class="score-row">
-        <span class="score-label">${q}</span>
-        <span class="score-value">${answers[i]}점 ${'★'.repeat(answers[i])}${'☆'.repeat(5 - answers[i])}</span>
-      </div>
-    `).join('') +
-    `<div class="score-avg"><span>평균 만족도</span><span>${avg} / 5.0</span></div>` +
-    (comment ? `<div style="margin-top:0.8rem;font-size:0.85rem;color:#555;"><b>의견:</b> ${comment}</div>` : '');
+  try {
+    await addDoc(collection(db, "responses"), {
+      q1: answers[0],
+      q2: answers[1],
+      q3: answers[2],
+      q4: answers[3],
+      q5: answers[4],
+      comment: document.getElementById('comment').value.trim(),
+      submittedAt: serverTimestamp()
+    });
 
-  // 화면 전환
-  document.getElementById('survey-form').style.display = 'none';
-  const result = document.getElementById('result');
-  result.style.display = 'block';
-  result.scrollIntoView({ behavior: 'smooth' });
+    document.getElementById('survey-form').style.display = 'none';
+    const result = document.getElementById('result');
+    result.style.display = 'block';
+    result.scrollIntoView({ behavior: 'smooth' });
+
+  } catch (e) {
+    console.error(e);
+    btnText.textContent = '설문 제출하기';
+    btn.disabled = false;
+    alert('제출 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.');
+  }
 }
 
-function resetSurvey() {
-  document.querySelectorAll('input[type="radio"]').forEach(r => r.checked = false);
-  document.getElementById('comment').value = '';
-  document.getElementById('error-msg').style.display = 'none';
-  document.getElementById('survey-form').style.display = 'block';
-  document.getElementById('result').style.display = 'none';
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
+window.submitSurvey = submitSurvey;
