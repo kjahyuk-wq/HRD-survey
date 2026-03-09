@@ -1,53 +1,52 @@
-let history = [];
+const questions = [
+  'Q1. 교육 내용의 업무 역량 도움',
+  'Q2. 강사 전문성 및 교수 능력',
+  'Q3. 교육 일정 및 운영 방식',
+  'Q4. 교육 시설 및 환경',
+  'Q5. 동료 추천 의향',
+];
 
-function generateLotto() {
-  const numbers = [];
-  while (numbers.length < 6) {
-    const n = Math.floor(Math.random() * 45) + 1;
-    if (!numbers.includes(n)) numbers.push(n);
+function submitSurvey() {
+  const answers = [];
+  for (let i = 1; i <= 5; i++) {
+    const selected = document.querySelector(`input[name="q${i}"]:checked`);
+    if (!selected) {
+      document.getElementById('error-msg').style.display = 'block';
+      document.querySelector(`[data-question="${i}"]`).scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    answers.push(parseInt(selected.value));
   }
-  numbers.sort((a, b) => a - b);
 
-  renderBalls(numbers);
-  addHistory(numbers);
+  document.getElementById('error-msg').style.display = 'none';
+
+  const avg = (answers.reduce((a, b) => a + b, 0) / answers.length).toFixed(1);
+  const comment = document.getElementById('comment').value.trim();
+
+  // 결과 요약 렌더링
+  const summaryEl = document.getElementById('score-summary');
+  summaryEl.innerHTML =
+    questions.map((q, i) => `
+      <div class="score-row">
+        <span class="score-label">${q}</span>
+        <span class="score-value">${answers[i]}점 ${'★'.repeat(answers[i])}${'☆'.repeat(5 - answers[i])}</span>
+      </div>
+    `).join('') +
+    `<div class="score-avg"><span>평균 만족도</span><span>${avg} / 5.0</span></div>` +
+    (comment ? `<div style="margin-top:0.8rem;font-size:0.85rem;color:#555;"><b>의견:</b> ${comment}</div>` : '');
+
+  // 화면 전환
+  document.getElementById('survey-form').style.display = 'none';
+  const result = document.getElementById('result');
+  result.style.display = 'block';
+  result.scrollIntoView({ behavior: 'smooth' });
 }
 
-function getBallColor(n) {
-  if (n <= 10) return '#fbc400';
-  if (n <= 20) return '#69c8f2';
-  if (n <= 30) return '#ff7272';
-  if (n <= 40) return '#aaaaaa';
-  return '#b0d840';
-}
-
-function renderBalls(numbers) {
-  const container = document.getElementById('balls-container');
-  container.innerHTML = '';
-  numbers.forEach((n, i) => {
-    const ball = document.createElement('div');
-    ball.className = 'ball';
-    ball.textContent = n;
-    ball.style.backgroundColor = getBallColor(n);
-    ball.style.animationDelay = `${i * 0.1}s`;
-    container.appendChild(ball);
-  });
-}
-
-function addHistory(numbers) {
-  history.unshift(numbers);
-  if (history.length > 5) history.pop();
-
-  const container = document.getElementById('history');
-  if (history.length === 0) { container.innerHTML = ''; return; }
-
-  container.innerHTML = '<h3>최근 추첨 기록</h3>';
-  history.forEach((nums, idx) => {
-    const row = document.createElement('div');
-    row.className = 'history-row';
-    row.innerHTML = `<span class="history-index">${idx + 1}회</span>` +
-      nums.map(n =>
-        `<span class="history-ball" style="background:${getBallColor(n)}">${n}</span>`
-      ).join('');
-    container.appendChild(row);
-  });
+function resetSurvey() {
+  document.querySelectorAll('input[type="radio"]').forEach(r => r.checked = false);
+  document.getElementById('comment').value = '';
+  document.getElementById('error-msg').style.display = 'none';
+  document.getElementById('survey-form').style.display = 'block';
+  document.getElementById('result').style.display = 'none';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }

@@ -3,23 +3,158 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>로또 번호 추천</title>
-  <link href='/style.css' rel='stylesheet'>
+  <title>교육과정 만족도 조사 - 대전광역시 인재개발원</title>
+  <link href="style.css" rel="stylesheet">
 </head>
 <body>
   <div class="container">
-    <h1>🎱 로또 번호 추천</h1>
-    <p class="subtitle">1~45 중 6개 번호를 무작위로 추천해드립니다</p>
+    <header>
+      <div class="logo-area">
+        <div class="logo-icon">🏛️</div>
+        <div>
+          <div class="org-name">대전광역시 인재개발원</div>
+          <h1>교육과정 만족도 조사</h1>
+        </div>
+      </div>
+      <p class="desc">본 설문은 교육과정 개선을 위한 자료로 활용됩니다.<br>솔직한 의견을 남겨주시면 감사하겠습니다.</p>
+    </header>
 
-    <div id="balls-container" class="balls-container">
-      <div class="placeholder">버튼을 눌러 번호를 뽑아보세요!</div>
+    <form id="survey-form">
+      <div class="questions">
+
+        <div class="question-card">
+          <div class="q-number">Q1</div>
+          <div class="q-text">교육 내용은 업무 역량 향상에 도움이 되었습니까?</div>
+          <div class="rating-group" data-question="1">
+            <label class="rating-label">
+              <input type="radio" name="q1" value="1"> <span class="rating-btn">1<br><small>매우 불만족</small></span>
+            </label>
+            <label class="rating-label">
+              <input type="radio" name="q1" value="2"> <span class="rating-btn">2<br><small>불만족</small></span>
+            </label>
+            <label class="rating-label">
+              <input type="radio" name="q1" value="3"> <span class="rating-btn">3<br><small>보통</small></span>
+            </label>
+            <label class="rating-label">
+              <input type="radio" name="q1" value="4"> <span class="rating-btn">4<br><small>만족</small></span>
+            </label>
+            <label class="rating-label">
+              <input type="radio" name="q1" value="5"> <span class="rating-btn">5<br><small>매우 만족</small></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="question-card">
+          <div class="q-number">Q2</div>
+          <div class="q-text">강사의 강의 전문성 및 교수 능력에 만족하십니까?</div>
+          <div class="rating-group" data-question="2">
+            <label class="rating-label">
+              <input type="radio" name="q2" value="1"> <span class="rating-btn">1<br><small>매우 불만족</small></span>
+            </label>
+            <label class="rating-label">
+              <input type="radio" name="q2" value="2"> <span class="rating-btn">2<br><small>불만족</small></span>
+            </label>
+            <label class="rating-label">
+              <input type="radio" name="q2" value="3"> <span class="rating-btn">3<br><small>보통</small></span>
+            </label>
+            <label class="rating-label">
+              <input type="radio" name="q2" value="4"> <span class="rating-btn">4<br><small>만족</small></span>
+            </label>
+            <label class="rating-label">
+              <input type="radio" name="q2" value="5"> <span class="rating-btn">5<br><small>매우 만족</small></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="question-card">
+          <div class="q-number">Q3</div>
+          <div class="q-text">교육 일정 및 운영 방식(시간·진행 등)은 적절하였습니까?</div>
+          <div class="rating-group" data-question="3">
+            <label class="rating-label">
+              <input type="radio" name="q3" value="1"> <span class="rating-btn">1<br><small>매우 불만족</small></span>
+            </label>
+            <label class="rating-label">
+              <input type="radio" name="q3" value="2"> <span class="rating-btn">2<br><small>불만족</small></span>
+            </label>
+            <label class="rating-label">
+              <input type="radio" name="q3" value="3"> <span class="rating-btn">3<br><small>보통</small></span>
+            </label>
+            <label class="rating-label">
+              <input type="radio" name="q3" value="4"> <span class="rating-btn">4<br><small>만족</small></span>
+            </label>
+            <label class="rating-label">
+              <input type="radio" name="q3" value="5"> <span class="rating-btn">5<br><small>매우 만족</small></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="question-card">
+          <div class="q-number">Q4</div>
+          <div class="q-text">교육 시설(강의실·편의시설 등) 및 교육 환경에 만족하십니까?</div>
+          <div class="rating-group" data-question="4">
+            <label class="rating-label">
+              <input type="radio" name="q4" value="1"> <span class="rating-btn">1<br><small>매우 불만족</small></span>
+            </label>
+            <label class="rating-label">
+              <input type="radio" name="q4" value="2"> <span class="rating-btn">2<br><small>불만족</small></span>
+            </label>
+            <label class="rating-label">
+              <input type="radio" name="q4" value="3"> <span class="rating-btn">3<br><small>보통</small></span>
+            </label>
+            <label class="rating-label">
+              <input type="radio" name="q4" value="4"> <span class="rating-btn">4<br><small>만족</small></span>
+            </label>
+            <label class="rating-label">
+              <input type="radio" name="q4" value="5"> <span class="rating-btn">5<br><small>매우 만족</small></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="question-card">
+          <div class="q-number">Q5</div>
+          <div class="q-text">이 교육과정을 동료에게 추천하고 싶습니까?</div>
+          <div class="rating-group" data-question="5">
+            <label class="rating-label">
+              <input type="radio" name="q5" value="1"> <span class="rating-btn">1<br><small>전혀 아니다</small></span>
+            </label>
+            <label class="rating-label">
+              <input type="radio" name="q5" value="2"> <span class="rating-btn">2<br><small>아니다</small></span>
+            </label>
+            <label class="rating-label">
+              <input type="radio" name="q5" value="3"> <span class="rating-btn">3<br><small>보통</small></span>
+            </label>
+            <label class="rating-label">
+              <input type="radio" name="q5" value="4"> <span class="rating-btn">4<br><small>그렇다</small></span>
+            </label>
+            <label class="rating-label">
+              <input type="radio" name="q5" value="5"> <span class="rating-btn">5<br><small>매우 그렇다</small></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="question-card optional">
+          <div class="q-number opt">의견</div>
+          <div class="q-text">기타 의견이 있으시면 자유롭게 작성해 주세요. <span class="optional-tag">선택</span></div>
+          <textarea id="comment" placeholder="교육 개선을 위한 소중한 의견을 남겨주세요." rows="4"></textarea>
+        </div>
+
+      </div>
+
+      <div id="error-msg" class="error-msg" style="display:none;">⚠️ 모든 문항(Q1~Q5)에 응답해 주세요.</div>
+
+      <button type="button" id="submit-btn" onclick="submitSurvey()">설문 제출하기</button>
+    </form>
+
+    <!-- 완료 화면 -->
+    <div id="result" class="result" style="display:none;">
+      <div class="result-icon">✅</div>
+      <h2>설문이 완료되었습니다!</h2>
+      <p>소중한 의견을 주셔서 감사합니다.<br>더 나은 교육을 위해 적극 반영하겠습니다.</p>
+      <div id="score-summary" class="score-summary"></div>
+      <button onclick="resetSurvey()">다시 응답하기</button>
     </div>
 
-    <button id="generate-btn" onclick="generateLotto()">번호 뽑기</button>
-
-    <div id="history" class="history"></div>
   </div>
-
-  <script defer type="text/javascript" src="/main.js"></script>
+  <script src="main.js"></script>
 </body>
 </html>
