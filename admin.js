@@ -1,4 +1,4 @@
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzDbv0sR9TBZavmK01hkFB_Lz8uTHBYGkPMnvjaGxbtpqzb3RuBtNcr8PslpJVrliT-/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycby2Uojv9p2W4kiyeAWLxkigb0hxysOU4nV2YTAr0zp0BfjQJlCsAhBLEloWNku8Ht98/exec";
 const ADMIN_PASSWORD = "hrd2024!";
 
 const Q_LABELS = [
@@ -287,21 +287,10 @@ function renderStats(responses, students) {
   document.getElementById('comments-list').innerHTML = comments.length
     ? comments.map(r => `
         <div class="comment-item">
-          <div class="comment-date">${r.name} · ${formatDate(r.submittedAt)}</div>
+          <div class="comment-date">익명 · ${formatDate(r.submittedAt)}</div>
           <div class="comment-text">${escapeHtml(String(r.comment))}</div>
         </div>`).join('')
     : '<div class="no-comment">작성된 의견이 없습니다.</div>';
-
-  document.getElementById('responses-body').innerHTML = [...responses].reverse().map(r => {
-    const scores = keys.map(k => Number(r[k]) || 0);
-    const avg = (scores.reduce((a,b) => a+b, 0) / 5).toFixed(1);
-    return `<tr>
-      <td>${r.name || '-'}</td>
-      <td>${formatDate(r.submittedAt)}</td>
-      ${scores.map(s => `<td class="score-cell score-${s}">${s}</td>`).join('')}
-      <td class="avg-cell">${avg}</td>
-    </tr>`;
-  }).join('');
 }
 
 // ── 유틸 ──────────────────────────────

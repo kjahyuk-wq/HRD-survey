@@ -104,6 +104,17 @@
 }
 
 
+/* 익명 안내 */
+.anon-notice {
+  background: #f0f7ff;
+  border: 1px solid #cce0ff;
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+  font-size: 0.8rem;
+  color: #446;
+  margin-bottom: 0.8rem;
+}
+
 /* 새로고침 버튼 */
 .icon-refresh-btn {
   margin-top: 0.8rem;

@@ -95,6 +95,18 @@ body {
 
 .lp-notice { font-size: 0.72rem; color: #bbb; line-height: 1.5; }
 
+.lp-privacy {
+  background: #f0f7ff;
+  border: 1px solid #cce0ff;
+  border-radius: 10px;
+  padding: 0.9rem 1rem;
+  font-size: 0.8rem;
+  color: #334;
+  line-height: 1.7;
+  text-align: left;
+  margin-bottom: 1rem;
+}
+
 /* ════════════════════════════
    설문 페이지
 ════════════════════════════ */

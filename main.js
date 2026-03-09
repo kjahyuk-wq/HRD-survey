@@ -1,4 +1,4 @@
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzDbv0sR9TBZavmK01hkFB_Lz8uTHBYGkPMnvjaGxbtpqzb3RuBtNcr8PslpJVrliT-/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycby2Uojv9p2W4kiyeAWLxkigb0hxysOU4nV2YTAr0zp0BfjQJlCsAhBLEloWNku8Ht98/exec";
 
 let currentUser = { name: '', phone: '', course: '' };
 
