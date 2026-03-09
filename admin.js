@@ -1,4 +1,4 @@
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycby_hKmeisOvpYazP5ovZuYTUR_0F7wiPMHsjuY2YzxAaHyEcGdmtgk2fj_QSQypYhb4/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxPs9zKMeSrAsHDFgXsBVRcntGPCvQA08Z6Y9xUFWmEN8EUgWiQNLulNt73AC7GwSmf/exec";
 
 // ⚠️ 관리자 비밀번호 (변경 가능)
 const ADMIN_PASSWORD = "hrd2024!";
