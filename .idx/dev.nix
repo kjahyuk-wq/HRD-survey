@@ -35,6 +35,7 @@
       # Runs when the workspace is (re)started - git config 자동 설정
       onStart = {
         git-setup = "git config user.name 'kjahyuk' && git config user.email 'kjahyuk@gmail.com'";
+        claude-install = "which claude > /dev/null 2>&1 || npm install -g @anthropic-ai/claude-code";
       };
     };
   };
