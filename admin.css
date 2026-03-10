@@ -5,6 +5,11 @@
   border-radius: 12px;
   padding: 1rem 1.2rem;
   margin-bottom: 1rem;
+  transition: background 0.15s, border-color 0.15s;
+}
+.excel-upload-area.drag-over {
+  background: #e8f0fe;
+  border-color: #0066cc;
 }
 .excel-upload-label {
   font-size: 0.9rem;

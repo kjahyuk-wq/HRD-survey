@@ -186,6 +186,7 @@ async function loadStudents() {
   document.getElementById('student-placeholder').style.display = course ? 'none' : 'block';
   document.getElementById('student-section').style.display = course ? 'block' : 'none';
   if (!course) return;
+  initExcelDragDrop();
 
   document.getElementById('student-loading').style.display = 'block';
   document.getElementById('student-list').innerHTML = '';
@@ -273,11 +274,40 @@ async function deleteStudent(name, empNo, course, btnEl) {
 // ── 엑셀 일괄 등록 ──────────────────────────────
 let excelStudentData = [];
 
+function initExcelDragDrop() {
+  const area = document.querySelector('.excel-upload-area');
+  if (!area || area.dataset.dragInit) return;
+  area.dataset.dragInit = '1';
+
+  area.addEventListener('dragover', e => {
+    e.preventDefault();
+    area.classList.add('drag-over');
+  });
+  area.addEventListener('dragleave', e => {
+    if (!area.contains(e.relatedTarget)) area.classList.remove('drag-over');
+  });
+  area.addEventListener('drop', e => {
+    e.preventDefault();
+    area.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+    if (!/\.(xlsx|xls)$/i.test(file.name)) {
+      alert('엑셀 파일(.xlsx, .xls)만 업로드할 수 있습니다.');
+      return;
+    }
+    document.getElementById('excel-file-name').textContent = file.name;
+    parseExcelFile(file);
+  });
+}
+
 function handleExcelUpload(input) {
   const file = input.files[0];
   if (!file) return;
-
   document.getElementById('excel-file-name').textContent = file.name;
+  parseExcelFile(file);
+}
+
+function parseExcelFile(file) {
   document.getElementById('excel-preview').style.display = 'none';
   document.getElementById('excel-progress').style.display = 'none';
   document.getElementById('excel-upload-btn').disabled = true;
@@ -290,13 +320,11 @@ function handleExcelUpload(input) {
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
 
-      // 2행부터 읽기 (1행은 헤더)
-      const parsed = [];
-      const errors = [];
+      const parsed = [], errors = [];
       for (let i = 1; i < rows.length; i++) {
         const empNo = String(rows[i][0] || '').trim();
         const name  = String(rows[i][1] || '').trim();
-        if (!empNo && !name) continue; // 빈 행 스킵
+        if (!empNo && !name) continue;
         if (!empNo || !/^\d+$/.test(empNo) || parseInt(empNo) < 1) {
           errors.push(`${i+1}행: 교번이 올바르지 않습니다. (값: "${empNo}")`);
           continue;
@@ -318,7 +346,7 @@ function handleExcelUpload(input) {
 
       let html = `<strong>총 ${parsed.length}명 인식됨</strong>`;
       if (errors.length > 0) {
-        html += errors.map(e => `<div class="excel-preview-error">⚠️ ${escapeHtml(e)}</div>`).join('');
+        html += errors.map(err => `<div class="excel-preview-error">⚠️ ${escapeHtml(err)}</div>`).join('');
       }
       html += parsed.map((s, i) =>
         `<div class="excel-preview-row">${i+1}. 교번 ${escapeHtml(s.empNo)} · ${escapeHtml(s.name)}</div>`
