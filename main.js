@@ -1,6 +1,7 @@
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwLF8v4YMXcd-d8uKuX4_cx48kA0cRFvBkGKyeS3X4XqoAPrm9jSfLTJ58GQl8v1AAE/exec";
 
 let currentUser = { name: '', empNo: '', course: '', instructors: [] };
+let instructorFetchPromise = null;
 
 async function doLogin() {
   const name = document.getElementById('input-name').value.trim();
@@ -32,8 +33,8 @@ async function doLogin() {
 
     currentUser = { name, empNo, course: data.course, instructors: [] };
 
-    // 과정 확인 화면 표시와 동시에 강사 목록 미리 fetch
-    fetch(`${SCRIPT_URL}?action=instructors&course=${encodeURIComponent(data.course)}`)
+    // 과정 확인 화면 표시와 동시에 강사 목록 미리 fetch (Promise 저장)
+    instructorFetchPromise = fetch(`${SCRIPT_URL}?action=instructors&course=${encodeURIComponent(data.course)}`)
       .then(r => r.json())
       .then(list => { currentUser.instructors = list; })
       .catch(() => { currentUser.instructors = []; });
@@ -62,7 +63,7 @@ function showLoginError(msg) {
   el.style.display = 'block';
 }
 
-function startSurvey() {
+async function startSurvey() {
   document.getElementById('screen-confirm').style.display = 'none';
   document.getElementById('screen-survey').style.display = 'block';
 
@@ -70,7 +71,10 @@ function startSurvey() {
   badge.textContent = currentUser.course;
   badge.style.display = 'inline-block';
 
-  // 강사 문항 동적 생성 (로그인 시 미리 fetch한 데이터 사용)
+  // 미리 시작한 fetch가 아직 진행 중이면 완료될 때까지 대기
+  if (instructorFetchPromise) await instructorFetchPromise;
+
+  // 강사 문항 동적 생성
   renderInstructorQuestions(currentUser.instructors);
 
   // 문항 수 안내 업데이트
