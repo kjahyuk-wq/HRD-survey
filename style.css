@@ -28,7 +28,7 @@ body {
   text-align: center;
 }
 
-.lp-logo-img { display: block; margin: 0 auto 1rem; width: 220px; height: auto; }
+.lp-icon { font-size: 3rem; display: block; margin-bottom: 0.4rem; }
 .lp-org { font-size: 0.82rem; color: #888; margin-bottom: 0.2rem; }
 .lp-title { font-size: 1.15rem; font-weight: 700; color: #003d99; margin-bottom: 1.6rem; }
 
@@ -124,17 +124,8 @@ body {
   box-shadow: 0 4px 20px rgba(0,61,153,0.25);
 }
 
-.sv-logo-area { display: flex; align-items: center; gap: 1.2rem; }
-.sv-logo-wrap {
-  background: #fff;
-  border-radius: 10px;
-  padding: 8px 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-.sv-logo-img { display: block; width: 150px; height: auto; }
+.sv-logo-area { display: flex; align-items: center; gap: 1rem; }
+.sv-logo-icon { font-size: 2.5rem; }
 .sv-org-name { font-size: 0.85rem; opacity: 0.85; margin-bottom: 0.2rem; }
 .sv-title { font-size: 1.4rem; font-weight: 700; }
 
