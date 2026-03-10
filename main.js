@@ -23,7 +23,7 @@ async function doLogin() {
     catch (_) { showLoginError('서버 연결에 문제가 발생했습니다.\n잠시 후 다시 시도해 주세요.'); reset(); return; }
 
     if (!data.found) {
-      showLoginError('등록된 수강생 정보를 찾을 수 없습니다.\n이름 또는 전화번호를 확인하거나 담당자에게 문의해 주세요.');
+      showLoginError('등록된 수강생 정보를 찾을 수 없습니다.\n이름 또는 교번을 확인하거나 담당자에게 문의해 주세요.');
       reset(); return;
     }
     if (data.completed) {
