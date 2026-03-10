@@ -37,12 +37,9 @@ async function doLogin() {
     instructorFetchPromise = fetch(`${SCRIPT_URL}?action=instructors&course=${encodeURIComponent(data.course)}`)
       .then(r => r.json())
       .then(list => {
-        currentUser.instructors = list;
-        const totalQ = 5 + list.length;
-        const mins = totalQ <= 10 ? Math.max(2, Math.round(totalQ / 2.5))
-                   : Math.round(totalQ * 0.4);
-        document.getElementById('survey-q-count').textContent = `총 ${totalQ}문항`;
-        document.getElementById('survey-time').textContent = `약 ${mins}분`;
+        const instructors = Array.isArray(list) ? list : [];
+        currentUser.instructors = instructors;
+        updateSurveyMeta(instructors.length);
       })
       .catch(() => { currentUser.instructors = []; });
 
@@ -64,6 +61,13 @@ async function doLogin() {
   }
 }
 
+function updateSurveyMeta(instructorCount) {
+  const totalQ = 5 + instructorCount + 1; // 객관식 5 + 강사 문항 + 주관식 1
+  const mins = Math.max(2, Math.round(totalQ * 0.4));
+  document.getElementById('survey-q-count').textContent = `총 ${totalQ}문항`;
+  document.getElementById('survey-time').textContent = `약 ${mins}분`;
+}
+
 function showLoginError(msg) {
   const el = document.getElementById('login-error');
   el.textContent = msg;
@@ -83,12 +87,7 @@ async function startSurvey() {
 
   // 강사 문항 동적 생성
   renderInstructorQuestions(currentUser.instructors);
-
-  // 문항 수 및 소요시간 업데이트
-  const totalQ = 5 + currentUser.instructors.length;
-  const minutes = Math.max(2, Math.round(totalQ / 2.5));
-  document.getElementById('survey-q-count').textContent = `총 ${totalQ}문항`;
-  document.getElementById('survey-time').textContent = `약 ${minutes}분`;
+  updateSurveyMeta(currentUser.instructors.length);
 
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
