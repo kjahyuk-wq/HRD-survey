@@ -36,7 +36,14 @@ async function doLogin() {
     // 과정 확인 화면 표시와 동시에 강사 목록 미리 fetch (Promise 저장)
     instructorFetchPromise = fetch(`${SCRIPT_URL}?action=instructors&course=${encodeURIComponent(data.course)}`)
       .then(r => r.json())
-      .then(list => { currentUser.instructors = list; })
+      .then(list => {
+        currentUser.instructors = list;
+        const totalQ = 5 + list.length;
+        const mins = totalQ <= 10 ? Math.max(2, Math.round(totalQ / 2.5))
+                   : Math.round(totalQ * 0.4);
+        document.getElementById('survey-q-count').textContent = `총 ${totalQ}문항`;
+        document.getElementById('survey-time').textContent = `약 ${mins}분`;
+      })
       .catch(() => { currentUser.instructors = []; });
 
     document.getElementById('page-login').style.display = 'none';
