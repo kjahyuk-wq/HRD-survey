@@ -76,12 +76,25 @@
           </div>
 
           <div id="student-section" style="display:none;">
-            <!-- 수강생 추가 -->
+            <!-- 수강생 추가 (수동) -->
             <div class="add-student-row">
               <input type="text" id="new-student-name" placeholder="이름" maxlength="20">
               <input type="number" id="new-student-empno" placeholder="교번 (예: 1)" min="1"
                 onkeydown="if(event.key==='Enter')addStudent()">
               <button class="add-btn" onclick="addStudent()">+ 등록</button>
+            </div>
+
+            <!-- 수강생 일괄 등록 (엑셀) -->
+            <div class="excel-upload-area">
+              <div class="excel-upload-label">📂 엑셀 일괄 등록 <span class="excel-tip">A열: 교번 / B열: 이름 / 2행부터 데이터</span></div>
+              <div class="excel-upload-row">
+                <label class="excel-file-btn" for="excel-file-input">파일 선택</label>
+                <input type="file" id="excel-file-input" accept=".xlsx,.xls" style="display:none" onchange="handleExcelUpload(this)">
+                <span id="excel-file-name" class="excel-file-name">선택된 파일 없음</span>
+                <button class="add-btn" id="excel-upload-btn" onclick="uploadExcelStudents()" disabled>일괄 등록</button>
+              </div>
+              <div id="excel-preview" class="excel-preview" style="display:none;"></div>
+              <div id="excel-progress" class="excel-progress" style="display:none;"></div>
             </div>
 
             <!-- 수강생 목록 -->
@@ -142,6 +155,7 @@
     </div>
   </div>
 
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script src="admin.js"></script>
 </body>
 </html>

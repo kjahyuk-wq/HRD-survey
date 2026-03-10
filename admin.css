@@ -1,3 +1,72 @@
+/* 엑셀 일괄 등록 */
+.excel-upload-area {
+  background: #f8faff;
+  border: 2px dashed #b3c8e8;
+  border-radius: 12px;
+  padding: 1rem 1.2rem;
+  margin-bottom: 1rem;
+}
+.excel-upload-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 0.6rem;
+}
+.excel-tip {
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: #64748b;
+  margin-left: 0.5rem;
+}
+.excel-upload-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.excel-file-btn {
+  display: inline-block;
+  padding: 0.55rem 1rem;
+  background: #e2eaf6;
+  color: #0066cc;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s;
+}
+.excel-file-btn:hover { background: #c7daf5; }
+.excel-file-name {
+  font-size: 0.83rem;
+  color: #64748b;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.excel-preview {
+  margin-top: 0.8rem;
+  font-size: 0.83rem;
+  color: #334155;
+  background: #fff;
+  border: 1px solid #dde3ea;
+  border-radius: 8px;
+  padding: 0.7rem 1rem;
+  max-height: 160px;
+  overflow-y: auto;
+}
+.excel-preview-row { padding: 0.2rem 0; border-bottom: 1px solid #f0f0f0; }
+.excel-preview-row:last-child { border-bottom: none; }
+.excel-preview-error { color: #ef4444; font-weight: 600; }
+.excel-progress {
+  margin-top: 0.8rem;
+  font-size: 0.85rem;
+  color: #0066cc;
+  font-weight: 500;
+}
+
 /* 수강생 추가 */
 .add-student-row {
   display: flex;
