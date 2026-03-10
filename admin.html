@@ -79,7 +79,7 @@
             <!-- 수강생 추가 -->
             <div class="add-student-row">
               <input type="text" id="new-student-name" placeholder="이름" maxlength="20">
-              <input type="tel" id="new-student-phone" placeholder="전화번호 뒷 4자리" maxlength="4"
+              <input type="number" id="new-student-empno" placeholder="교번 (예: 1)" min="1"
                 onkeydown="if(event.key==='Enter')addStudent()">
               <button class="add-btn" onclick="addStudent()">+ 등록</button>
             </div>

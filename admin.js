@@ -1,4 +1,4 @@
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzMlJtsmYl6EjNWB9iIqCPKniX8j1_T0anZ9v4ufyQH18US3ubxuTUlcAIeQOqB3I8w/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwLF8v4YMXcd-d8uKuX4_cx48kA0cRFvBkGKyeS3X4XqoAPrm9jSfLTJ58GQl8v1AAE/exec";
 const ADMIN_PASSWORD = "hrd2024!";
 
 const Q_LABELS = [
@@ -218,17 +218,17 @@ async function loadStudents() {
     document.getElementById('student-list').innerHTML = `
       <div class="student-table-wrap">
         <table class="student-table">
-          <thead><tr><th>이름</th><th>전화 뒷4자리</th><th>상태</th><th></th></tr></thead>
+          <thead><tr><th>이름</th><th>교번</th><th>상태</th><th></th></tr></thead>
           <tbody>
             ${students.map(s => `
               <tr>
                 <td>${s.name}</td>
-                <td>****${s.phone}</td>
+                <td>${s.empNo}</td>
                 <td>${s.completed
                   ? `<span class="status-done">✅ 완료</span>`
                   : `<span class="status-pending">⏳ 미완료</span>`}
                 </td>
-                <td><button class="delete-btn" onclick="deleteStudent('${escapeAttr(s.name)}','${escapeAttr(s.phone)}','${escapeAttr(course)}',this)">삭제</button></td>
+                <td><button class="delete-btn" onclick="deleteStudent('${escapeAttr(s.name)}','${escapeAttr(s.empNo)}','${escapeAttr(course)}',this)">삭제</button></td>
               </tr>`).join('')}
           </tbody>
         </table>
@@ -241,30 +241,30 @@ async function loadStudents() {
 async function addStudent() {
   const course = document.getElementById('student-course-select').value;
   const name = document.getElementById('new-student-name').value.trim();
-  const phone = document.getElementById('new-student-phone').value.trim();
+  const empNo = document.getElementById('new-student-empno').value.trim();
 
   if (!course) { alert('교육과정을 먼저 선택해 주세요.'); return; }
   if (!name) { document.getElementById('new-student-name').focus(); return; }
-  if (!/^\d{4}$/.test(phone)) { alert('전화번호 뒷 4자리를 숫자로 입력해 주세요.'); return; }
+  if (!/^\d+$/.test(empNo) || parseInt(empNo) < 1) { alert('교번을 올바르게 입력해 주세요. (1 이상의 숫자)'); return; }
 
   const addBtns = document.querySelectorAll('.add-btn');
   addBtns.forEach(b => { b.disabled = true; b.textContent = '등록 중...'; });
 
   try {
-    await postData({ action: 'addStudent', name, phone, course });
+    await postData({ action: 'addStudent', name, empNo, course });
     document.getElementById('new-student-name').value = '';
-    document.getElementById('new-student-phone').value = '';
+    document.getElementById('new-student-empno').value = '';
     await delay(800);
     await loadStudents();
   } catch (e) { alert('등록 중 오류가 발생했습니다.'); }
   finally { addBtns.forEach(b => { b.disabled = false; b.textContent = '+ 등록'; }); }
 }
 
-async function deleteStudent(name, phone, course, btnEl) {
+async function deleteStudent(name, empNo, course, btnEl) {
   if (!confirm(`"${name}" 수강생을 삭제하시겠습니까?`)) return;
   btnEl.disabled = true; btnEl.textContent = '삭제 중...';
   try {
-    await postData({ action: 'deleteStudent', name, phone, course });
+    await postData({ action: 'deleteStudent', name, empNo, course });
     await delay(800);
     await loadStudents();
   } catch (e) { alert('삭제 중 오류가 발생했습니다.'); btnEl.disabled = false; btnEl.textContent = '삭제'; }

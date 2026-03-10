@@ -1,13 +1,13 @@
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzMlJtsmYl6EjNWB9iIqCPKniX8j1_T0anZ9v4ufyQH18US3ubxuTUlcAIeQOqB3I8w/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwLF8v4YMXcd-d8uKuX4_cx48kA0cRFvBkGKyeS3X4XqoAPrm9jSfLTJ58GQl8v1AAE/exec";
 
-let currentUser = { name: '', phone: '', course: '', instructors: [] };
+let currentUser = { name: '', empNo: '', course: '', instructors: [] };
 
 async function doLogin() {
   const name = document.getElementById('input-name').value.trim();
-  const phone = document.getElementById('input-phone').value.trim();
+  const empNo = document.getElementById('input-empno').value.trim();
 
   if (!name) { showLoginError('이름을 입력해 주세요.'); return; }
-  if (!/^\d{4}$/.test(phone)) { showLoginError('휴대폰 번호 뒷 4자리를 숫자로 입력해 주세요.'); return; }
+  if (!/^\d+$/.test(empNo) || parseInt(empNo) < 1) { showLoginError('교번을 올바르게 입력해 주세요. (1 이상의 숫자)'); return; }
 
   document.getElementById('login-error').style.display = 'none';
   const btn = document.getElementById('login-btn');
@@ -15,7 +15,7 @@ async function doLogin() {
   btn.disabled = true;
 
   try {
-    const res = await fetch(`${SCRIPT_URL}?action=login&name=${encodeURIComponent(name)}&phone=${encodeURIComponent(phone)}`);
+    const res = await fetch(`${SCRIPT_URL}?action=login&name=${encodeURIComponent(name)}&empNo=${encodeURIComponent(empNo)}`);
     const text = await res.text();
     let data;
     try { data = JSON.parse(text); }
@@ -30,7 +30,7 @@ async function doLogin() {
       reset(); return;
     }
 
-    currentUser = { name, phone, course: data.course, instructors: [] };
+    currentUser = { name, empNo, course: data.course, instructors: [] };
 
     document.getElementById('page-login').style.display = 'none';
     document.getElementById('page-survey').style.display = 'block';
@@ -149,7 +149,7 @@ async function submitSurvey() {
       method: 'POST', mode: 'no-cors',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        name: currentUser.name, phone: currentUser.phone, course: currentUser.course,
+        name: currentUser.name, empNo: currentUser.empNo, course: currentUser.course,
         q1: answers[0], q2: answers[1], q3: answers[2], q4: answers[3], q5: answers[4],
         instructors: instructorScores,
         comment: document.getElementById('comment').value.trim()
