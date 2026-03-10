@@ -1,3 +1,25 @@
+/* ── 컨테이너 & 헤더 ── */
+.container { max-width: 960px; margin: 0 auto; padding: 1.5rem 1rem; }
+
+header {
+  background: linear-gradient(135deg, #003d99, #0066cc);
+  color: #fff;
+  padding: 1.4rem 1.8rem;
+  border-radius: 16px;
+  margin-bottom: 1.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 4px 20px rgba(0,61,153,0.25);
+  flex-wrap: wrap;
+  gap: 0.8rem;
+}
+
+.logo-area { display: flex; align-items: center; gap: 1rem; }
+.logo-icon { font-size: 2.8rem; line-height: 1; }
+.org-name { font-size: 0.82rem; opacity: 0.8; margin-bottom: 0.2rem; letter-spacing: 0.3px; }
+header h1 { font-size: 1.3rem; font-weight: 700; margin: 0; color: #fff; }
+
 /* 엑셀 일괄 등록 */
 .excel-upload-area {
   background: #f8faff;
@@ -481,7 +503,7 @@
 .course-select-row select:focus { border-color: #0066cc; }
 
 /* 헤더 액션 */
-.header-actions { display: flex; gap: 0.5rem; margin-top: 0.8rem; }
+.header-actions { display: flex; gap: 0.5rem; align-items: center; }
 .excel-export-btn {
   padding: 0.5rem 1.2rem;
   background: #22c55e;
@@ -496,7 +518,23 @@
 }
 .excel-export-btn:hover { background: #16a34a; transform: none; box-shadow: none; }
 
-.refresh-btn, .logout-btn {
+.logout-btn {
+  padding: 0.45rem 1.1rem;
+  border: none;
+  background: rgba(255,255,255,0.18);
+  color: #fff;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+  width: auto;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  transition: background 0.15s;
+}
+.logout-btn:hover { background: rgba(255,255,255,0.32); transform: none; box-shadow: none; }
+
+.refresh-btn {
   padding: 0.4rem 1rem;
   border: 2px solid rgba(255,255,255,0.5);
   background: transparent;
@@ -508,7 +546,7 @@
   width: auto;
   font-weight: 600;
 }
-.refresh-btn:hover, .logout-btn:hover { background: rgba(255,255,255,0.15); transform: none; }
+.refresh-btn:hover { background: rgba(255,255,255,0.15); transform: none; }
 
 /* 로딩/빈 상태 */
 .loading, .no-data {
