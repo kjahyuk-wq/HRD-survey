@@ -1,3 +1,5 @@
+.header-logo-img { max-width: 130px; height: auto; }
+
 /* 엑셀 일괄 등록 */
 .excel-upload-area {
   background: #f8faff;
