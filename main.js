@@ -77,9 +77,11 @@ async function startSurvey() {
   // 강사 문항 동적 생성
   renderInstructorQuestions(currentUser.instructors);
 
-  // 문항 수 안내 업데이트
+  // 문항 수 및 소요시간 업데이트
   const totalQ = 5 + currentUser.instructors.length;
+  const minutes = Math.max(2, Math.round(totalQ / 2.5));
   document.getElementById('survey-q-count').textContent = `총 ${totalQ}문항`;
+  document.getElementById('survey-time').textContent = `약 ${minutes}분`;
 
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
