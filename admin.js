@@ -399,6 +399,9 @@ async function uploadExcelStudents() {
 }
 
 // ── 통계 ──────────────────────────────
+let lastResponses = [];
+let lastCourseName = '';
+
 async function populateStatsSelect() {
   try {
     const res = await fetch(SCRIPT_URL + '?action=courses');
@@ -412,6 +415,7 @@ async function populateStatsSelect() {
 async function loadStats() {
   const course = document.getElementById('stats-course-select').value;
   if (!course) return;
+  lastCourseName = course;
 
   document.getElementById('stats-placeholder').style.display = 'none';
   document.getElementById('stats-loading').style.display = 'block';
@@ -433,6 +437,7 @@ async function loadStats() {
       return;
     }
 
+    lastResponses = responses;
     renderStats(responses, students);
     document.getElementById('stats-area').style.display = 'block';
   } catch (e) {
@@ -551,6 +556,59 @@ function renderStats(responses, students) {
     : '<div class="no-comment">작성된 의견이 없습니다.</div>';
 }
 
+// ── 엑셀 내보내기 ──────────────────────────────
+function exportStatsExcel() {
+  if (!lastResponses.length) return;
+
+  const wb = XLSX.utils.book_new();
+
+  // 강사 키 수집
+  const instKeySet = new Set();
+  lastResponses.forEach(r => {
+    let obj = r.instructors || {};
+    if (typeof obj === 'string') { try { obj = JSON.parse(obj); } catch { return; } }
+    Object.keys(obj).forEach(k => instKeySet.add(k));
+  });
+  const instKeys = [...instKeySet];
+
+  // ── 시트1: 객관식 ──
+  const instHeaders = instKeys.map(k => {
+    const parts = k.split('__');
+    return parts.length === 2 ? `[${parts[0]}] ${parts[1]} 강사` : `${k} 강사`;
+  });
+  const headers1 = ['순번', ...Q_LABELS, ...instHeaders];
+  const sheet1Data = [headers1];
+
+  lastResponses.forEach((r, idx) => {
+    const row = [idx + 1];
+    ['q1','q2','q3','q4','q5'].forEach(k => {
+      const v = Number(r[k]);
+      row.push((v >= 1 && v <= 5) ? 6 - v : '');
+    });
+    let instObj = r.instructors || {};
+    if (typeof instObj === 'string') { try { instObj = JSON.parse(instObj); } catch { instObj = {}; } }
+    instKeys.forEach(k => {
+      const v = Number(instObj[k]);
+      row.push((v >= 1 && v <= 5) ? 6 - v : '');
+    });
+    sheet1Data.push(row);
+  });
+
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sheet1Data), '객관식');
+
+  // ── 시트2: 주관식 ──
+  const sheet2Data = [['순번', '의견']];
+  let commentIdx = 1;
+  lastResponses.forEach(r => {
+    const c = String(r.comment || '').trim();
+    if (c) sheet2Data.push([commentIdx++, c]);
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sheet2Data), '주관식');
+
+  const filename = `${lastCourseName}_설문결과_${new Date().toISOString().slice(0,10)}.xlsx`;
+  XLSX.writeFile(wb, filename);
+}
+
 // ── 유틸 ──────────────────────────────
 function postData(body) {
   return fetch(SCRIPT_URL, {
@@ -591,3 +649,4 @@ window.deleteStudent = deleteStudent;
 window.handleExcelUpload = handleExcelUpload;
 window.uploadExcelStudents = uploadExcelStudents;
 window.loadStats = loadStats;
+window.exportStatsExcel = exportStatsExcel;
