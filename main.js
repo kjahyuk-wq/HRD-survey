@@ -33,20 +33,22 @@ async function doLogin() {
 
     currentUser = { name, empNo, course: data.course, instructors: [] };
 
-    // 과정 확인 화면 표시와 동시에 강사 목록 미리 fetch (Promise 저장)
+    // 강사 목록 fetch 완료 후 화면 표시
     instructorFetchPromise = fetch(`${SCRIPT_URL}?action=instructors&course=${encodeURIComponent(data.course)}`)
       .then(r => r.json())
       .then(list => {
         const instructors = Array.isArray(list) ? list : [];
         currentUser.instructors = instructors;
-        updateSurveyMeta(instructors.length);
       })
       .catch(() => { currentUser.instructors = []; });
+
+    await instructorFetchPromise;
 
     document.getElementById('page-login').style.display = 'none';
     document.getElementById('page-survey').style.display = 'block';
     document.getElementById('confirm-greeting').textContent = `${name}님, 안녕하세요!`;
     document.getElementById('confirm-course-name').textContent = data.course;
+    updateSurveyMeta(currentUser.instructors.length);
     document.getElementById('screen-confirm').style.display = 'block';
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
