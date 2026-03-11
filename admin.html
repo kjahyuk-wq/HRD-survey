@@ -42,6 +42,7 @@
       <div class="tabs">
         <button class="tab-btn active" onclick="switchTab('courses')">📋 교육과정·수강생 관리</button>
         <button class="tab-btn" onclick="switchTab('stats')">📊 설문 통계</button>
+        <button class="tab-btn" onclick="switchTab('pdf')">📄 리플릿 PDF 분석</button>
       </div>
 
       <!-- 교육과정·수강생 관리 탭 -->
@@ -155,9 +156,99 @@
         </div>
       </div>
 
+      <!-- PDF 분석 탭 -->
+      <div id="tab-pdf" style="display:none;">
+
+        <!-- PDF 업로드 -->
+        <div class="section-card">
+          <div class="section-title">📄 교육 운영 리플릿 PDF 업로드</div>
+          <div class="pdf-upload-area" id="pdf-upload-area">
+            <div class="pdf-upload-icon">📄</div>
+            <div class="pdf-upload-text">PDF 파일을 드래그하거나 아래 버튼을 클릭하여 업로드하세요</div>
+            <div class="pdf-upload-tip">리플릿에서 과정명·교육목표·기간·장소·강사·교육생 정보를 자동으로 추출합니다</div>
+            <label class="excel-file-btn pdf-select-btn" for="pdf-file-input">📂 PDF 파일 선택</label>
+            <input type="file" id="pdf-file-input" accept=".pdf" style="display:none" onchange="handlePdfUpload(this)">
+            <div id="pdf-file-name" class="pdf-file-name-display">선택된 파일 없음</div>
+            <div id="pdf-parse-status" style="display:none;" class="pdf-parse-status"></div>
+          </div>
+        </div>
+
+        <!-- 추출된 텍스트 -->
+        <div id="pdf-raw-section" class="section-card" style="display:none;">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem;">
+            <div class="section-title" style="margin:0;">📝 추출된 원본 텍스트</div>
+            <button class="icon-refresh-btn" onclick="toggleRawText()" style="margin:0;">펼치기/접기</button>
+          </div>
+          <div id="pdf-raw-text" class="pdf-raw-text" style="display:none;"></div>
+        </div>
+
+        <!-- 파싱 결과 폼 -->
+        <div id="pdf-form-section" style="display:none;">
+
+          <!-- 교육과정 기본 정보 -->
+          <div class="section-card">
+            <div class="section-title">📋 교육과정 정보 확인 및 수정</div>
+            <div class="pdf-info-notice">⚠️ PDF에서 자동 추출된 정보입니다. 정확한지 확인 후 필요하면 수정해 주세요.</div>
+            <div class="pdf-form-grid">
+              <div class="pdf-form-group required">
+                <label>과정명 <span class="required-mark">*</span></label>
+                <input type="text" id="pdf-course-name" placeholder="교육과정명을 입력하세요">
+              </div>
+              <div class="pdf-form-group">
+                <label>교육 기간</label>
+                <input type="text" id="pdf-period" placeholder="예: 2024.03.04 ~ 2024.03.08">
+              </div>
+              <div class="pdf-form-group">
+                <label>교육 장소</label>
+                <input type="text" id="pdf-location" placeholder="예: 대전광역시 인재개발원 제1교육실">
+              </div>
+              <div class="pdf-form-group">
+                <label>수강인원</label>
+                <input type="text" id="pdf-capacity" placeholder="예: 30명">
+              </div>
+            </div>
+            <div class="pdf-form-group" style="margin-top:0.8rem;">
+              <label>교육목표</label>
+              <textarea id="pdf-objective" rows="3" placeholder="교육목표를 입력하세요"></textarea>
+            </div>
+          </div>
+
+          <!-- 강사 정보 -->
+          <div class="section-card">
+            <div class="section-title">👨‍🏫 강사 정보 <span id="pdf-inst-count" class="badge">0명</span></div>
+            <div id="pdf-instructor-list" class="pdf-item-list"></div>
+            <div class="pdf-add-row">
+              <input type="text" id="pdf-inst-edu" placeholder="교육(강의)명" maxlength="50">
+              <input type="text" id="pdf-inst-name" placeholder="강사명" maxlength="20">
+              <button class="add-btn" onclick="addPdfInstructor()">+ 추가</button>
+            </div>
+          </div>
+
+          <!-- 교육생 목록 -->
+          <div class="section-card">
+            <div class="section-title">👥 교육생 목록 <span id="pdf-stu-count" class="badge">0명</span></div>
+            <div id="pdf-student-list" class="pdf-item-list"></div>
+            <div class="pdf-add-row">
+              <input type="number" id="pdf-stu-no" placeholder="연번" min="1" style="width:70px;flex:none;">
+              <input type="text" id="pdf-stu-name" placeholder="이름" maxlength="20">
+              <input type="text" id="pdf-stu-dept" placeholder="소속" maxlength="50">
+              <button class="add-btn" onclick="addPdfStudent()">+ 추가</button>
+            </div>
+          </div>
+
+          <!-- 생성 버튼 -->
+          <div class="section-card" style="text-align:center;padding:1.5rem;">
+            <button class="pdf-generate-btn" id="pdf-generate-btn" onclick="generateSurvey()">✅ 만족도 조사 생성</button>
+            <div id="pdf-generate-status" class="pdf-generate-status" style="display:none;"></div>
+          </div>
+
+        </div>
+      </div>
+
     </div>
   </div>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script src="admin.js"></script>
 </body>
