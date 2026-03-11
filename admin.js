@@ -647,27 +647,6 @@ if (typeof pdfjsLib !== 'undefined') {
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 }
 
-function showManualForm() {
-  // Reset form fields
-  document.getElementById('pdf-course-name').value = '';
-  document.getElementById('pdf-period').value = '';
-  document.getElementById('pdf-location').value = '';
-  document.getElementById('pdf-capacity').value = '';
-  document.getElementById('pdf-objective').value = '';
-  pdfInstructors = [];
-  pdfStudents = [];
-  renderPdfInstructors();
-  renderPdfStudents();
-
-  document.getElementById('pdf-raw-section').style.display = 'none';
-  document.getElementById('pdf-form-section').style.display = 'block';
-  document.getElementById('pdf-generate-btn').disabled = false;
-  document.getElementById('pdf-generate-btn').textContent = '✅ 만족도 조사 생성';
-  document.getElementById('pdf-generate-status').style.display = 'none';
-
-  document.getElementById('pdf-form-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
 function handlePdfUpload(input) {
   const file = input.files[0];
   if (!file) return;
@@ -1059,7 +1038,6 @@ window.uploadExcelStudents = uploadExcelStudents;
 window.loadStats = loadStats;
 window.exportStatsExcel = exportStatsExcel;
 window.handlePdfUpload = handlePdfUpload;
-window.showManualForm = showManualForm;
 window.toggleRawText = toggleRawText;
 window.addPdfInstructor = addPdfInstructor;
 window.removePdfInstructor = removePdfInstructor;
