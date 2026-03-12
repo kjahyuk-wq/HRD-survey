@@ -852,3 +852,19 @@ tr:hover td { background: #f8faff; }
   font-weight: 500;
   line-height: 1.6;
 }
+
+/* 인구통계 분포 */
+.demo-dist { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; }
+.demo-item { display: flex; align-items: center; gap: 0.8rem; min-height: 24px; }
+.demo-label { min-width: 90px; font-size: 0.83rem; color: #555; font-weight: 600; text-align: right; white-space: nowrap; }
+.demo-count { font-size: 0.8rem; color: #555; white-space: nowrap; min-width: 90px; }
+
+/* 주관식 서브섹션 */
+.comment-sub-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #0066cc;
+  margin: 1rem 0 0.4rem;
+  padding-left: 0.5rem;
+  border-left: 2px solid #0066cc;
+}

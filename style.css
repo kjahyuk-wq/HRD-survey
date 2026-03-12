@@ -321,3 +321,28 @@ button:disabled { opacity: 0.65; cursor: not-allowed; transform: none; }
   .rating-btn small { font-size: 0.6rem; }
   .sv-title { font-size: 1.15rem; }
 }
+
+/* 선택형 문항 그룹 (인구통계 Q11-Q16) */
+.choice-group { display: flex; flex-wrap: wrap; gap: 8px; }
+.choice-label { cursor: pointer; }
+.choice-label input[type="radio"] { display: none; }
+.choice-btn {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  border: 2px solid #dde3ea;
+  border-radius: 20px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  background: #f8f9fb;
+  color: #555;
+  transition: all 0.15s;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+.choice-label input[type="radio"]:checked + .choice-btn {
+  background: #0066cc;
+  border-color: #0066cc;
+  color: #fff;
+  box-shadow: 0 3px 10px rgba(0,102,204,0.35);
+}
+.choice-btn:hover { border-color: #0066cc; color: #0066cc; }

@@ -64,8 +64,8 @@ async function doLogin() {
 }
 
 function updateSurveyMeta(instructorCount) {
-  const totalQ = 5 + instructorCount + 1; // 객관식 5 + 강사 문항 + 주관식 1
-  const mins = Math.max(2, Math.round(totalQ * 0.4));
+  const totalQ = 19 + instructorCount; // Q1~Q16 고정(16문항) + 강사문항 + 주관식 3문항
+  const mins = Math.max(3, Math.round(totalQ * 0.4));
   document.getElementById('survey-q-count').textContent = `총 ${totalQ}문항`;
   document.getElementById('survey-time').textContent = `약 ${mins}분`;
 }
@@ -99,7 +99,7 @@ function renderInstructorQuestions(instructors) {
   if (!instructors || instructors.length === 0) { container.innerHTML = ''; return; }
 
   container.innerHTML = instructors.map((inst, idx) => {
-    const qNum = 6 + idx;
+    const qNum = 17 + idx;
     const inputName = `instructor_${idx}`;
     const instName = typeof inst === 'string' ? inst : inst.name;
     const edu = typeof inst === 'string' ? '' : inst.education;
@@ -124,8 +124,9 @@ function renderInstructorQuestions(instructors) {
 }
 
 async function submitSurvey() {
+  // Q1-Q9 리커트 수집
   const answers = [];
-  for (let i = 1; i <= 5; i++) {
+  for (let i = 1; i <= 9; i++) {
     const selected = document.querySelector(`input[name="q${i}"]:checked`);
     if (!selected) {
       document.getElementById('error-msg').style.display = 'block';
@@ -135,13 +136,28 @@ async function submitSurvey() {
     answers.push(parseInt(selected.value));
   }
 
+  // Q10 주관식 (선택)
+  const q10Comment = document.getElementById('q10-comment').value.trim();
+
+  // Q11-Q16 인구통계 수집 (필수)
+  const demographics = {};
+  for (let i = 11; i <= 16; i++) {
+    const selected = document.querySelector(`input[name="q${i}"]:checked`);
+    if (!selected) {
+      document.getElementById('error-msg').style.display = 'block';
+      document.querySelector(`[data-question="${i}"]`).scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    demographics[`q${i}`] = selected.value;
+  }
+
   // 강사 평가 수집
   const instructorScores = {};
   for (let idx = 0; idx < currentUser.instructors.length; idx++) {
     const selected = document.querySelector(`input[name="instructor_${idx}"]:checked`);
     if (!selected) {
       document.getElementById('error-msg').style.display = 'block';
-      document.querySelector(`[data-question="${6 + idx}"]`).scrollIntoView({ behavior: 'smooth', block: 'center' });
+      document.querySelector(`[data-question="${17 + idx}"]`).scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
     const inst = currentUser.instructors[idx];
@@ -150,6 +166,11 @@ async function submitSurvey() {
     const key = edu ? `${edu}__${instName}` : instName;
     instructorScores[key] = parseInt(selected.value);
   }
+
+  // 후반 주관식 3문항 (선택)
+  const comment1 = document.getElementById('comment1').value.trim();
+  const comment2 = document.getElementById('comment2').value.trim();
+  const comment3 = document.getElementById('comment3').value.trim();
 
   document.getElementById('error-msg').style.display = 'none';
   const btn = document.getElementById('submit-btn');
@@ -163,8 +184,12 @@ async function submitSurvey() {
       body: JSON.stringify({
         name: currentUser.name, empNo: currentUser.empNo, course: currentUser.course,
         q1: answers[0], q2: answers[1], q3: answers[2], q4: answers[3], q5: answers[4],
+        q6: answers[5], q7: answers[6], q8: answers[7], q9: answers[8],
+        q10_comment: q10Comment,
+        q11: demographics.q11, q12: demographics.q12, q13: demographics.q13,
+        q14: demographics.q14, q15: demographics.q15, q16: demographics.q16,
         instructors: instructorScores,
-        comment: document.getElementById('comment').value.trim()
+        comment1, comment2, comment3
       })
     });
     document.getElementById('screen-survey').style.display = 'none';

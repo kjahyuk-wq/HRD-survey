@@ -2,11 +2,24 @@ const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwLF8v4YMXcd-d8uKuX4
 const ADMIN_PASSWORD = "hrd2024!";
 
 const Q_LABELS = [
-  'Q1. 교육 내용의 업무 역량 도움',
-  'Q2. 강사 전문성 및 교수 능력',
-  'Q3. 교육 일정 및 운영 방식',
-  'Q4. 교육 시설 및 환경',
-  'Q5. 동료 추천 의향',
+  'Q1. 과정 목적 달성을 위한 교육기간',
+  'Q2. 과정 목적 달성을 위한 교과편성',
+  'Q3. 과정 목적 달성을 위한 강사선정',
+  'Q4. 교육내용 및 수준',
+  'Q5. 과정장 및 직원 교육과정 운영',
+  'Q6. 과정 전반적인 만족도',
+  'Q7. 교육내용의 향후 업무·개인생활 도움',
+  'Q8. 식당 음식의 질 및 서비스',
+  'Q9. 교육시설 및 편의시설 수준',
+];
+
+const DEMO_QUESTIONS = [
+  { key: 'q11', label: 'Q11. 귀하의 근무처', options: ['시 본청', '시 사업소', '구', '동', '기타'] },
+  { key: 'q12', label: 'Q12. 귀하의 직급', options: ['5급', '6급', '7급', '8급', '9급', '기타'] },
+  { key: 'q13', label: 'Q13. 귀하의 직렬', options: ['행정직', '기술직', '연구직', '관리운영직', '기타'] },
+  { key: 'q14', label: 'Q14. 귀하의 연령', options: ['20대', '30대', '40대', '50대'] },
+  { key: 'q15', label: 'Q15. 귀하의 성별', options: ['남', '여'] },
+  { key: 'q16', label: 'Q16. 입교 동기', options: ['업무능력 개발', '교육이수 점수 취득', '심신의 재충전', '자기개발', '기타'] },
 ];
 
 // ── 로그인 ──────────────────────────────
@@ -471,10 +484,10 @@ function renderStats(responses, students) {
     ncSection.style.display = 'none';
   }
 
-  // 항목별 평균
-  const keys = ['q1', 'q2', 'q3', 'q4', 'q5'];
+  // 항목별 평균 (Q1-Q9)
+  const keys = ['q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7', 'q8', 'q9'];
   const avgs = keys.map(k => responses.reduce((acc, r) => acc + (Number(r[k]) || 0), 0) / n);
-  const overallAvg = avgs.reduce((a, b) => a + b, 0) / 5;
+  const overallAvg = avgs.reduce((a, b) => a + b, 0) / 9;
   document.getElementById('overall-avg').textContent = overallAvg.toFixed(2);
 
   document.getElementById('question-stats').innerHTML = avgs.map((avg, i) => {
@@ -548,15 +561,61 @@ function renderStats(responses, students) {
     document.getElementById('instructor-stats-section').style.display = 'none';
   }
 
-  const comments = responses.filter(r => r.comment && String(r.comment).trim());
-  document.getElementById('comment-count').textContent = comments.length + '건';
-  document.getElementById('comments-list').innerHTML = comments.length
-    ? comments.map(r => `
-        <div class="comment-item">
-          <div class="comment-date">익명 · ${formatDate(r.submittedAt)}</div>
-          <div class="comment-text">${escapeHtml(String(r.comment))}</div>
-        </div>`).join('')
-    : '<div class="no-comment">작성된 의견이 없습니다.</div>';
+  // 인구통계 통계 (Q11-Q16)
+  const hasDemoData = responses.some(r => r.q11 || r.q12);
+  const demoSection = document.getElementById('demographics-stats-section');
+  if (hasDemoData) {
+    demoSection.style.display = 'block';
+    document.getElementById('demographics-stats').innerHTML = DEMO_QUESTIONS.map(dq => {
+      const counts = dq.options.map(opt => responses.filter(r => r[dq.key] === opt).length);
+      const total = counts.reduce((a, b) => a + b, 0);
+      return `
+        <div class="q-stat-card">
+          <div class="q-stat-header">
+            <span class="q-stat-label">${dq.label}</span>
+            <span class="q-stat-avg" style="color:#555;">${total}명 응답</span>
+          </div>
+          <div class="demo-dist">
+            ${dq.options.map((opt, i) => {
+              const cnt = counts[i];
+              const pct = total > 0 ? (cnt / total * 100).toFixed(1) : 0;
+              return `
+                <div class="demo-item">
+                  <span class="demo-label">${escapeHtml(opt)}</span>
+                  <div class="bar-track" style="flex:1;"><div class="bar-fill" style="width:${pct}%;background:#0066cc;"></div></div>
+                  <span class="demo-count">${cnt}명 (${pct}%)</span>
+                </div>`;
+            }).join('')}
+          </div>
+        </div>`;
+    }).join('');
+  } else {
+    demoSection.style.display = 'none';
+  }
+
+  // 주관식 응답 (Q10, comment1, comment2, comment3, 구 양식 comment)
+  const subjectiveTypes = [
+    { key: 'q10_comment', label: 'Q10. 기타 편의시설 건의사항' },
+    { key: 'comment1', label: '소감 및 건의사항' },
+    { key: 'comment2', label: '만족도 평가 개선 필요 부분' },
+    { key: 'comment3', label: '전반적인 과목 및 강사 건의' },
+    { key: 'comment', label: '기타 의견 (이전 양식)' },
+  ];
+  let totalCommentCount = 0;
+  let commentListHtml = '';
+  subjectiveTypes.forEach(({ key, label }) => {
+    const items = responses.filter(r => r[key] && String(r[key]).trim());
+    if (!items.length) return;
+    totalCommentCount += items.length;
+    commentListHtml += `<div class="comment-sub-title">${escapeHtml(label)}</div>`;
+    commentListHtml += items.map(r => `
+      <div class="comment-item">
+        <div class="comment-date">익명 · ${formatDate(r.submittedAt)}</div>
+        <div class="comment-text">${escapeHtml(String(r[key]))}</div>
+      </div>`).join('');
+  });
+  document.getElementById('comment-count').textContent = totalCommentCount + '건';
+  document.getElementById('comments-list').innerHTML = commentListHtml || '<div class="no-comment">작성된 의견이 없습니다.</div>';
 }
 
 // ── 엑셀 내보내기 ──────────────────────────────
@@ -579,15 +638,35 @@ function exportStatsExcel() {
     const parts = k.split('__');
     return parts.length === 2 ? `[${parts[0]}] ${parts[1]} 강사` : `${k} 강사`;
   });
-  const headers1 = ['순번', ...Q_LABELS, ...instHeaders];
+  // Q10은 주관식이므로 열만 확보하고 데이터는 비워둠
+  const headers1 = [
+    '순번',
+    ...Q_LABELS,                // Q1~Q9
+    'Q10(주관식)',               // Q10 빈 칸
+    'Q11. 귀하의 근무처',
+    'Q12. 귀하의 직급',
+    'Q13. 귀하의 직렬',
+    'Q14. 귀하의 연령',
+    'Q15. 귀하의 성별',
+    'Q16. 입교 동기',
+    ...instHeaders
+  ];
   const sheet1Data = [headers1];
 
   lastResponses.forEach((r, idx) => {
     const row = [idx + 1];
-    ['q1','q2','q3','q4','q5'].forEach(k => {
+    // Q1~Q9 점수 (역점수 변환)
+    ['q1','q2','q3','q4','q5','q6','q7','q8','q9'].forEach(k => {
       const v = Number(r[k]);
       row.push((v >= 1 && v <= 5) ? 6 - v : '');
     });
+    // Q10 빈 칸
+    row.push('');
+    // Q11~Q16 인구통계 (텍스트 값)
+    ['q11','q12','q13','q14','q15','q16'].forEach(k => {
+      row.push(String(r[k] || '').trim());
+    });
+    // 강사 점수 (역점수 변환)
     let instObj = r.instructors || {};
     if (typeof instObj === 'string') { try { instObj = JSON.parse(instObj); } catch { instObj = {}; } }
     instKeys.forEach(k => {
@@ -600,11 +679,24 @@ function exportStatsExcel() {
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sheet1Data), '객관식');
 
   // ── 시트2: 주관식 ──
-  const sheet2Data = [['순번', '의견']];
+  const sheet2Headers = [
+    '순번',
+    'Q10. 기타 편의시설 건의사항',
+    '소감 및 건의사항',
+    '만족도 평가 개선 필요 부분',
+    '전반적인 과목 및 강사 건의',
+  ];
+  const sheet2Data = [sheet2Headers];
   let commentIdx = 1;
   lastResponses.forEach(r => {
-    const c = String(r.comment || '').trim();
-    if (c) sheet2Data.push([commentIdx++, c]);
+    const q10 = String(r.q10_comment || '').trim();
+    // comment1 없으면 구 양식 comment 폴백
+    const c1 = String(r.comment1 || r.comment || '').trim();
+    const c2 = String(r.comment2 || '').trim();
+    const c3 = String(r.comment3 || '').trim();
+    if (q10 || c1 || c2 || c3) {
+      sheet2Data.push([commentIdx++, q10, c1, c2, c3]);
+    }
   });
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sheet2Data), '주관식');
 
