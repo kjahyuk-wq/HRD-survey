@@ -487,13 +487,27 @@ function renderStats(responses, students) {
   // 항목별 평균 (Q1-Q9)
   const keys = ['q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7', 'q8', 'q9'];
   const avgs = keys.map(k => responses.reduce((acc, r) => acc + (Number(r[k]) || 0), 0) / n);
-  const overallAvg = avgs.reduce((a, b) => a + b, 0) / 9;
+  const dists = keys.map((k, i) => [1,2,3,4,5].map(v => responses.filter(r => Number(r[k]) === v).length));
+  const hasData = keys.map((k, i) => dists[i].some(c => c > 0));
+  // 실제 응답이 있는 문항만 전체 평균에 포함
+  const validAvgs = avgs.filter((_, i) => hasData[i]);
+  const overallAvg = validAvgs.length > 0 ? validAvgs.reduce((a, b) => a + b, 0) / validAvgs.length : 0;
   document.getElementById('overall-avg').textContent = overallAvg.toFixed(2);
 
   document.getElementById('question-stats').innerHTML = avgs.map((avg, i) => {
+    if (!hasData[i]) {
+      return `
+        <div class="q-stat-card">
+          <div class="q-stat-header">
+            <span class="q-stat-label">${Q_LABELS[i]}</span>
+            <span class="q-stat-avg" style="color:#aaa;">응답 없음</span>
+          </div>
+          <div style="color:#bbb;font-size:0.82rem;padding:0.3rem 0;">아직 수집된 응답이 없습니다.</div>
+        </div>`;
+    }
     const pct = (avg / 5 * 100).toFixed(1);
     const color = avg >= 4.5 ? '#22c55e' : avg >= 3.5 ? '#0066cc' : avg >= 2.5 ? '#f59e0b' : '#ef4444';
-    const dist = [1,2,3,4,5].map(v => responses.filter(r => Number(r[keys[i]]) === v).length);
+    const dist = dists[i];
     return `
       <div class="q-stat-card">
         <div class="q-stat-header">
@@ -561,37 +575,41 @@ function renderStats(responses, students) {
     document.getElementById('instructor-stats-section').style.display = 'none';
   }
 
-  // 인구통계 통계 (Q11-Q16)
-  const hasDemoData = responses.some(r => r.q11 || r.q12);
-  const demoSection = document.getElementById('demographics-stats-section');
-  if (hasDemoData) {
-    demoSection.style.display = 'block';
-    document.getElementById('demographics-stats').innerHTML = DEMO_QUESTIONS.map(dq => {
-      const counts = dq.options.map(opt => responses.filter(r => r[dq.key] === opt).length);
-      const total = counts.reduce((a, b) => a + b, 0);
+  // 인구통계 통계 (Q11-Q16) - 항상 표시
+  document.getElementById('demographics-stats-section').style.display = 'block';
+  document.getElementById('demographics-stats').innerHTML = DEMO_QUESTIONS.map(dq => {
+    const counts = dq.options.map(opt => responses.filter(r => r[dq.key] === opt).length);
+    const total = counts.reduce((a, b) => a + b, 0);
+    if (total === 0) {
       return `
         <div class="q-stat-card">
           <div class="q-stat-header">
             <span class="q-stat-label">${dq.label}</span>
-            <span class="q-stat-avg" style="color:#555;">${total}명 응답</span>
+            <span class="q-stat-avg" style="color:#aaa;">응답 없음</span>
           </div>
-          <div class="demo-dist">
-            ${dq.options.map((opt, i) => {
-              const cnt = counts[i];
-              const pct = total > 0 ? (cnt / total * 100).toFixed(1) : 0;
-              return `
-                <div class="demo-item">
-                  <span class="demo-label">${escapeHtml(opt)}</span>
-                  <div class="bar-track" style="flex:1;"><div class="bar-fill" style="width:${pct}%;background:#0066cc;"></div></div>
-                  <span class="demo-count">${cnt}명 (${pct}%)</span>
-                </div>`;
-            }).join('')}
-          </div>
+          <div style="color:#bbb;font-size:0.82rem;padding:0.3rem 0;">아직 수집된 응답이 없습니다.</div>
         </div>`;
-    }).join('');
-  } else {
-    demoSection.style.display = 'none';
-  }
+    }
+    return `
+      <div class="q-stat-card">
+        <div class="q-stat-header">
+          <span class="q-stat-label">${dq.label}</span>
+          <span class="q-stat-avg" style="color:#555;">${total}명 응답</span>
+        </div>
+        <div class="demo-dist">
+          ${dq.options.map((opt, i) => {
+            const cnt = counts[i];
+            const pct = total > 0 ? (cnt / total * 100).toFixed(1) : 0;
+            return `
+              <div class="demo-item">
+                <span class="demo-label">${i + 1}. ${escapeHtml(opt)}</span>
+                <div class="bar-track" style="flex:1;"><div class="bar-fill" style="width:${pct}%;background:#0066cc;"></div></div>
+                <span class="demo-count">${cnt}명 (${pct}%)</span>
+              </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+  }).join('');
 
   // 주관식 응답 (Q10, comment1, comment2, comment3, 구 양식 comment)
   const subjectiveTypes = [
@@ -639,16 +657,15 @@ function exportStatsExcel() {
     return parts.length === 2 ? `[${parts[0]}] ${parts[1]} 강사` : `${k} 강사`;
   });
   // Q10은 주관식이므로 열만 확보하고 데이터는 비워둠
+  // Q11~Q16 헤더: 보기 번호 안내 포함
+  const demoHeaders = DEMO_QUESTIONS.map(dq =>
+    `${dq.label} (${dq.options.map((o, i) => `${i+1}=${o}`).join(' ')})`
+  );
   const headers1 = [
     '순번',
     ...Q_LABELS,                // Q1~Q9
-    'Q10(주관식)',               // Q10 빈 칸
-    'Q11. 귀하의 근무처',
-    'Q12. 귀하의 직급',
-    'Q13. 귀하의 직렬',
-    'Q14. 귀하의 연령',
-    'Q15. 귀하의 성별',
-    'Q16. 입교 동기',
+    'Q10(주관식→시트2)',         // Q10 빈 칸
+    ...demoHeaders,             // Q11~Q16 (보기번호 안내 포함)
     ...instHeaders
   ];
   const sheet1Data = [headers1];
@@ -662,9 +679,11 @@ function exportStatsExcel() {
     });
     // Q10 빈 칸
     row.push('');
-    // Q11~Q16 인구통계 (텍스트 값)
-    ['q11','q12','q13','q14','q15','q16'].forEach(k => {
-      row.push(String(r[k] || '').trim());
+    // Q11~Q16 인구통계 (보기 번호로 변환: 1번=1, 2번=2, ...)
+    DEMO_QUESTIONS.forEach(dq => {
+      const val = String(r[dq.key] || '').trim();
+      const idx = val ? dq.options.indexOf(val) + 1 : '';
+      row.push(idx > 0 ? idx : '');
     });
     // 강사 점수 (역점수 변환)
     let instObj = r.instructors || {};
@@ -689,15 +708,20 @@ function exportStatsExcel() {
   const sheet2Data = [sheet2Headers];
   let commentIdx = 1;
   lastResponses.forEach(r => {
-    const q10 = String(r.q10_comment || '').trim();
-    // comment1 없으면 구 양식 comment 폴백
+    const q10 = String(r.q10_comment || r['q10_comment'] || '').trim();
+    // comment1 없으면 구 양식 comment 폴백 (필드명 변형도 처리)
     const c1 = String(r.comment1 || r.comment || '').trim();
     const c2 = String(r.comment2 || '').trim();
     const c3 = String(r.comment3 || '').trim();
+    // 하나라도 내용이 있으면 행 추가
     if (q10 || c1 || c2 || c3) {
       sheet2Data.push([commentIdx++, q10, c1, c2, c3]);
     }
   });
+  // 주관식 데이터가 전혀 없으면 안내 행 추가
+  if (sheet2Data.length === 1) {
+    sheet2Data.push(['', '(수집된 주관식 응답이 없습니다)', '', '', '']);
+  }
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sheet2Data), '주관식');
 
   const filename = `${lastCourseName}_설문결과_${new Date().toISOString().slice(0,10)}.xlsx`;
