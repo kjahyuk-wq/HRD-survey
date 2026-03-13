@@ -1,4 +1,4 @@
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwLF8v4YMXcd-d8uKuX4_cx48kA0cRFvBkGKyeS3X4XqoAPrm9jSfLTJ58GQl8v1AAE/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxvgK27IPkjNnHJtUa-aPc79sztLiTuuWxD3amlLw8FMWEZJEmbe4_bpl7npnEH7tKG/exec";
 
 let currentUser = { name: '', empNo: '', course: '', instructors: [] };
 let instructorFetchPromise = null;
