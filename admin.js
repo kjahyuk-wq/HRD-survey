@@ -656,18 +656,8 @@ function exportStatsExcel() {
     const parts = k.split('__');
     return parts.length === 2 ? `[${parts[0]}] ${parts[1]} 강사` : `${k} 강사`;
   });
-  // Q10은 주관식이므로 열만 확보하고 데이터는 비워둠
-  // Q11~Q16 헤더: 보기 번호 안내 포함
-  const demoHeaders = DEMO_QUESTIONS.map(dq =>
-    `${dq.label} (${dq.options.map((o, i) => `${i+1}=${o}`).join(' ')})`
-  );
-  const headers1 = [
-    '순번',
-    ...Q_LABELS,                // Q1~Q9
-    'Q10(주관식→시트2)',         // Q10 빈 칸
-    ...demoHeaders,             // Q11~Q16 (보기번호 안내 포함)
-    ...instHeaders
-  ];
+  const totalCols = 9 + 1 + 6 + instKeys.length; // Q1~Q9, Q10, Q11~Q16, 강사
+  const headers1 = ['순번', ...Array.from({length: totalCols}, (_, i) => i + 1)];
   const sheet1Data = [headers1];
 
   lastResponses.forEach((r, idx) => {
