@@ -241,7 +241,7 @@ async function loadStudents() {
                 <td>${s.name}</td>
                 <td>${s.empNo}</td>
                 <td>${s.completed
-                  ? `<span class="status-done">✅ 완료</span>`
+                  ? `<span class="status-done">✅ 완료</span>${s.completedAt ? `<br><small class="completed-at">${formatDateTime(s.completedAt)}</small>` : ''}`
                   : `<span class="status-pending">⏳ 미완료</span>`}
                 </td>
                 <td><button class="delete-btn" onclick="deleteStudent('${escapeAttr(s.name)}','${escapeAttr(s.empNo)}','${escapeAttr(course)}',this)">삭제</button></td>
@@ -733,6 +733,14 @@ function formatDate(val) {
   const d = new Date(val);
   if (isNaN(d)) return String(val);
   return d.toLocaleString('ko-KR', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
+}
+
+function formatDateTime(isoStr) {
+  if (!isoStr) return '';
+  const d = new Date(isoStr);
+  if (isNaN(d)) return isoStr;
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}.${pad(d.getMonth()+1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function escapeHtml(str) {

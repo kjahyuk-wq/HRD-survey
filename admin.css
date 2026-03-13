@@ -176,6 +176,7 @@ header h1 { font-size: 1.3rem; font-weight: 700; margin: 0; color: #fff; }
 
 .status-done { color: #22c55e; font-weight: 600; font-size: 0.85rem; }
 .status-pending { color: #f59e0b; font-weight: 600; font-size: 0.85rem; }
+.completed-at { color: #888; font-size: 0.75rem; }
 
 /* 미참여자 */
 .not-completed-list {
