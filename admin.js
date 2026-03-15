@@ -1,5 +1,13 @@
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxfw2LUnlZJnLXXhxUtQzdd_4wYKrrZjyej0kEZcTF4XFlGD_VWCGyC8i0cGMMtE36Y/exec";
+import { db } from './firebase-config.js';
+import {
+  collection, query, getDocs,
+  addDoc, deleteDoc, doc, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
+
 const ADMIN_PASSWORD = "hrd2024!";
+
+// 과정명 → Firestore doc ID 매핑
+let courseIdMap = {};
 
 const Q_LABELS = [
   'Q1. 과정 목적 달성을 위한 교육기간',
@@ -60,9 +68,15 @@ async function loadCourseList() {
   document.getElementById('course-manage-empty').style.display = 'none';
 
   try {
-    const res = await fetch(SCRIPT_URL + '?action=courses');
-    const courses = await res.json();
+    const snap = await getDocs(collection(db, 'courses'));
     document.getElementById('course-manage-loading').style.display = 'none';
+
+    courseIdMap = {};
+    const courses = snap.docs.map(d => {
+      courseIdMap[d.data().name] = d.id;
+      return d.data().name;
+    });
+
     document.getElementById('course-count').textContent = courses.length + '개';
 
     if (!courses.length) {
@@ -81,7 +95,6 @@ async function loadCourseList() {
         </div>`).join('');
     }
 
-    // 수강생 관리 드롭다운 업데이트
     const sel = document.getElementById('student-course-select');
     const prev = sel.value;
     sel.innerHTML = '<option value="">-- 교육과정을 선택하세요 --</option>' +
@@ -102,9 +115,8 @@ async function addCourse() {
   btn.disabled = true; btn.textContent = '추가 중...';
 
   try {
-    await postData({ action: 'addCourse', name });
+    await addDoc(collection(db, 'courses'), { name });
     input.value = '';
-    await delay(800);
     await loadCourseList();
   } catch (e) { alert('추가 중 오류가 발생했습니다.'); }
   finally { btn.disabled = false; btn.textContent = '+ 추가'; }
@@ -114,10 +126,18 @@ async function deleteCourse(name, btnEl) {
   if (!confirm(`"${name}" 과정을 삭제하시겠습니까?\n(기존 설문 데이터는 유지됩니다)`)) return;
   btnEl.disabled = true; btnEl.textContent = '삭제 중...';
   try {
-    await postData({ action: 'deleteCourse', name });
-    await delay(800);
+    const courseId = courseIdMap[name];
+    await deleteSubcollection(courseId, 'instructors');
+    await deleteSubcollection(courseId, 'students');
+    await deleteSubcollection(courseId, 'responses');
+    await deleteDoc(doc(db, 'courses', courseId));
     await loadCourseList();
   } catch (e) { alert('삭제 중 오류가 발생했습니다.'); btnEl.disabled = false; btnEl.textContent = '삭제'; }
+}
+
+async function deleteSubcollection(courseId, subcollectionName) {
+  const snap = await getDocs(collection(db, 'courses', courseId, subcollectionName));
+  await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
 }
 
 // ── 강사 관리 ──────────────────────────────
@@ -135,8 +155,9 @@ async function loadInstructors(courseName, panelIdx) {
   const panel = document.getElementById(`inst-panel-${panelIdx}`);
   panel.innerHTML = '<div class="inst-loading">불러오는 중...</div>';
   try {
-    const res = await fetch(`${SCRIPT_URL}?action=instructors&course=${encodeURIComponent(courseName)}`);
-    const instructors = await res.json();
+    const courseId = courseIdMap[courseName];
+    const snap = await getDocs(collection(db, 'courses', courseId, 'instructors'));
+    const instructors = snap.docs.map(d => ({ ...d.data(), _id: d.id }));
     renderInstructorPanel(courseName, panelIdx, instructors);
   } catch (e) {
     panel.innerHTML = '<div class="inst-loading">불러오기 실패</div>';
@@ -148,14 +169,14 @@ function renderInstructorPanel(courseName, panelIdx, instructors) {
   const ec = escapeAttr(courseName);
   const listHtml = instructors.length === 0
     ? '<div class="inst-empty">등록된 강사가 없습니다. 강사를 추가해 주세요.</div>'
-    : instructors.map((inst, i) => {
+    : instructors.map((inst) => {
         const name = typeof inst === 'string' ? inst : inst.name;
         const edu  = typeof inst === 'string' ? '' : (inst.education || '');
         const label = edu ? `<span class="inst-edu-tag">${escapeHtml(edu)}</span> ${escapeHtml(name)}` : escapeHtml(name);
-        const en = escapeAttr(name), ee = escapeAttr(edu);
+        const en = escapeAttr(name), ee = escapeAttr(edu), eid = escapeAttr(inst._id || '');
         return `<div class="inst-item">
           <span class="inst-label">${label}</span>
-          <button class="delete-btn" onclick="deleteInstructor('${ec}', ${panelIdx}, '${en}', '${ee}', this)">삭제</button>
+          <button class="delete-btn" onclick="deleteInstructor('${ec}', ${panelIdx}, '${en}', '${ee}', '${eid}', this)">삭제</button>
         </div>`;
       }).join('');
 
@@ -177,20 +198,20 @@ async function addInstructor(courseName, panelIdx) {
   const btn = document.querySelector(`#inst-panel-${panelIdx} .inst-add-btn`);
   btn.disabled = true; btn.textContent = '추가 중...';
   try {
-    await postData({ action: 'addInstructor', course: courseName, name, education: edu });
+    const courseId = courseIdMap[courseName];
+    await addDoc(collection(db, 'courses', courseId, 'instructors'), { name, education: edu });
     document.getElementById(`inst-edu-${panelIdx}`).value = '';
     document.getElementById(`inst-name-${panelIdx}`).value = '';
-    await delay(800);
     await loadInstructors(courseName, panelIdx);
   } catch (e) { alert('추가 중 오류가 발생했습니다.'); btn.disabled = false; btn.textContent = '+ 추가'; }
 }
 
-async function deleteInstructor(courseName, panelIdx, name, education, btnEl) {
+async function deleteInstructor(courseName, panelIdx, name, education, instId, btnEl) {
   if (!confirm(`"${name}" 강사를 삭제하시겠습니까?`)) return;
   btnEl.disabled = true; btnEl.textContent = '삭제 중...';
   try {
-    await postData({ action: 'deleteInstructor', course: courseName, name, education });
-    await delay(800);
+    const courseId = courseIdMap[courseName];
+    await deleteDoc(doc(db, 'courses', courseId, 'instructors', instId));
     await loadInstructors(courseName, panelIdx);
   } catch (e) { alert('삭제 중 오류가 발생했습니다.'); btnEl.disabled = false; btnEl.textContent = '삭제'; }
 }
@@ -209,8 +230,13 @@ async function loadStudents() {
   document.getElementById('student-stats-bar').innerHTML = '';
 
   try {
-    const res = await fetch(`${SCRIPT_URL}?action=students&course=${encodeURIComponent(course)}`);
-    const students = await res.json();
+    const courseId = courseIdMap[course];
+    const snap = await getDocs(collection(db, 'courses', courseId, 'students'));
+    const students = snap.docs.map(d => ({
+      ...d.data(),
+      _id: d.id,
+      completedAt: d.data().completedAt?.toDate?.()?.toISOString() ?? null
+    }));
     document.getElementById('student-loading').style.display = 'none';
 
     const total = students.length;
@@ -244,7 +270,7 @@ async function loadStudents() {
                   ? `<span class="status-done">✅ 완료</span>${s.completedAt ? `<br><small class="completed-at">${formatDateTime(s.completedAt)}</small>` : ''}`
                   : `<span class="status-pending">⏳ 미완료</span>`}
                 </td>
-                <td><button class="delete-btn" onclick="deleteStudent('${escapeAttr(s.name)}','${escapeAttr(s.empNo)}','${escapeAttr(course)}',this)">삭제</button></td>
+                <td><button class="delete-btn" onclick="deleteStudent('${escapeAttr(s.name)}','${escapeAttr(s.empNo)}','${escapeAttr(course)}','${escapeAttr(s._id)}',this)">삭제</button></td>
               </tr>`).join('')}
           </tbody>
         </table>
@@ -267,21 +293,23 @@ async function addStudent() {
   addBtns.forEach(b => { b.disabled = true; b.textContent = '등록 중...'; });
 
   try {
-    await postData({ action: 'addStudent', name, empNo, course });
+    const courseId = courseIdMap[course];
+    await addDoc(collection(db, 'courses', courseId, 'students'), {
+      name, empNo, completed: false, completedAt: null
+    });
     document.getElementById('new-student-name').value = '';
     document.getElementById('new-student-empno').value = '';
-    await delay(800);
     await loadStudents();
   } catch (e) { alert('등록 중 오류가 발생했습니다.'); }
   finally { addBtns.forEach(b => { b.disabled = false; b.textContent = '+ 등록'; }); }
 }
 
-async function deleteStudent(name, empNo, course, btnEl) {
+async function deleteStudent(name, empNo, course, studentId, btnEl) {
   if (!confirm(`"${name}" 수강생을 삭제하시겠습니까?`)) return;
   btnEl.disabled = true; btnEl.textContent = '삭제 중...';
   try {
-    await postData({ action: 'deleteStudent', name, empNo, course });
-    await delay(800);
+    const courseId = courseIdMap[course];
+    await deleteDoc(doc(db, 'courses', courseId, 'students', studentId));
     await loadStudents();
   } catch (e) { alert('삭제 중 오류가 발생했습니다.'); btnEl.disabled = false; btnEl.textContent = '삭제'; }
 }
@@ -391,12 +419,15 @@ async function uploadExcelStudents() {
   const progress = document.getElementById('excel-progress');
   progress.style.display = 'block';
 
+  const courseId = courseIdMap[course];
   let success = 0, fail = 0;
   for (let i = 0; i < excelStudentData.length; i++) {
     const { empNo, name } = excelStudentData[i];
     progress.textContent = `등록 중... (${i+1}/${excelStudentData.length}) ${name}`;
     try {
-      await postData({ action: 'addStudent', name, empNo, course });
+      await addDoc(collection(db, 'courses', courseId, 'students'), {
+        name, empNo, completed: false, completedAt: null
+      });
       success++;
     } catch(_) {
       fail++;
@@ -409,7 +440,6 @@ async function uploadExcelStudents() {
   document.getElementById('excel-file-name').textContent = '선택된 파일 없음';
   document.getElementById('excel-preview').style.display = 'none';
 
-  await delay(800);
   await loadStudents();
 }
 
@@ -419,8 +449,9 @@ let lastCourseName = '';
 
 async function populateStatsSelect() {
   try {
-    const res = await fetch(SCRIPT_URL + '?action=courses');
-    const courses = await res.json();
+    const snap = await getDocs(collection(db, 'courses'));
+    snap.docs.forEach(d => { courseIdMap[d.data().name] = d.id; });
+    const courses = snap.docs.map(d => d.data().name);
     const sel = document.getElementById('stats-course-select');
     sel.innerHTML = '<option value="">-- 교육과정을 선택하세요 --</option>' +
       courses.map(c => `<option value="${escapeAttr(c)}">${c}</option>`).join('');
@@ -438,12 +469,20 @@ async function loadStats() {
   document.getElementById('stats-no-data').style.display = 'none';
 
   try {
-    const [resResponses, resStudents] = await Promise.all([
-      fetch(`${SCRIPT_URL}?action=responses&course=${encodeURIComponent(course)}`),
-      fetch(`${SCRIPT_URL}?action=students&course=${encodeURIComponent(course)}`)
+    const courseId = courseIdMap[course];
+    const [responsesSnap, studentsSnap] = await Promise.all([
+      getDocs(collection(db, 'courses', courseId, 'responses')),
+      getDocs(collection(db, 'courses', courseId, 'students'))
     ]);
-    const responses = await resResponses.json();
-    const students = await resStudents.json();
+
+    const responses = responsesSnap.docs.map(d => ({
+      ...d.data(),
+      submittedAt: d.data().submittedAt?.toDate?.()?.toISOString() ?? null
+    }));
+    const students = studentsSnap.docs.map(d => ({
+      ...d.data(),
+      completedAt: d.data().completedAt?.toDate?.()?.toISOString() ?? null
+    }));
 
     document.getElementById('stats-loading').style.display = 'none';
 
@@ -472,7 +511,6 @@ function renderStats(responses, students) {
   document.getElementById('completion-detail').textContent = `${completedStudents} / ${totalStudents}명`;
   document.getElementById('not-completed').textContent = notCompleted.length + '명';
 
-  // 미참여자 목록
   const ncSection = document.getElementById('not-completed-section');
   if (notCompleted.length > 0) {
     ncSection.style.display = 'block';
@@ -483,12 +521,10 @@ function renderStats(responses, students) {
     ncSection.style.display = 'none';
   }
 
-  // 항목별 평균 (Q1-Q9)
   const keys = ['q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7', 'q8', 'q9'];
   const avgs = keys.map(k => responses.reduce((acc, r) => acc + (Number(r[k]) || 0), 0) / n);
-  const dists = keys.map((k, i) => [1,2,3,4,5].map(v => responses.filter(r => Number(r[k]) === v).length));
+  const dists = keys.map((k) => [1,2,3,4,5].map(v => responses.filter(r => Number(r[k]) === v).length));
   const hasData = keys.map((k, i) => dists[i].some(c => c > 0));
-  // 실제 응답이 있는 문항만 전체 평균에 포함
   const validAvgs = avgs.filter((_, i) => hasData[i]);
   const overallAvg = validAvgs.length > 0 ? validAvgs.reduce((a, b) => a + b, 0) / validAvgs.length : 0;
   document.getElementById('overall-avg').textContent = overallAvg.toFixed(2);
@@ -525,8 +561,7 @@ function renderStats(responses, students) {
       </div>`;
   }).join('');
 
-  // 강사별 만족도 통계
-  const instScoreMap = {}; // key → [scores]
+  const instScoreMap = {};
   responses.forEach(r => {
     if (!r.instructors) return;
     let obj = r.instructors;
@@ -548,7 +583,6 @@ function renderStats(responses, students) {
       const pct = (avg / 5 * 100).toFixed(1);
       const color = avg >= 4.5 ? '#22c55e' : avg >= 3.5 ? '#0066cc' : avg >= 2.5 ? '#f59e0b' : '#ef4444';
       const dist = [1,2,3,4,5].map(v => scores.filter(s => s === v).length);
-      // key 형식: "교육명__강사명" 또는 "강사명"
       const parts = key.split('__');
       const label = parts.length === 2
         ? `👨‍🏫 [${escapeHtml(parts[0])}] ${escapeHtml(parts[1])} 강사`
@@ -574,7 +608,6 @@ function renderStats(responses, students) {
     document.getElementById('instructor-stats-section').style.display = 'none';
   }
 
-  // 인구통계 통계 (Q11-Q16) - 항상 표시
   document.getElementById('demographics-stats-section').style.display = 'block';
   document.getElementById('demographics-stats').innerHTML = DEMO_QUESTIONS.map(dq => {
     const counts = dq.options.map(opt => responses.filter(r => r[dq.key] === opt).length);
@@ -610,7 +643,6 @@ function renderStats(responses, students) {
       </div>`;
   }).join('');
 
-  // 주관식 응답 (Q10, comment1, comment2, comment3, 구 양식 comment)
   const subjectiveTypes = [
     { key: 'q10_comment', label: 'Q10. 기타 편의시설 건의사항' },
     { key: 'comment1', label: '소감 및 건의사항' },
@@ -641,7 +673,6 @@ function exportStatsExcel() {
 
   const wb = XLSX.utils.book_new();
 
-  // 강사 키 수집
   const instKeySet = new Set();
   lastResponses.forEach(r => {
     let obj = r.instructors || {};
@@ -650,31 +681,26 @@ function exportStatsExcel() {
   });
   const instKeys = [...instKeySet];
 
-  // ── 시트1: 객관식 ──
   const instHeaders = instKeys.map(k => {
     const parts = k.split('__');
     return parts.length === 2 ? `[${parts[0]}] ${parts[1]} 강사` : `${k} 강사`;
   });
-  const totalCols = 9 + 1 + 6 + instKeys.length; // Q1~Q9, Q10, Q11~Q16, 강사
+  const totalCols = 9 + 1 + 6 + instKeys.length;
   const headers1 = ['순번', ...Array.from({length: totalCols}, (_, i) => i + 1)];
   const sheet1Data = [headers1];
 
   lastResponses.forEach((r, idx) => {
     const row = [idx + 1];
-    // Q1~Q9 점수 (역점수 변환)
     ['q1','q2','q3','q4','q5','q6','q7','q8','q9'].forEach(k => {
       const v = Number(r[k]);
       row.push((v >= 1 && v <= 5) ? 6 - v : '');
     });
-    // Q10 빈 칸
     row.push('');
-    // Q11~Q16 인구통계 (보기 번호로 변환: 1번=1, 2번=2, ...)
     DEMO_QUESTIONS.forEach(dq => {
       const val = String(r[dq.key] || '').trim();
-      const idx = val ? dq.options.indexOf(val) + 1 : '';
-      row.push(idx > 0 ? idx : '');
+      const i = val ? dq.options.indexOf(val) + 1 : '';
+      row.push(i > 0 ? i : '');
     });
-    // 강사 점수 (역점수 변환)
     let instObj = r.instructors || {};
     if (typeof instObj === 'string') { try { instObj = JSON.parse(instObj); } catch { instObj = {}; } }
     instKeys.forEach(k => {
@@ -686,7 +712,6 @@ function exportStatsExcel() {
 
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sheet1Data), '객관식');
 
-  // ── 시트2: 주관식 ──
   const sheet2Headers = [
     '순번',
     'Q10. 기타 편의시설 건의사항',
@@ -697,17 +722,14 @@ function exportStatsExcel() {
   const sheet2Data = [sheet2Headers];
   let commentIdx = 1;
   lastResponses.forEach(r => {
-    const q10 = String(r.q10_comment || r['q10_comment'] || '').trim();
-    // comment1 없으면 구 양식 comment 폴백 (필드명 변형도 처리)
+    const q10 = String(r.q10_comment || '').trim();
     const c1 = String(r.comment1 || r.comment || '').trim();
     const c2 = String(r.comment2 || '').trim();
     const c3 = String(r.comment3 || '').trim();
-    // 하나라도 내용이 있으면 행 추가
     if (q10 || c1 || c2 || c3) {
       sheet2Data.push([commentIdx++, q10, c1, c2, c3]);
     }
   });
-  // 주관식 데이터가 전혀 없으면 안내 행 추가
   if (sheet2Data.length === 1) {
     sheet2Data.push(['', '(수집된 주관식 응답이 없습니다)', '', '', '']);
   }
@@ -718,16 +740,6 @@ function exportStatsExcel() {
 }
 
 // ── 유틸 ──────────────────────────────
-function postData(body) {
-  return fetch(SCRIPT_URL, {
-    method: 'POST', mode: 'no-cors',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
-}
-
-function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
-
 function formatDate(val) {
   if (!val) return '-';
   const d = new Date(val);

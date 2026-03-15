@@ -1,12 +1,14 @@
-// ⚠️ 아래 값을 Firebase 콘솔에서 복사한 값으로 교체하세요.
-// Firebase Console → 프로젝트 설정 → 내 앱 → SDK 설정 및 구성
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
+import { getFirestore } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
+
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyAw1nRzHaV318mm6vhueWt19PAkVHyMkrw",
+  authDomain: "hrd-data.firebaseapp.com",
+  projectId: "hrd-data",
+  storageBucket: "hrd-data.firebasestorage.app",
+  messagingSenderId: "233199711039",
+  appId: "1:233199711039:web:8f1cb4d26f4ac9306dd98a"
 };
 
-export { firebaseConfig };
+const app = initializeApp(firebaseConfig);
+export const db = getFirestore(app);

@@ -1,7 +1,10 @@
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxfw2LUnlZJnLXXhxUtQzdd_4wYKrrZjyej0kEZcTF4XFlGD_VWCGyC8i0cGMMtE36Y/exec";
+import { db } from './firebase-config.js';
+import {
+  collection, collectionGroup, query, where, getDocs,
+  addDoc, updateDoc, getDoc, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 
-let currentUser = { name: '', empNo: '', course: '', instructors: [] };
-let instructorFetchPromise = null;
+let currentUser = { name: '', empNo: '', course: '', courseId: '', studentRef: null, instructors: [] };
 
 async function doLogin() {
   const name = document.getElementById('input-name').value.trim();
@@ -16,44 +19,47 @@ async function doLogin() {
   btn.disabled = true;
 
   try {
-    const res = await fetch(`${SCRIPT_URL}?action=login&name=${encodeURIComponent(name)}&empNo=${encodeURIComponent(empNo)}`);
-    const text = await res.text();
-    let data;
-    try { data = JSON.parse(text); }
-    catch (_) { showLoginError('서버 연결에 문제가 발생했습니다.\n잠시 후 다시 시도해 주세요.'); reset(); return; }
+    const q = query(collectionGroup(db, 'students'), where('empNo', '==', empNo));
+    const snap = await getDocs(q);
+    const match = snap.docs.find(d => d.data().name === name);
 
-    if (!data.found) {
+    if (!match) {
       showLoginError('등록된 수강생 정보를 찾을 수 없습니다.\n이름 또는 교번을 확인하거나 담당자에게 문의해 주세요.');
       reset(); return;
     }
-    if (data.completed) {
+
+    const studentData = match.data();
+    if (studentData.completed) {
       showLoginError('이미 설문에 참여하셨습니다.\n감사합니다!');
       reset(); return;
     }
 
-    currentUser = { name, empNo, course: data.course, instructors: [] };
+    const courseRef = match.ref.parent.parent;
+    const courseSnap = await getDoc(courseRef);
+    const courseName = courseSnap.data().name;
 
-    // 강사 목록 fetch 완료 후 화면 표시
-    instructorFetchPromise = fetch(`${SCRIPT_URL}?action=instructors&course=${encodeURIComponent(data.course)}`)
-      .then(r => r.json())
-      .then(list => {
-        const instructors = Array.isArray(list) ? list : [];
-        currentUser.instructors = instructors;
-      })
-      .catch(() => { currentUser.instructors = []; });
+    const instrSnap = await getDocs(collection(db, 'courses', courseRef.id, 'instructors'));
+    const instructors = instrSnap.docs.map(d => d.data());
 
-    await instructorFetchPromise;
+    currentUser = {
+      name, empNo,
+      course: courseName,
+      courseId: courseRef.id,
+      studentRef: match.ref,
+      instructors
+    };
 
     document.getElementById('page-login').style.display = 'none';
     document.getElementById('page-survey').style.display = 'block';
     document.getElementById('confirm-greeting').textContent = `${name}님, 안녕하세요!`;
-    document.getElementById('confirm-course-name').textContent = data.course;
-    updateSurveyMeta(currentUser.instructors.length);
+    document.getElementById('confirm-course-name').textContent = courseName;
+    updateSurveyMeta(instructors.length);
     document.getElementById('screen-confirm').style.display = 'block';
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
   } catch (e) {
-    showLoginError('네트워크 오류가 발생했습니다.\n인터넷 연결을 확인 후 다시 시도해 주세요.');
+    console.error(e);
+    showLoginError('서버 연결에 문제가 발생했습니다.\n잠시 후 다시 시도해 주세요.');
     reset();
   }
 
@@ -64,7 +70,7 @@ async function doLogin() {
 }
 
 function updateSurveyMeta(instructorCount) {
-  const totalQ = 19 + instructorCount; // Q1~Q16 고정(16문항) + 강사문항 + 주관식 3문항
+  const totalQ = 19 + instructorCount;
   const mins = Math.max(3, Math.round(totalQ * 0.4));
   document.getElementById('survey-q-count').textContent = `총 ${totalQ}문항`;
   document.getElementById('survey-time').textContent = `약 ${mins}분`;
@@ -84,10 +90,6 @@ async function startSurvey() {
   badge.textContent = currentUser.course;
   badge.style.display = 'inline-block';
 
-  // 미리 시작한 fetch가 아직 진행 중이면 완료될 때까지 대기
-  if (instructorFetchPromise) await instructorFetchPromise;
-
-  // 강사 문항 동적 생성
   renderInstructorQuestions(currentUser.instructors);
   updateSurveyMeta(currentUser.instructors.length);
 
@@ -178,24 +180,28 @@ async function submitSurvey() {
   btn.disabled = true;
 
   try {
-    await fetch(SCRIPT_URL, {
-      method: 'POST', mode: 'no-cors',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: currentUser.name, empNo: currentUser.empNo, course: currentUser.course,
-        q1: answers[0], q2: answers[1], q3: answers[2], q4: answers[3], q5: answers[4],
-        q6: answers[5], q7: answers[6], q8: answers[7], q9: answers[8],
-        q10_comment: q10Comment,
-        q11: demographics.q11, q12: demographics.q12, q13: demographics.q13,
-        q14: demographics.q14, q15: demographics.q15, q16: demographics.q16,
-        instructors: instructorScores,
-        comment1, comment2, comment3
-      })
+    await addDoc(collection(db, 'courses', currentUser.courseId, 'responses'), {
+      name: currentUser.name, empNo: currentUser.empNo, course: currentUser.course,
+      q1: answers[0], q2: answers[1], q3: answers[2], q4: answers[3], q5: answers[4],
+      q6: answers[5], q7: answers[6], q8: answers[7], q9: answers[8],
+      q10_comment: q10Comment,
+      q11: demographics.q11, q12: demographics.q12, q13: demographics.q13,
+      q14: demographics.q14, q15: demographics.q15, q16: demographics.q16,
+      instructors: instructorScores,
+      comment1, comment2, comment3,
+      submittedAt: serverTimestamp()
     });
+
+    await updateDoc(currentUser.studentRef, {
+      completed: true,
+      completedAt: serverTimestamp()
+    });
+
     document.getElementById('screen-survey').style.display = 'none';
     document.getElementById('screen-result').style.display = 'block';
     window.scrollTo({ top: 0, behavior: 'smooth' });
   } catch (e) {
+    console.error(e);
     document.getElementById('btn-text').textContent = '설문 제출하기';
     btn.disabled = false;
     alert('제출 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.');
@@ -205,3 +211,7 @@ async function submitSurvey() {
 function escapeHtml(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
+
+window.doLogin = doLogin;
+window.startSurvey = startSurvey;
+window.submitSurvey = submitSurvey;
