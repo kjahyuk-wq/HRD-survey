@@ -702,13 +702,13 @@ function exportStatsExcel() {
     DEMO_QUESTIONS.forEach(dq => {
       const val = String(r[dq.key] || '').trim();
       const i = val ? dq.options.indexOf(val) + 1 : '';
-      row.push(i > 0 ? i : '');
+      row.push(i > 0 ? `${i}_0` : '');
     });
     let instObj = r.instructors || {};
     if (typeof instObj === 'string') { try { instObj = JSON.parse(instObj); } catch { instObj = {}; } }
     instKeys.forEach(k => {
       const v = Number(instObj[k]);
-      row.push((v >= 1 && v <= 5) ? 6 - v : '');
+      row.push((v >= 1 && v <= 5) ? `${6 - v}_0` : '');
     });
     sheet1Data.push(row);
   });
