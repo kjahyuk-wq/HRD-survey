@@ -1,6 +1,6 @@
 import { db } from './firebase-config.js';
 import {
-  collection, query, getDocs,
+  collection, query, orderBy, getDocs,
   addDoc, deleteDoc, doc, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 
@@ -156,7 +156,7 @@ async function loadInstructors(courseName, panelIdx) {
   panel.innerHTML = '<div class="inst-loading">불러오는 중...</div>';
   try {
     const courseId = courseIdMap[courseName];
-    const snap = await getDocs(collection(db, 'courses', courseId, 'instructors'));
+    const snap = await getDocs(query(collection(db, 'courses', courseId, 'instructors'), orderBy('createdAt')));
     const instructors = snap.docs.map(d => ({ ...d.data(), _id: d.id }));
     renderInstructorPanel(courseName, panelIdx, instructors);
   } catch (e) {
@@ -199,7 +199,7 @@ async function addInstructor(courseName, panelIdx) {
   btn.disabled = true; btn.textContent = '추가 중...';
   try {
     const courseId = courseIdMap[courseName];
-    await addDoc(collection(db, 'courses', courseId, 'instructors'), { name, education: edu });
+    await addDoc(collection(db, 'courses', courseId, 'instructors'), { name, education: edu, createdAt: serverTimestamp() });
     document.getElementById(`inst-edu-${panelIdx}`).value = '';
     document.getElementById(`inst-name-${panelIdx}`).value = '';
     await loadInstructors(courseName, panelIdx);

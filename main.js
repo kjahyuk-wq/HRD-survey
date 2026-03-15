@@ -1,6 +1,6 @@
 import { db } from './firebase-config.js';
 import {
-  collection, query, where, getDocs,
+  collection, query, where, orderBy, getDocs,
   addDoc, updateDoc, getDoc, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 
@@ -49,7 +49,7 @@ async function doLogin() {
     }
 
     const courseName = matchCourseName;
-    const instrSnap = await getDocs(collection(db, 'courses', matchCourseId, 'instructors'));
+    const instrSnap = await getDocs(query(collection(db, 'courses', matchCourseId, 'instructors'), orderBy('createdAt')));
     const instructors = instrSnap.docs.map(d => d.data());
 
     currentUser = {
