@@ -236,7 +236,7 @@ async function loadStudents() {
       ...d.data(),
       _id: d.id,
       completedAt: d.data().completedAt?.toDate?.()?.toISOString() ?? null
-    }));
+    })).sort((a, b) => Number(a.empNo) - Number(b.empNo));
     document.getElementById('student-loading').style.display = 'none';
 
     const total = students.length;
