@@ -1,6 +1,6 @@
 import { db } from './firebase-config.js';
 import {
-  collection, query, orderBy, getDocs,
+  collection, query, where, orderBy, getDocs,
   addDoc, deleteDoc, doc, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 
@@ -305,10 +305,13 @@ async function addStudent() {
 }
 
 async function deleteStudent(name, empNo, course, studentId, btnEl) {
-  if (!confirm(`"${name}" 수강생을 삭제하시겠습니까?`)) return;
+  if (!confirm(`"${name}" 수강생을 삭제하시겠습니까?\n해당 수강생의 설문 응답도 함께 삭제됩니다.`)) return;
   btnEl.disabled = true; btnEl.textContent = '삭제 중...';
   try {
     const courseId = courseIdMap[course];
+    const respSnap = await getDocs(query(collection(db, 'courses', courseId, 'responses'), where('empNo', '==', empNo)));
+    const matching = respSnap.docs.filter(d => d.data().name === name);
+    await Promise.all(matching.map(d => deleteDoc(d.ref)));
     await deleteDoc(doc(db, 'courses', courseId, 'students', studentId));
     await loadStudents();
   } catch (e) { alert('삭제 중 오류가 발생했습니다.'); btnEl.disabled = false; btnEl.textContent = '삭제'; }
