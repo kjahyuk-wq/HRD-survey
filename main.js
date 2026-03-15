@@ -1,6 +1,6 @@
 import { db } from './firebase-config.js';
 import {
-  collection, collectionGroup, query, where, getDocs,
+  collection, query, where, getDocs,
   addDoc, updateDoc, getDoc, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 
@@ -19,9 +19,23 @@ async function doLogin() {
   btn.disabled = true;
 
   try {
-    const q = query(collectionGroup(db, 'students'), where('empNo', '==', empNo));
-    const snap = await getDocs(q);
-    const match = snap.docs.find(d => d.data().name === name);
+    // 전체 과정을 순서대로 검색해서 수강생 찾기 (컬렉션 그룹 색인 불필요)
+    const coursesSnap = await getDocs(collection(db, 'courses'));
+    let match = null;
+    let matchCourseId = null;
+    let matchCourseName = null;
+
+    for (const courseDoc of coursesSnap.docs) {
+      const q = query(collection(db, 'courses', courseDoc.id, 'students'), where('empNo', '==', empNo));
+      const snap = await getDocs(q);
+      const found = snap.docs.find(d => d.data().name === name);
+      if (found) {
+        match = found;
+        matchCourseId = courseDoc.id;
+        matchCourseName = courseDoc.data().name;
+        break;
+      }
+    }
 
     if (!match) {
       showLoginError('등록된 수강생 정보를 찾을 수 없습니다.\n이름 또는 교번을 확인하거나 담당자에게 문의해 주세요.');
@@ -34,17 +48,14 @@ async function doLogin() {
       reset(); return;
     }
 
-    const courseRef = match.ref.parent.parent;
-    const courseSnap = await getDoc(courseRef);
-    const courseName = courseSnap.data().name;
-
-    const instrSnap = await getDocs(collection(db, 'courses', courseRef.id, 'instructors'));
+    const courseName = matchCourseName;
+    const instrSnap = await getDocs(collection(db, 'courses', matchCourseId, 'instructors'));
     const instructors = instrSnap.docs.map(d => d.data());
 
     currentUser = {
       name, empNo,
       course: courseName,
-      courseId: courseRef.id,
+      courseId: matchCourseId,
       studentRef: match.ref,
       instructors
     };
