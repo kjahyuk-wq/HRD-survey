@@ -449,6 +449,7 @@ async function uploadExcelStudents() {
 // ── 통계 ──────────────────────────────
 let lastResponses = [];
 let lastCourseName = '';
+let lastOrderedInstructorKeys = [];
 
 async function populateStatsSelect() {
   try {
@@ -473,9 +474,10 @@ async function loadStats() {
 
   try {
     const courseId = courseIdMap[course];
-    const [responsesSnap, studentsSnap] = await Promise.all([
+    const [responsesSnap, studentsSnap, instructorsSnap] = await Promise.all([
       getDocs(collection(db, 'courses', courseId, 'responses')),
-      getDocs(collection(db, 'courses', courseId, 'students'))
+      getDocs(collection(db, 'courses', courseId, 'students')),
+      getDocs(query(collection(db, 'courses', courseId, 'instructors'), orderBy('createdAt')))
     ]);
 
     const responses = responsesSnap.docs.map(d => ({
@@ -486,6 +488,10 @@ async function loadStats() {
       ...d.data(),
       completedAt: d.data().completedAt?.toDate?.()?.toISOString() ?? null
     }));
+    const orderedInstructorKeys = instructorsSnap.docs.map(d => {
+      const { name, education } = d.data();
+      return education ? `${education}__${name}` : name;
+    });
 
     document.getElementById('stats-loading').style.display = 'none';
 
@@ -495,14 +501,15 @@ async function loadStats() {
     }
 
     lastResponses = responses;
-    renderStats(responses, students);
+    lastOrderedInstructorKeys = orderedInstructorKeys;
+    renderStats(responses, students, orderedInstructorKeys);
     document.getElementById('stats-area').style.display = 'block';
   } catch (e) {
     document.getElementById('stats-loading').textContent = '데이터를 불러오지 못했습니다.';
   }
 }
 
-function renderStats(responses, students) {
+function renderStats(responses, students, orderedInstructorKeys = []) {
   const n = responses.length;
   const totalStudents = students.length;
   const completedStudents = students.filter(s => s.completed).length;
@@ -576,7 +583,10 @@ function renderStats(responses, students) {
     });
   });
 
-  const instKeys = Object.keys(instScoreMap);
+  // Firestore 입력 순서(orderedInstructorKeys)를 우선 사용하고, 없으면 응답 데이터 순으로 fallback
+  const allInstKeys = Object.keys(instScoreMap);
+  const instKeys = orderedInstructorKeys.filter(k => instScoreMap[k])
+    .concat(allInstKeys.filter(k => !orderedInstructorKeys.includes(k)));
   if (instKeys.length > 0) {
     document.getElementById('instructor-stats-section').style.display = 'block';
     document.getElementById('instructor-stats').innerHTML = instKeys.map(key => {
@@ -682,7 +692,10 @@ function exportStatsExcel() {
     if (typeof obj === 'string') { try { obj = JSON.parse(obj); } catch { return; } }
     Object.keys(obj).forEach(k => instKeySet.add(k));
   });
-  const instKeys = [...instKeySet];
+  const allInstKeys = [...instKeySet];
+  // Firestore 입력 순서를 우선 사용하고, 없으면 응답 데이터 순으로 fallback
+  const instKeys = lastOrderedInstructorKeys.filter(k => instKeySet.has(k))
+    .concat(allInstKeys.filter(k => !lastOrderedInstructorKeys.includes(k)));
 
   const instHeaders = instKeys.map(k => {
     const parts = k.split('__');
