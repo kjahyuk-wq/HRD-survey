@@ -630,6 +630,7 @@ header h1 { font-size: 1.3rem; font-weight: 700; margin: 0; color: #fff; }
 
 .q-stat-label { font-size: 0.9rem; font-weight: 600; color: #333; }
 .q-stat-avg { font-size: 1.1rem; font-weight: 800; }
+.q-stat-satisfy { font-size: 0.82rem; font-weight: 600; color: #6b7280; background: #f3f4f6; border-radius: 4px; padding: 2px 7px; margin-left: 6px; white-space: nowrap; }
 
 .bar-track {
   background: #eef2f7;

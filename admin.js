@@ -553,11 +553,13 @@ function renderStats(responses, students, orderedInstructorKeys = []) {
     const pct = (avg / 5 * 100).toFixed(1);
     const color = avg >= 4.5 ? '#22c55e' : avg >= 3.5 ? '#0066cc' : avg >= 2.5 ? '#f59e0b' : '#ef4444';
     const dist = dists[i];
+    const satisfyPct = n > 0 ? ((dist[3] + dist[4]) / n * 100).toFixed(1) : '0.0';
     return `
       <div class="q-stat-card">
         <div class="q-stat-header">
           <span class="q-stat-label">${Q_LABELS[i]}</span>
           <span class="q-stat-avg" style="color:${color}">${avg.toFixed(2)}점</span>
+          <span class="q-stat-satisfy">만족이상 ${satisfyPct}%</span>
         </div>
         <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${color}"></div></div>
         <div class="dist-row">
@@ -596,6 +598,7 @@ function renderStats(responses, students, orderedInstructorKeys = []) {
       const pct = (avg / 5 * 100).toFixed(1);
       const color = avg >= 4.5 ? '#22c55e' : avg >= 3.5 ? '#0066cc' : avg >= 2.5 ? '#f59e0b' : '#ef4444';
       const dist = [1,2,3,4,5].map(v => scores.filter(s => s === v).length);
+      const instSatisfyPct = cnt > 0 ? ((dist[3] + dist[4]) / cnt * 100).toFixed(1) : '0.0';
       const parts = key.split('__');
       const label = parts.length === 2
         ? `👨‍🏫 [${escapeHtml(parts[0])}] ${escapeHtml(parts[1])} 강사`
@@ -605,6 +608,7 @@ function renderStats(responses, students, orderedInstructorKeys = []) {
           <div class="q-stat-header">
             <span class="q-stat-label">${label}</span>
             <span class="q-stat-avg" style="color:${color}">${avg.toFixed(2)}점</span>
+            <span class="q-stat-satisfy">만족이상 ${instSatisfyPct}%</span>
           </div>
           <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${color}"></div></div>
           <div class="dist-row">
