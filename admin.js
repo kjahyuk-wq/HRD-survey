@@ -632,13 +632,14 @@ function renderStats(responses, students, orderedInstructorKeys = []) {
     document.getElementById('instructor-stats-section').style.display = 'none';
   }
 
-  // 전체 평균: Q1~Q9 + 강사 전체 평균
-  const allInstScoresForOverall = Object.values(instScoreMap).flat();
-  const allScoresForOverall = [...validAvgs];
-  if (allInstScoresForOverall.length > 0) {
-    const instAvgForOverall = allInstScoresForOverall.reduce((a, b) => a + b, 0) / allInstScoresForOverall.length;
-    allScoresForOverall.push(instAvgForOverall);
-  }
+  // 전체 평균: Q1~Q9 + 각 강사 개별 평균 (반올림된 값 기준, 엑셀 셀 선택과 일치)
+  const allScoresForOverall = validAvgs.map(v => Number(v.toFixed(2)));
+  instKeys.forEach(k => {
+    const scores = instScoreMap[k];
+    if (scores && scores.length > 0) {
+      allScoresForOverall.push(Number((scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2)));
+    }
+  });
   const overallAvg = allScoresForOverall.length > 0 ? allScoresForOverall.reduce((a, b) => a + b, 0) / allScoresForOverall.length : 0;
   document.getElementById('overall-avg').textContent = overallAvg.toFixed(2);
 
@@ -804,10 +805,22 @@ function exportResultsExcel() {
   const instKeys2 = lastOrderedInstructorKeys.filter(k => instKeySet2.has(k))
     .concat([...instKeySet2].filter(k => !lastOrderedInstructorKeys.includes(k)));
 
+  // 전체 평균: 반올림된 값 기준으로 계산 (엑셀 셀 선택과 일치)
+  const validAvgs = avgs.filter((_, i) => dists[i].some(c => c > 0));
+  const allScoresForOverall2 = validAvgs.map(v => Number(v.toFixed(2)));
+  instKeys2.forEach(k => {
+    const scores = instScoreMap2[k];
+    if (scores && scores.length > 0) {
+      allScoresForOverall2.push(Number((scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2)));
+    }
+  });
+  const overallAvg = allScoresForOverall2.length > 0 ? allScoresForOverall2.reduce((a, b) => a + b, 0) / allScoresForOverall2.length : 0;
+
   const statsData = [
     ['교육과정', lastCourseName, '', '', '', '', '', ''],
     ['응답자 수', n + '명', '', '', '', '', '', ''],
     ['작성일', new Date().toLocaleDateString('ko-KR'), '', '', '', '', '', ''],
+    ['전체 평균 (Q1~Q9 + 강사)', Number(overallAvg.toFixed(2)), '', '', '', '', '', ''],
     [],
     ['항목', '평균점수', '만족이상(%)', '1점(명)', '2점(명)', '3점(명)', '4점(명)', '5점(명)'],
   ];
@@ -820,16 +833,6 @@ function exportResultsExcel() {
       dists[i][0], dists[i][1], dists[i][2], dists[i][3], dists[i][4]
     ]);
   });
-
-  const validAvgs = avgs.filter((_, i) => dists[i].some(c => c > 0));
-  const allInstScoresForOverall2 = instKeys2.flatMap(k => instScoreMap2[k]);
-  const allScoresForOverall2 = [...validAvgs];
-  if (allInstScoresForOverall2.length > 0) {
-    allScoresForOverall2.push(allInstScoresForOverall2.reduce((a, b) => a + b, 0) / allInstScoresForOverall2.length);
-  }
-  const overallAvg = allScoresForOverall2.length > 0 ? allScoresForOverall2.reduce((a, b) => a + b, 0) / allScoresForOverall2.length : 0;
-  statsData.push([]);
-  statsData.push(['전체 평균 (Q1~Q9 + 강사)', Number(overallAvg.toFixed(2)), '', '', '', '', '', '']);
 
   if (instKeys2.length > 0) {
     statsData.push([]);
