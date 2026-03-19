@@ -536,8 +536,6 @@ function renderStats(responses, students, orderedInstructorKeys = []) {
   const dists = keys.map((k) => [1,2,3,4,5].map(v => responses.filter(r => Number(r[k]) === v).length));
   const hasData = keys.map((k, i) => dists[i].some(c => c > 0));
   const validAvgs = avgs.filter((_, i) => hasData[i]);
-  const overallAvg = validAvgs.length > 0 ? validAvgs.reduce((a, b) => a + b, 0) / validAvgs.length : 0;
-  document.getElementById('overall-avg').textContent = overallAvg.toFixed(2);
 
   document.getElementById('question-stats').innerHTML = avgs.map((avg, i) => {
     if (!hasData[i]) {
@@ -633,6 +631,16 @@ function renderStats(responses, students, orderedInstructorKeys = []) {
   } else {
     document.getElementById('instructor-stats-section').style.display = 'none';
   }
+
+  // 전체 평균: Q1~Q9 + 강사 전체 평균
+  const allInstScoresForOverall = Object.values(instScoreMap).flat();
+  const allScoresForOverall = [...validAvgs];
+  if (allInstScoresForOverall.length > 0) {
+    const instAvgForOverall = allInstScoresForOverall.reduce((a, b) => a + b, 0) / allInstScoresForOverall.length;
+    allScoresForOverall.push(instAvgForOverall);
+  }
+  const overallAvg = allScoresForOverall.length > 0 ? allScoresForOverall.reduce((a, b) => a + b, 0) / allScoresForOverall.length : 0;
+  document.getElementById('overall-avg').textContent = overallAvg.toFixed(2);
 
   document.getElementById('demographics-stats-section').style.display = 'block';
   document.getElementById('demographics-stats').innerHTML = DEMO_QUESTIONS.map(dq => {
@@ -814,9 +822,14 @@ function exportResultsExcel() {
   });
 
   const validAvgs = avgs.filter((_, i) => dists[i].some(c => c > 0));
-  const overallAvg = validAvgs.length > 0 ? validAvgs.reduce((a, b) => a + b, 0) / validAvgs.length : 0;
+  const allInstScoresForOverall2 = instKeys2.flatMap(k => instScoreMap2[k]);
+  const allScoresForOverall2 = [...validAvgs];
+  if (allInstScoresForOverall2.length > 0) {
+    allScoresForOverall2.push(allInstScoresForOverall2.reduce((a, b) => a + b, 0) / allInstScoresForOverall2.length);
+  }
+  const overallAvg = allScoresForOverall2.length > 0 ? allScoresForOverall2.reduce((a, b) => a + b, 0) / allScoresForOverall2.length : 0;
   statsData.push([]);
-  statsData.push(['전체 평균 (Q1~Q9)', Number(overallAvg.toFixed(2)), '', '', '', '', '', '']);
+  statsData.push(['전체 평균 (Q1~Q9 + 강사)', Number(overallAvg.toFixed(2)), '', '', '', '', '', '']);
 
   if (instKeys2.length > 0) {
     statsData.push([]);
