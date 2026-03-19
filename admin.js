@@ -768,6 +768,124 @@ function exportStatsExcel() {
   XLSX.writeFile(wb, filename);
 }
 
+// ── 결과 보기용 엑셀 내보내기 ──────────────────────────────
+function exportResultsExcel() {
+  if (!lastResponses.length) return;
+
+  const responses = lastResponses;
+  const n = responses.length;
+  const wb = XLSX.utils.book_new();
+
+  // ── 시트1: 만족도 통계 ──
+  const keys = ['q1','q2','q3','q4','q5','q6','q7','q8','q9'];
+  const avgs = keys.map(k => responses.reduce((acc, r) => acc + (Number(r[k]) || 0), 0) / n);
+  const dists = keys.map(k => [1,2,3,4,5].map(v => responses.filter(r => Number(r[k]) === v).length));
+  const satisfyPcts = dists.map(d => n > 0 ? (d[3] + d[4]) / n * 100 : 0);
+
+  const instScoreMap2 = {};
+  responses.forEach(r => {
+    let obj = r.instructors || {};
+    if (typeof obj === 'string') { try { obj = JSON.parse(obj); } catch { return; } }
+    Object.entries(obj).forEach(([key, score]) => {
+      if (!instScoreMap2[key]) instScoreMap2[key] = [];
+      const v = Number(score);
+      if (v >= 1 && v <= 5) instScoreMap2[key].push(v);
+    });
+  });
+  const instKeySet2 = new Set(Object.keys(instScoreMap2));
+  const instKeys2 = lastOrderedInstructorKeys.filter(k => instKeySet2.has(k))
+    .concat([...instKeySet2].filter(k => !lastOrderedInstructorKeys.includes(k)));
+
+  const statsData = [
+    ['교육과정', lastCourseName, '', '', '', '', '', ''],
+    ['응답자 수', n + '명', '', '', '', '', '', ''],
+    ['작성일', new Date().toLocaleDateString('ko-KR'), '', '', '', '', '', ''],
+    [],
+    ['항목', '평균점수', '만족이상(%)', '1점(명)', '2점(명)', '3점(명)', '4점(명)', '5점(명)'],
+  ];
+
+  keys.forEach((k, i) => {
+    statsData.push([
+      Q_LABELS[i],
+      Number(avgs[i].toFixed(2)),
+      Number(satisfyPcts[i].toFixed(1)),
+      dists[i][0], dists[i][1], dists[i][2], dists[i][3], dists[i][4]
+    ]);
+  });
+
+  const validAvgs = avgs.filter((_, i) => dists[i].some(c => c > 0));
+  const overallAvg = validAvgs.length > 0 ? validAvgs.reduce((a, b) => a + b, 0) / validAvgs.length : 0;
+  statsData.push([]);
+  statsData.push(['전체 평균 (Q1~Q9)', Number(overallAvg.toFixed(2)), '', '', '', '', '', '']);
+
+  if (instKeys2.length > 0) {
+    statsData.push([]);
+    statsData.push(['── 강사별 만족도 ──', '', '', '', '', '', '', '']);
+    const allInstScores2 = instKeys2.flatMap(k => instScoreMap2[k]);
+    const instTotalAvg2 = allInstScores2.reduce((a, b) => a + b, 0) / allInstScores2.length;
+    const instTotalSatisfyPct2 = allInstScores2.filter(s => s >= 4).length / allInstScores2.length * 100;
+    statsData.push(['강사 전체 평균', Number(instTotalAvg2.toFixed(2)), Number(instTotalSatisfyPct2.toFixed(1)), '', '', '', '', '']);
+    instKeys2.forEach(key => {
+      const scores = instScoreMap2[key];
+      const cnt = scores.length;
+      const avg = scores.reduce((a, b) => a + b, 0) / cnt;
+      const dist = [1,2,3,4,5].map(v => scores.filter(s => s === v).length);
+      const satisfyPct = cnt > 0 ? (dist[3] + dist[4]) / cnt * 100 : 0;
+      const parts = key.split('__');
+      const label = parts.length === 2 ? `[${parts[0]}] ${parts[1]} 강사` : `${key} 강사`;
+      statsData.push([label, Number(avg.toFixed(2)), Number(satisfyPct.toFixed(1)), dist[0], dist[1], dist[2], dist[3], dist[4]]);
+    });
+  }
+
+  const ws1 = XLSX.utils.aoa_to_sheet(statsData);
+  ws1['!cols'] = [{ wch: 42 }, { wch: 12 }, { wch: 14 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 8 }];
+  XLSX.utils.book_append_sheet(wb, ws1, '만족도 통계');
+
+  // ── 시트2: 응답자 특성 ──
+  const demoData = [
+    ['교육과정', lastCourseName],
+    ['응답자 수', n + '명'],
+    [],
+  ];
+  DEMO_QUESTIONS.forEach(dq => {
+    const counts = dq.options.map(opt => responses.filter(r => r[dq.key] === opt).length);
+    const total = counts.reduce((a, b) => a + b, 0);
+    demoData.push([dq.label, '인원(명)', '비율(%)']);
+    dq.options.forEach((opt, i) => {
+      const pct = total > 0 ? counts[i] / total * 100 : 0;
+      demoData.push([`  ${opt}`, counts[i], Number(pct.toFixed(1))]);
+    });
+    demoData.push(['  합계', total, '']);
+    demoData.push([]);
+  });
+  const ws2 = XLSX.utils.aoa_to_sheet(demoData);
+  ws2['!cols'] = [{ wch: 30 }, { wch: 12 }, { wch: 10 }];
+  XLSX.utils.book_append_sheet(wb, ws2, '응답자 특성');
+
+  // ── 시트3: 주관식 의견 ──
+  const commentData = [
+    ['교육과정', lastCourseName],
+    ['응답자 수', n + '명'],
+    [],
+    ['순번', 'Q10. 기타 편의시설 건의사항', '소감 및 건의사항', '만족도 평가 개선 필요 부분', '전반적인 과목 및 강사 건의'],
+  ];
+  let cidx = 1;
+  responses.forEach(r => {
+    const q10 = String(r.q10_comment || '').trim();
+    const c1 = String(r.comment1 || r.comment || '').trim();
+    const c2 = String(r.comment2 || '').trim();
+    const c3 = String(r.comment3 || '').trim();
+    if (q10 || c1 || c2 || c3) commentData.push([cidx++, q10, c1, c2, c3]);
+  });
+  if (commentData.length === 4) commentData.push(['', '(수집된 주관식 응답이 없습니다)', '', '', '']);
+  const ws3 = XLSX.utils.aoa_to_sheet(commentData);
+  ws3['!cols'] = [{ wch: 6 }, { wch: 35 }, { wch: 35 }, { wch: 35 }, { wch: 35 }];
+  XLSX.utils.book_append_sheet(wb, ws3, '주관식 의견');
+
+  const filename = `${lastCourseName}_만족도결과_${new Date().toISOString().slice(0,10)}.xlsx`;
+  XLSX.writeFile(wb, filename);
+}
+
 // ── 유틸 ──────────────────────────────
 function formatDate(val) {
   if (!val) return '-';
@@ -807,3 +925,4 @@ window.handleExcelUpload = handleExcelUpload;
 window.uploadExcelStudents = uploadExcelStudents;
 window.loadStats = loadStats;
 window.exportStatsExcel = exportStatsExcel;
+window.exportResultsExcel = exportResultsExcel;

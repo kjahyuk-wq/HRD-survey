@@ -518,6 +518,8 @@ header h1 { font-size: 1.3rem; font-weight: 700; margin: 0; color: #fff; }
   box-shadow: 0 2px 8px rgba(34,197,94,0.3);
 }
 .excel-export-btn:hover { background: #16a34a; transform: none; box-shadow: none; }
+.excel-export-btn.secondary { background: #6b7280; box-shadow: 0 2px 8px rgba(107,114,128,0.3); }
+.excel-export-btn.secondary:hover { background: #4b5563; }
 
 .logout-btn {
   padding: 0.45rem 1.1rem;

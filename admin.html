@@ -125,8 +125,9 @@
         <div id="stats-no-data" class="no-data" style="display:none;">해당 교육과정의 응답이 없습니다.</div>
 
         <div id="stats-area" style="display:none;">
-          <div style="text-align:right; margin-bottom:0.8rem;">
-            <button class="excel-export-btn" onclick="exportStatsExcel()">📥 엑셀 다운로드</button>
+          <div style="text-align:right; margin-bottom:0.8rem; display:flex; gap:0.5rem; justify-content:flex-end;">
+            <button class="excel-export-btn" onclick="exportResultsExcel()">📊 결과 엑셀 다운로드</button>
+            <button class="excel-export-btn secondary" onclick="exportStatsExcel()">📥 엑셀 다운로드 (업로드용)</button>
           </div>
           <div class="summary-cards">
             <div class="summary-card"><div class="card-label">총 수강생</div><div class="card-value" id="total-students">-</div></div>
