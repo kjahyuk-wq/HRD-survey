@@ -591,7 +591,16 @@ function renderStats(responses, students, orderedInstructorKeys = []) {
     .concat(allInstKeys.filter(k => !orderedInstructorKeys.includes(k)));
   if (instKeys.length > 0) {
     document.getElementById('instructor-stats-section').style.display = 'block';
-    document.getElementById('instructor-stats').innerHTML = instKeys.map(key => {
+    const allInstScores = instKeys.flatMap(k => instScoreMap[k]);
+    const instTotalAvg = allInstScores.reduce((a, b) => a + b, 0) / allInstScores.length;
+    const instTotalColor = instTotalAvg >= 4.5 ? '#22c55e' : instTotalAvg >= 3.5 ? '#0066cc' : instTotalAvg >= 2.5 ? '#f59e0b' : '#ef4444';
+    const instTotalSatisfyPct = allInstScores.length > 0 ? (allInstScores.filter(s => s >= 4).length / allInstScores.length * 100).toFixed(1) : '0.0';
+    document.getElementById('instructor-stats').innerHTML = `
+      <div class="inst-total-summary">
+        <span class="inst-total-label">강사 전체 평균</span>
+        <span class="inst-total-avg" style="color:${instTotalColor}">${instTotalAvg.toFixed(2)}점</span>
+        <span class="q-stat-satisfy">만족이상 ${instTotalSatisfyPct}%</span>
+      </div>` + instKeys.map(key => {
       const scores = instScoreMap[key];
       const cnt = scores.length;
       const avg = scores.reduce((a, b) => a + b, 0) / cnt;
