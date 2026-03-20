@@ -635,10 +635,16 @@ function renderStats(responses, students, orderedInstructorKeys = []) {
   };
 
   document.getElementById('question-stats').innerHTML = QUESTION_CATEGORIES.map(cat => {
-    const catValidAvgs = cat.indices.filter(i => hasData[i]).map(i => avgs[i]);
+    const validIdx = cat.indices.filter(i => hasData[i]);
+    const catValidAvgs = validIdx.map(i => avgs[i]);
     const catAvg = catValidAvgs.length > 0 ? catValidAvgs.reduce((a, b) => a + b, 0) / catValidAvgs.length : null;
     const catColor = catAvg !== null ? (catAvg >= 4.5 ? '#22c55e' : catAvg >= 3.5 ? '#0066cc' : catAvg >= 2.5 ? '#f59e0b' : '#ef4444') : '#aaa';
-    const catAvgHtml = catAvg !== null ? `<span class="cat-header-avg" style="color:${catColor}">평균 ${catAvg.toFixed(2)}점</span>` : '';
+    const catSatisfyTotal = validIdx.reduce((sum, i) => sum + dists[i].reduce((a, b) => a + b, 0), 0);
+    const catSatisfyCount = validIdx.reduce((sum, i) => sum + dists[i][3] + dists[i][4], 0);
+    const catSatisfyPct = catSatisfyTotal > 0 ? (catSatisfyCount / catSatisfyTotal * 100).toFixed(1) : null;
+    const catAvgHtml = catAvg !== null
+      ? `<span class="cat-header-avg" style="color:${catColor}">평균 ${catAvg.toFixed(2)}점 &nbsp;·&nbsp; 만족이상 ${catSatisfyPct}%</span>`
+      : '';
     return `<div class="cat-header">${cat.label}${catAvgHtml}</div>` +
       cat.indices.map(i => makeQCard(avgs[i], i, dists[i])).join('');
   }).join('');
@@ -1002,12 +1008,13 @@ function exportResultsExcel() {
 }
 
 function generateCategoryChart(courseName, labels, values) {
-  const W = 900, H = 500;
+  // 87.5×67.67mm 표시 기준, 3배 해상도로 제작
+  const W = 875, H = 677;
   const canvas = document.createElement('canvas');
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext('2d');
 
-  const ml = 80, mr = 50, mt = 80, mb = 100;
+  const ml = 68, mr = 24, mt = 72, mb = 82;
   const cw = W - ml - mr, ch = H - mt - mb;
 
   // 배경
@@ -1016,31 +1023,31 @@ function generateCategoryChart(courseName, labels, values) {
 
   // 제목
   ctx.fillStyle = '#1e293b';
-  ctx.font = 'bold 18px sans-serif';
+  ctx.font = 'bold 28px sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText(`${courseName}  분야별 만족도 현황`, W / 2, 45);
+  ctx.fillText('분야별 만족도 현황', W / 2, 44);
 
   // Y축 그리드 및 레이블
   ctx.textAlign = 'right';
-  ctx.font = '13px sans-serif';
+  ctx.font = 'bold 22px sans-serif';
   for (let v = 0; v <= 5; v++) {
     const y = mt + ch - (v / 5) * ch;
-    ctx.strokeStyle = v === 0 ? '#94a3b8' : '#e2e8f0';
-    ctx.lineWidth = v === 0 ? 2 : 1;
+    ctx.strokeStyle = v === 0 ? '#94a3b8' : '#dde3ed';
+    ctx.lineWidth = v === 0 ? 2.5 : 1;
     ctx.beginPath(); ctx.moveTo(ml, y); ctx.lineTo(ml + cw, y); ctx.stroke();
     ctx.fillStyle = '#64748b';
-    ctx.fillText(v.toFixed(1), ml - 8, y + 4);
+    ctx.fillText(String(v), ml - 8, y + 8);
   }
 
   // X축
   ctx.strokeStyle = '#94a3b8';
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 2.5;
   ctx.beginPath(); ctx.moveTo(ml, mt + ch); ctx.lineTo(ml + cw, mt + ch); ctx.stroke();
 
   // 막대
   const n = labels.length;
   const slotW = cw / n;
-  const barW = slotW * 0.5;
+  const barW = slotW * 0.58;
 
   labels.forEach((label, i) => {
     const val = values[i];
@@ -1053,22 +1060,26 @@ function generateCategoryChart(courseName, labels, values) {
     // 막대 (파란색 그라데이션)
     const grad = ctx.createLinearGradient(x, y, x, mt + ch);
     grad.addColorStop(0, '#3b82f6');
-    grad.addColorStop(1, '#1d4ed8');
+    grad.addColorStop(1, '#1e40af');
     ctx.fillStyle = grad;
     ctx.beginPath();
-    ctx.roundRect ? ctx.roundRect(x, y, barW, barH, [6, 6, 0, 0]) : ctx.rect(x, y, barW, barH);
+    if (ctx.roundRect) {
+      ctx.roundRect(x, y, barW, barH, [5, 5, 0, 0]);
+    } else {
+      ctx.rect(x, y, barW, barH);
+    }
     ctx.fill();
 
     // 막대 상단 점수
     ctx.fillStyle = '#1e293b';
-    ctx.font = 'bold 15px sans-serif';
+    ctx.font = 'bold 26px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(val.toFixed(2), x + barW / 2, y - 10);
+    ctx.fillText(val.toFixed(2), x + barW / 2, y - 11);
 
     // X축 레이블
-    ctx.fillStyle = '#374151';
-    ctx.font = '14px sans-serif';
-    ctx.fillText(label, x + barW / 2, mt + ch + 28);
+    ctx.fillStyle = '#1e293b';
+    ctx.font = 'bold 24px sans-serif';
+    ctx.fillText(label, x + barW / 2, mt + ch + 50);
   });
 
   return canvas.toDataURL('image/png');
