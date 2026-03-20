@@ -21,6 +21,13 @@ const Q_LABELS = [
   'Q9. 교육시설 및 편의시설 수준',
 ];
 
+const QUESTION_CATEGORIES = [
+  { label: '📅 교육기간', indices: [0] },
+  { label: '📋 교육운영', indices: [1, 2, 3, 4, 5] },
+  { label: '🎯 교육효과', indices: [6] },
+  { label: '🏢 시설환경', indices: [7, 8] },
+];
+
 const DEMO_QUESTIONS = [
   { key: 'q11', label: 'Q11. 귀하의 근무처', options: ['시 본청', '시 사업소', '구', '동', '기타'] },
   { key: 'q12', label: 'Q12. 귀하의 직급', options: ['5급', '6급', '7급', '8급', '9급', '기타'] },
@@ -596,20 +603,17 @@ function renderStats(responses, students, orderedInstructorKeys = []) {
   const hasData = keys.map((k, i) => dists[i].some(c => c > 0));
   const validAvgs = avgs.filter((_, i) => hasData[i]);
 
-  document.getElementById('question-stats').innerHTML = avgs.map((avg, i) => {
-    if (!hasData[i]) {
-      return `
-        <div class="q-stat-card">
-          <div class="q-stat-header">
-            <span class="q-stat-label">${Q_LABELS[i]}</span>
-            <span class="q-stat-avg" style="color:#aaa;">응답 없음</span>
-          </div>
-          <div style="color:#bbb;font-size:0.82rem;padding:0.3rem 0;">아직 수집된 응답이 없습니다.</div>
-        </div>`;
-    }
+  const makeQCard = (avg, i, dist) => {
+    if (!hasData[i]) return `
+      <div class="q-stat-card">
+        <div class="q-stat-header">
+          <span class="q-stat-label">${Q_LABELS[i]}</span>
+          <span class="q-stat-avg" style="color:#aaa;">응답 없음</span>
+        </div>
+        <div style="color:#bbb;font-size:0.82rem;padding:0.3rem 0;">아직 수집된 응답이 없습니다.</div>
+      </div>`;
     const pct = (avg / 5 * 100).toFixed(1);
     const color = avg >= 4.5 ? '#22c55e' : avg >= 3.5 ? '#0066cc' : avg >= 2.5 ? '#f59e0b' : '#ef4444';
-    const dist = dists[i];
     const satisfyPct = n > 0 ? ((dist[3] + dist[4]) / n * 100).toFixed(1) : '0.0';
     return `
       <div class="q-stat-card">
@@ -628,6 +632,15 @@ function renderStats(responses, students, orderedInstructorKeys = []) {
             </div>`).join('')}
         </div>
       </div>`;
+  };
+
+  document.getElementById('question-stats').innerHTML = QUESTION_CATEGORIES.map(cat => {
+    const catValidAvgs = cat.indices.filter(i => hasData[i]).map(i => avgs[i]);
+    const catAvg = catValidAvgs.length > 0 ? catValidAvgs.reduce((a, b) => a + b, 0) / catValidAvgs.length : null;
+    const catColor = catAvg !== null ? (catAvg >= 4.5 ? '#22c55e' : catAvg >= 3.5 ? '#0066cc' : catAvg >= 2.5 ? '#f59e0b' : '#ef4444') : '#aaa';
+    const catAvgHtml = catAvg !== null ? `<span class="cat-header-avg" style="color:${catColor}">평균 ${catAvg.toFixed(2)}점</span>` : '';
+    return `<div class="cat-header">${cat.label}${catAvgHtml}</div>` +
+      cat.indices.map(i => makeQCard(avgs[i], i, dists[i])).join('');
   }).join('');
 
   const instScoreMap = {};
@@ -957,8 +970,108 @@ function exportResultsExcel() {
   ws3['!cols'] = [{ wch: 6 }, { wch: 35 }, { wch: 35 }, { wch: 35 }, { wch: 35 }];
   XLSX.utils.book_append_sheet(wb, ws3, '주관식 의견');
 
+  // ── 분야별 카테고리 평균 계산 ──
+  const catDefs = [
+    { label: '교육기간', keys: ['q1'] },
+    { label: '교육운영', keys: ['q2','q3','q4','q5','q6'] },
+    { label: '교육효과', keys: ['q7'] },
+    { label: '시설환경', keys: ['q8','q9'] },
+  ];
+  const catAvgs = catDefs.map(cat => {
+    const vals = cat.keys.map(k => responses.reduce((a, r) => a + (Number(r[k]) || 0), 0) / n);
+    return Number((vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2));
+  });
+  const allInstScores3 = instKeys2.flatMap(k => instScoreMap2[k]);
+  const instCatAvg = allInstScores3.length > 0
+    ? Number((allInstScores3.reduce((a, b) => a + b, 0) / allInstScores3.length).toFixed(2))
+    : null;
+  const chartLabels = [...catDefs.map(c => c.label), '강사'];
+  const chartValues = [...catAvgs, instCatAvg];
+
   const filename = `${lastCourseName}_만족도결과_${new Date().toISOString().slice(0,10)}.xlsx`;
   XLSX.writeFile(wb, filename);
+
+  // ── 분야별 만족도 막대그래프 PNG 다운로드 ──
+  const chartPng = generateCategoryChart(lastCourseName, chartLabels, chartValues);
+  setTimeout(() => {
+    const a = document.createElement('a');
+    a.href = chartPng;
+    a.download = `${lastCourseName}_분야별만족도_${new Date().toISOString().slice(0,10)}.png`;
+    a.click();
+  }, 400);
+}
+
+function generateCategoryChart(courseName, labels, values) {
+  const W = 900, H = 500;
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+
+  const ml = 80, mr = 50, mt = 80, mb = 100;
+  const cw = W - ml - mr, ch = H - mt - mb;
+
+  // 배경
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, W, H);
+
+  // 제목
+  ctx.fillStyle = '#1e293b';
+  ctx.font = 'bold 18px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(`${courseName}  분야별 만족도 현황`, W / 2, 45);
+
+  // Y축 그리드 및 레이블
+  ctx.textAlign = 'right';
+  ctx.font = '13px sans-serif';
+  for (let v = 0; v <= 5; v++) {
+    const y = mt + ch - (v / 5) * ch;
+    ctx.strokeStyle = v === 0 ? '#94a3b8' : '#e2e8f0';
+    ctx.lineWidth = v === 0 ? 2 : 1;
+    ctx.beginPath(); ctx.moveTo(ml, y); ctx.lineTo(ml + cw, y); ctx.stroke();
+    ctx.fillStyle = '#64748b';
+    ctx.fillText(v.toFixed(1), ml - 8, y + 4);
+  }
+
+  // X축
+  ctx.strokeStyle = '#94a3b8';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(ml, mt + ch); ctx.lineTo(ml + cw, mt + ch); ctx.stroke();
+
+  // 막대
+  const n = labels.length;
+  const slotW = cw / n;
+  const barW = slotW * 0.5;
+
+  labels.forEach((label, i) => {
+    const val = values[i];
+    if (val === null || isNaN(val)) return;
+
+    const x = ml + slotW * i + (slotW - barW) / 2;
+    const barH = (val / 5) * ch;
+    const y = mt + ch - barH;
+
+    // 막대 (파란색 그라데이션)
+    const grad = ctx.createLinearGradient(x, y, x, mt + ch);
+    grad.addColorStop(0, '#3b82f6');
+    grad.addColorStop(1, '#1d4ed8');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(x, y, barW, barH, [6, 6, 0, 0]) : ctx.rect(x, y, barW, barH);
+    ctx.fill();
+
+    // 막대 상단 점수
+    ctx.fillStyle = '#1e293b';
+    ctx.font = 'bold 15px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(val.toFixed(2), x + barW / 2, y - 10);
+
+    // X축 레이블
+    ctx.fillStyle = '#374151';
+    ctx.font = '14px sans-serif';
+    ctx.fillText(label, x + barW / 2, mt + ch + 28);
+  });
+
+  return canvas.toDataURL('image/png');
 }
 
 // ── 유틸 ──────────────────────────────

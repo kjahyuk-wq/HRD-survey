@@ -346,3 +346,19 @@ button:disabled { opacity: 0.65; cursor: not-allowed; transform: none; }
   box-shadow: 0 3px 10px rgba(0,102,204,0.35);
 }
 .choice-btn:hover { border-color: #0066cc; color: #0066cc; }
+
+/* 문항 중분류 헤더 (설문 미리보기용) */
+.cat-header {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  font-size: .9rem;
+  font-weight: 700;
+  color: #1e40af;
+  padding: .45rem .9rem;
+  background: #eff6ff;
+  border-left: 4px solid #3b82f6;
+  border-radius: 8px;
+  margin: .8rem 0 0;
+}
+.cat-header-avg { margin-left: auto; font-size: .85rem; font-weight: 600; }
