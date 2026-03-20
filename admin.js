@@ -61,7 +61,7 @@ function switchTab(tab) {
   ['courses', 'stats', 'preview'].forEach(t => {
     document.getElementById(`tab-${t}`).style.display = t === tab ? 'block' : 'none';
   });
-  const tabNames = ['courses', 'stats', 'preview'];
+  const tabNames = ['courses', 'preview', 'stats'];
   document.querySelectorAll('.tab-btn').forEach((btn, i) => {
     btn.classList.toggle('active', tabNames[i] === tab);
   });
