@@ -244,7 +244,6 @@ function renderInstructorPanel(courseName, panelIdx, instructors) {
       <input type="text" id="inst-edu-${panelIdx}" placeholder="교육명 (예: AI 기초과정)" maxlength="50">
       <input type="text" id="inst-name-${panelIdx}" placeholder="강사명 (예: 홍길동)" maxlength="20">
       <button class="add-btn inst-add-btn" onclick="addInstructor('${ec}', ${panelIdx})">+ 추가</button>
-      <button class="icon-refresh-btn" onclick="loadInstructors('${ec}', ${panelIdx})" title="새로고침">🔄</button>
     </div>
     <div class="inst-list" id="inst-list-${panelIdx}">${listHtml}</div>`;
 }
