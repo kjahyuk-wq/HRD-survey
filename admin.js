@@ -63,6 +63,9 @@ function switchTab(tab) {
 }
 
 // ── 설문 미리보기 ──────────────────────────────
+let previewResponses = [];
+let previewInstructorKeys = [];
+
 async function populatePreviewSelect() {
   try {
     const snap = await getDocs(collection(db, 'courses'));
@@ -70,7 +73,7 @@ async function populatePreviewSelect() {
     const courses = snap.docs.map(d => d.data().name);
     const sel = document.getElementById('preview-course-select');
     const current = sel.value;
-    sel.innerHTML = '<option value="">-- 교육과정을 선택하면 강사 문항이 표시됩니다 --</option>' +
+    sel.innerHTML = '<option value="">-- 교육과정을 선택하세요 --</option>' +
       courses.map(c => `<option value="${escapeAttr(c)}"${c === current ? ' selected' : ''}>${escapeHtml(c)}</option>`).join('');
     if (current) loadPreviewInstructors();
   } catch (e) {}
@@ -80,44 +83,143 @@ async function loadPreviewInstructors() {
   const course = document.getElementById('preview-course-select').value;
   const badge = document.getElementById('preview-course-badge');
   const container = document.getElementById('preview-instructor-questions');
+  const responseRow = document.getElementById('preview-response-row');
+  const responseSel = document.getElementById('preview-response-select');
 
   badge.textContent = course || '교육과정을 선택하세요';
+  previewResponses = [];
+  previewInstructorKeys = [];
 
   if (!course) {
     container.innerHTML = '';
+    responseRow.style.display = 'none';
+    responseSel.innerHTML = '<option value="">-- 빈 설문지 보기 --</option>';
+    clearPreviewForm();
     return;
   }
 
-  container.innerHTML = '<div class="loading" style="text-align:center;padding:1rem;">강사 정보 불러오는 중...</div>';
+  container.innerHTML = '<div class="loading" style="text-align:center;padding:1rem;">불러오는 중...</div>';
   try {
     const courseId = courseIdMap[course];
-    const snap = await getDocs(query(collection(db, 'courses', courseId, 'instructors'), orderBy('createdAt')));
-    const instructors = snap.docs.map(d => d.data());
+    const [instSnap, respSnap] = await Promise.all([
+      getDocs(query(collection(db, 'courses', courseId, 'instructors'), orderBy('createdAt'))),
+      getDocs(collection(db, 'courses', courseId, 'responses'))
+    ]);
 
+    const instructors = instSnap.docs.map(d => d.data());
+    previewInstructorKeys = instructors.map(inst =>
+      inst.education ? `${inst.education}__${inst.name}` : inst.name
+    );
+
+    // 강사 문항 렌더링
     if (instructors.length === 0) {
       container.innerHTML = '<div class="no-data" style="margin:0.5rem 0;">등록된 강사가 없습니다.</div>';
-      return;
+    } else {
+      container.innerHTML = instructors.map((inst, i) => {
+        const qNum = 17 + i;
+        const nameLabel = inst.education ? `${escapeHtml(inst.education)} · ${escapeHtml(inst.name)}` : escapeHtml(inst.name);
+        const ratingHtml = [1,2,3,4,5].map((v, vi) => {
+          const labels = ['매우 불만족','불만족','보통','만족','매우 만족'];
+          return `<label class="rating-label"><input type="radio" name="pq${qNum}" value="${v}"><span class="rating-btn">${v}<br><small>${labels[vi]}</small></span></label>`;
+        }).join('');
+        return `<div class="q-card">
+          <div class="q-num">Q${qNum}</div>
+          <div class="q-txt">
+            <div style="font-size:.8rem;color:#888;margin-bottom:.3rem;">👨‍🏫 강사 만족도 · ${nameLabel}</div>
+            강사의 전반적인 강의 만족도는?
+          </div>
+          <div class="rating-group">${ratingHtml}</div>
+        </div>`;
+      }).join('');
     }
 
-    container.innerHTML = instructors.map((inst, i) => {
-      const qNum = 17 + i;
-      const nameLabel = inst.education ? `${escapeHtml(inst.education)} · ${escapeHtml(inst.name)}` : escapeHtml(inst.name);
-      const ratingHtml = [1,2,3,4,5].map((v, vi) => {
-        const labels = ['매우 불만족','불만족','보통','만족','매우 만족'];
-        return `<label class="rating-label"><input type="radio" name="pq${qNum}" value="${v}" disabled><span class="rating-btn">${v}<br><small>${labels[vi]}</small></span></label>`;
-      }).join('');
-      return `<div class="q-card">
-        <div class="q-num">Q${qNum}</div>
-        <div class="q-txt">
-          <div style="font-size:.8rem;color:#888;margin-bottom:.3rem;">👨‍🏫 강사 만족도 · ${nameLabel}</div>
-          강사의 전반적인 강의 만족도는?
-        </div>
-        <div class="rating-group">${ratingHtml}</div>
-      </div>`;
-    }).join('');
+    // 완료된 응답 드롭다운 구성
+    previewResponses = respSnap.docs.map(d => ({
+      ...d.data(),
+      _submittedAt: d.data().submittedAt?.toDate?.() ?? null
+    })).sort((a, b) => (b._submittedAt || 0) - (a._submittedAt || 0));
+
+    if (previewResponses.length > 0) {
+      responseSel.innerHTML = '<option value="">-- 빈 설문지 보기 --</option>' +
+        previewResponses.map((r, i) => {
+          const dateStr = r._submittedAt ? formatDate(r._submittedAt.toISOString()) : '';
+          return `<option value="${i}">응답 ${previewResponses.length - i} · ${dateStr}</option>`;
+        }).join('');
+      responseRow.style.display = 'block';
+    } else {
+      responseSel.innerHTML = '<option value="">-- 완료된 응답 없음 --</option>';
+      responseRow.style.display = 'block';
+    }
+
+    clearPreviewForm();
   } catch (e) {
-    container.innerHTML = '<div class="no-data">강사 정보를 불러오지 못했습니다.</div>';
+    container.innerHTML = '<div class="no-data">정보를 불러오지 못했습니다.</div>';
   }
+}
+
+function clearPreviewForm() {
+  for (let i = 1; i <= 9; i++) {
+    document.querySelectorAll(`input[name="pq${i}"]`).forEach(r => r.checked = false);
+  }
+  for (let i = 11; i <= 16; i++) {
+    document.querySelectorAll(`input[name="pq${i}"]`).forEach(r => r.checked = false);
+  }
+  previewInstructorKeys.forEach((_, i) => {
+    document.querySelectorAll(`input[name="pq${17+i}"]`).forEach(r => r.checked = false);
+  });
+  ['preview-q10-comment','preview-comment1','preview-comment2','preview-comment3'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+}
+
+function loadPreviewResponse() {
+  const idx = document.getElementById('preview-response-select').value;
+  if (idx === '') { clearPreviewForm(); return; }
+
+  const r = previewResponses[parseInt(idx)];
+  if (!r) return;
+
+  // Q1-Q9
+  for (let i = 1; i <= 9; i++) {
+    const val = r[`q${i}`];
+    if (val) {
+      const radio = document.querySelector(`input[name="pq${i}"][value="${val}"]`);
+      if (radio) radio.checked = true;
+    }
+  }
+
+  // Q10 textarea
+  const q10el = document.getElementById('preview-q10-comment');
+  if (q10el) q10el.value = r.q10_comment || '';
+
+  // Q11-Q16
+  for (let i = 11; i <= 16; i++) {
+    const val = r[`q${i}`];
+    if (val) {
+      const radio = document.querySelector(`input[name="pq${i}"][value="${CSS.escape(val)}"]`) ||
+                    [...document.querySelectorAll(`input[name="pq${i}"]`)].find(el => el.value === val);
+      if (radio) radio.checked = true;
+    }
+  }
+
+  // 강사 문항
+  const instObj = r.instructors || {};
+  previewInstructorKeys.forEach((key, i) => {
+    const val = instObj[key];
+    if (val) {
+      const radio = document.querySelector(`input[name="pq${17+i}"][value="${val}"]`);
+      if (radio) radio.checked = true;
+    }
+  });
+
+  // 주관식
+  const c1 = document.getElementById('preview-comment1');
+  const c2 = document.getElementById('preview-comment2');
+  const c3 = document.getElementById('preview-comment3');
+  if (c1) c1.value = r.comment1 || '';
+  if (c2) c2.value = r.comment2 || '';
+  if (c3) c3.value = r.comment3 || '';
 }
 
 // ── 교육과정 관리 ──────────────────────────────
@@ -1002,3 +1104,4 @@ window.loadStats = loadStats;
 window.exportStatsExcel = exportStatsExcel;
 window.exportResultsExcel = exportResultsExcel;
 window.loadPreviewInstructors = loadPreviewInstructors;
+window.loadPreviewResponse = loadPreviewResponse;

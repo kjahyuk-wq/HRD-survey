@@ -895,6 +895,8 @@ tr:hover td { background: #f8faff; }
   max-width: 640px;
   margin: 0 auto;
   box-shadow: 0 4px 24px rgba(100,130,255,0.1);
+  pointer-events: none;
+  user-select: none;
 }
 
 .preview-device-frame .sv-wrap {
