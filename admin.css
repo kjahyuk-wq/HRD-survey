@@ -885,3 +885,31 @@ tr:hover td { background: #f8faff; }
   padding-left: 0.5rem;
   border-left: 2px solid #0066cc;
 }
+
+/* ── 설문 미리보기 ── */
+.preview-device-frame {
+  background: #f5f7ff;
+  border: 2px solid #d0d9ff;
+  border-radius: 16px;
+  padding: 1.5rem 1rem;
+  max-width: 640px;
+  margin: 0 auto;
+  box-shadow: 0 4px 24px rgba(100,130,255,0.1);
+}
+
+.preview-device-frame .sv-wrap {
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.preview-device-frame button[disabled] {
+  pointer-events: none;
+}
+
+.preview-device-frame textarea[disabled] {
+  background: #f8f8f8;
+  color: #aaa;
+  cursor: not-allowed;
+  resize: none;
+}

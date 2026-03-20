@@ -42,6 +42,7 @@
       <div class="tabs">
         <button class="tab-btn active" onclick="switchTab('courses')">📋 교육과정·수강생 관리</button>
         <button class="tab-btn" onclick="switchTab('stats')">📊 설문 통계</button>
+        <button class="tab-btn" onclick="switchTab('preview')">👁 설문 미리보기</button>
       </div>
 
       <!-- 교육과정·수강생 관리 탭 -->
@@ -161,6 +162,254 @@
         </div>
       </div>
 
+
+      <!-- 설문 미리보기 탭 -->
+      <div id="tab-preview" style="display:none;">
+        <div class="section-card" style="background:#f0f4ff;border:2px dashed #6b8cff;margin-bottom:1rem;">
+          <div style="display:flex;align-items:center;gap:.5rem;color:#4a6cf7;font-weight:600;font-size:.95rem;">
+            <span>👁</span>
+            <span>교육생이 실제로 보는 설문조사 화면입니다. 제출 기능은 동작하지 않습니다.</span>
+          </div>
+        </div>
+
+        <div class="preview-device-frame">
+          <div class="sv-wrap">
+
+            <div class="sv-header">
+              <div class="sv-logo-area">
+                <div class="sv-logo-icon">🏛️</div>
+                <div>
+                  <div class="sv-org-name">대전광역시 인재개발원</div>
+                  <div class="sv-title">교육과정 만족도 조사</div>
+                </div>
+              </div>
+              <span class="sv-badge">예시 교육과정</span>
+            </div>
+
+            <p class="sv-guide">각 문항에 대해 1(매우 불만족) ~ 5(매우 만족)으로 응답해 주세요.</p>
+
+            <div class="q-card">
+              <div class="q-num">Q1</div>
+              <div class="q-txt">과정 목적 달성을 위한 교육기간은?</div>
+              <div class="rating-group">
+                <label class="rating-label"><input type="radio" name="pq1" value="1" disabled><span class="rating-btn">1<br><small>매우 불만족</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq1" value="2" disabled><span class="rating-btn">2<br><small>불만족</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq1" value="3" disabled><span class="rating-btn">3<br><small>보통</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq1" value="4" disabled><span class="rating-btn">4<br><small>만족</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq1" value="5" disabled><span class="rating-btn">5<br><small>매우 만족</small></span></label>
+              </div>
+            </div>
+
+            <div class="q-card">
+              <div class="q-num">Q2</div>
+              <div class="q-txt">과정 목적 달성을 위한 교과편성은?</div>
+              <div class="rating-group">
+                <label class="rating-label"><input type="radio" name="pq2" value="1" disabled><span class="rating-btn">1<br><small>매우 불만족</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq2" value="2" disabled><span class="rating-btn">2<br><small>불만족</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq2" value="3" disabled><span class="rating-btn">3<br><small>보통</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq2" value="4" disabled><span class="rating-btn">4<br><small>만족</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq2" value="5" disabled><span class="rating-btn">5<br><small>매우 만족</small></span></label>
+              </div>
+            </div>
+
+            <div class="q-card">
+              <div class="q-num">Q3</div>
+              <div class="q-txt">과정 목적 달성을 위한 강사선정은?</div>
+              <div class="rating-group">
+                <label class="rating-label"><input type="radio" name="pq3" value="1" disabled><span class="rating-btn">1<br><small>매우 불만족</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq3" value="2" disabled><span class="rating-btn">2<br><small>불만족</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq3" value="3" disabled><span class="rating-btn">3<br><small>보통</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq3" value="4" disabled><span class="rating-btn">4<br><small>만족</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq3" value="5" disabled><span class="rating-btn">5<br><small>매우 만족</small></span></label>
+              </div>
+            </div>
+
+            <div class="q-card">
+              <div class="q-num">Q4</div>
+              <div class="q-txt">교육내용 및 수준은?</div>
+              <div class="rating-group">
+                <label class="rating-label"><input type="radio" name="pq4" value="1" disabled><span class="rating-btn">1<br><small>매우 불만족</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq4" value="2" disabled><span class="rating-btn">2<br><small>불만족</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq4" value="3" disabled><span class="rating-btn">3<br><small>보통</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq4" value="4" disabled><span class="rating-btn">4<br><small>만족</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq4" value="5" disabled><span class="rating-btn">5<br><small>매우 만족</small></span></label>
+              </div>
+            </div>
+
+            <div class="q-card">
+              <div class="q-num">Q5</div>
+              <div class="q-txt">과정장 및 직원 교육과정(과정소개 등) 운영은?</div>
+              <div class="rating-group">
+                <label class="rating-label"><input type="radio" name="pq5" value="1" disabled><span class="rating-btn">1<br><small>매우 불만족</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq5" value="2" disabled><span class="rating-btn">2<br><small>불만족</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq5" value="3" disabled><span class="rating-btn">3<br><small>보통</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq5" value="4" disabled><span class="rating-btn">4<br><small>만족</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq5" value="5" disabled><span class="rating-btn">5<br><small>매우 만족</small></span></label>
+              </div>
+            </div>
+
+            <div class="q-card">
+              <div class="q-num">Q6</div>
+              <div class="q-txt">과정 전반적인 만족도는?</div>
+              <div class="rating-group">
+                <label class="rating-label"><input type="radio" name="pq6" value="1" disabled><span class="rating-btn">1<br><small>매우 불만족</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq6" value="2" disabled><span class="rating-btn">2<br><small>불만족</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq6" value="3" disabled><span class="rating-btn">3<br><small>보통</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq6" value="4" disabled><span class="rating-btn">4<br><small>만족</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq6" value="5" disabled><span class="rating-btn">5<br><small>매우 만족</small></span></label>
+              </div>
+            </div>
+
+            <div class="q-card">
+              <div class="q-num">Q7</div>
+              <div class="q-txt">본 기간동안의 교육내용은 향후 업무 및 개인생활에 도움이 될 것이다.</div>
+              <div class="rating-group">
+                <label class="rating-label"><input type="radio" name="pq7" value="1" disabled><span class="rating-btn">1<br><small>매우 불만족</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq7" value="2" disabled><span class="rating-btn">2<br><small>불만족</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq7" value="3" disabled><span class="rating-btn">3<br><small>보통</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq7" value="4" disabled><span class="rating-btn">4<br><small>만족</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq7" value="5" disabled><span class="rating-btn">5<br><small>매우 만족</small></span></label>
+              </div>
+            </div>
+
+            <div class="q-card">
+              <div class="q-num">Q8</div>
+              <div class="q-txt">식당 음식의 질 및 서비스면?</div>
+              <div class="rating-group">
+                <label class="rating-label"><input type="radio" name="pq8" value="1" disabled><span class="rating-btn">1<br><small>매우 불만족</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq8" value="2" disabled><span class="rating-btn">2<br><small>불만족</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq8" value="3" disabled><span class="rating-btn">3<br><small>보통</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq8" value="4" disabled><span class="rating-btn">4<br><small>만족</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq8" value="5" disabled><span class="rating-btn">5<br><small>매우 만족</small></span></label>
+              </div>
+            </div>
+
+            <div class="q-card">
+              <div class="q-num">Q9</div>
+              <div class="q-txt">교육시설(강의실 및 기자재 등) 편의시설 수준은?</div>
+              <div class="rating-group">
+                <label class="rating-label"><input type="radio" name="pq9" value="1" disabled><span class="rating-btn">1<br><small>매우 불만족</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq9" value="2" disabled><span class="rating-btn">2<br><small>불만족</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq9" value="3" disabled><span class="rating-btn">3<br><small>보통</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq9" value="4" disabled><span class="rating-btn">4<br><small>만족</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq9" value="5" disabled><span class="rating-btn">5<br><small>매우 만족</small></span></label>
+              </div>
+            </div>
+
+            <div class="q-card optional">
+              <div class="q-num opt">Q10 <em>선택</em></div>
+              <div class="q-txt">기타 편의시설의 건의사항</div>
+              <textarea placeholder="편의시설 관련 건의사항을 작성해 주세요." rows="3" disabled></textarea>
+            </div>
+
+            <div class="q-card">
+              <div class="q-num">Q11</div>
+              <div class="q-txt">귀하의 근무처는?</div>
+              <div class="choice-group">
+                <label class="choice-label"><input type="radio" name="pq11" value="시 본청" disabled><span class="choice-btn">시 본청</span></label>
+                <label class="choice-label"><input type="radio" name="pq11" value="시 사업소" disabled><span class="choice-btn">시 사업소</span></label>
+                <label class="choice-label"><input type="radio" name="pq11" value="구" disabled><span class="choice-btn">구</span></label>
+                <label class="choice-label"><input type="radio" name="pq11" value="동" disabled><span class="choice-btn">동</span></label>
+                <label class="choice-label"><input type="radio" name="pq11" value="기타" disabled><span class="choice-btn">기타</span></label>
+              </div>
+            </div>
+
+            <div class="q-card">
+              <div class="q-num">Q12</div>
+              <div class="q-txt">귀하의 직급은?</div>
+              <div class="choice-group">
+                <label class="choice-label"><input type="radio" name="pq12" value="5급" disabled><span class="choice-btn">5급</span></label>
+                <label class="choice-label"><input type="radio" name="pq12" value="6급" disabled><span class="choice-btn">6급</span></label>
+                <label class="choice-label"><input type="radio" name="pq12" value="7급" disabled><span class="choice-btn">7급</span></label>
+                <label class="choice-label"><input type="radio" name="pq12" value="8급" disabled><span class="choice-btn">8급</span></label>
+                <label class="choice-label"><input type="radio" name="pq12" value="9급" disabled><span class="choice-btn">9급</span></label>
+                <label class="choice-label"><input type="radio" name="pq12" value="기타" disabled><span class="choice-btn">기타</span></label>
+              </div>
+            </div>
+
+            <div class="q-card">
+              <div class="q-num">Q13</div>
+              <div class="q-txt">귀하의 직렬은?</div>
+              <div class="choice-group">
+                <label class="choice-label"><input type="radio" name="pq13" value="행정직" disabled><span class="choice-btn">행정직</span></label>
+                <label class="choice-label"><input type="radio" name="pq13" value="기술직" disabled><span class="choice-btn">기술직</span></label>
+                <label class="choice-label"><input type="radio" name="pq13" value="연구직" disabled><span class="choice-btn">연구직</span></label>
+                <label class="choice-label"><input type="radio" name="pq13" value="관리운영직" disabled><span class="choice-btn">관리운영직</span></label>
+                <label class="choice-label"><input type="radio" name="pq13" value="기타" disabled><span class="choice-btn">기타</span></label>
+              </div>
+            </div>
+
+            <div class="q-card">
+              <div class="q-num">Q14</div>
+              <div class="q-txt">귀하의 연령은?</div>
+              <div class="choice-group">
+                <label class="choice-label"><input type="radio" name="pq14" value="20대" disabled><span class="choice-btn">20대</span></label>
+                <label class="choice-label"><input type="radio" name="pq14" value="30대" disabled><span class="choice-btn">30대</span></label>
+                <label class="choice-label"><input type="radio" name="pq14" value="40대" disabled><span class="choice-btn">40대</span></label>
+                <label class="choice-label"><input type="radio" name="pq14" value="50대" disabled><span class="choice-btn">50대</span></label>
+              </div>
+            </div>
+
+            <div class="q-card">
+              <div class="q-num">Q15</div>
+              <div class="q-txt">귀하의 성별은?</div>
+              <div class="choice-group">
+                <label class="choice-label"><input type="radio" name="pq15" value="남" disabled><span class="choice-btn">남</span></label>
+                <label class="choice-label"><input type="radio" name="pq15" value="여" disabled><span class="choice-btn">여</span></label>
+              </div>
+            </div>
+
+            <div class="q-card">
+              <div class="q-num">Q16</div>
+              <div class="q-txt">본 과정에 입교하게 된 동기?</div>
+              <div class="choice-group">
+                <label class="choice-label"><input type="radio" name="pq16" value="업무능력 개발" disabled><span class="choice-btn">업무능력 개발</span></label>
+                <label class="choice-label"><input type="radio" name="pq16" value="교육이수 점수 취득" disabled><span class="choice-btn">교육이수 점수 취득</span></label>
+                <label class="choice-label"><input type="radio" name="pq16" value="심신의 재충전" disabled><span class="choice-btn">심신의 재충전</span></label>
+                <label class="choice-label"><input type="radio" name="pq16" value="자기개발" disabled><span class="choice-btn">자기개발</span></label>
+                <label class="choice-label"><input type="radio" name="pq16" value="기타" disabled><span class="choice-btn">기타</span></label>
+              </div>
+            </div>
+
+            <!-- 강사별 만족도 (예시) -->
+            <div class="q-card">
+              <div class="q-num">Q17</div>
+              <div class="q-txt">
+                <div style="font-size:.8rem;color:#888;margin-bottom:.3rem;">👨‍🏫 강사 만족도 · 예시강사 (교육학 박사)</div>
+                강사의 전반적인 강의 만족도는?
+              </div>
+              <div class="rating-group">
+                <label class="rating-label"><input type="radio" name="pq17" value="1" disabled><span class="rating-btn">1<br><small>매우 불만족</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq17" value="2" disabled><span class="rating-btn">2<br><small>불만족</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq17" value="3" disabled><span class="rating-btn">3<br><small>보통</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq17" value="4" disabled><span class="rating-btn">4<br><small>만족</small></span></label>
+                <label class="rating-label"><input type="radio" name="pq17" value="5" disabled><span class="rating-btn">5<br><small>매우 만족</small></span></label>
+              </div>
+            </div>
+
+            <div class="q-card optional">
+              <div class="q-num opt">소감 <em>선택</em></div>
+              <div class="q-txt">소감 및 건의사항</div>
+              <textarea placeholder="소감 및 건의사항을 자유롭게 작성해 주세요." rows="4" disabled></textarea>
+            </div>
+
+            <div class="q-card optional">
+              <div class="q-num opt">의견 <em>선택</em></div>
+              <div class="q-txt">만족도 평가에 추가하거나 개선이 필요한 부분은 있는지</div>
+              <textarea placeholder="추가 또는 개선이 필요한 부분을 작성해 주세요." rows="4" disabled></textarea>
+            </div>
+
+            <div class="q-card optional">
+              <div class="q-num opt">건의 <em>선택</em></div>
+              <div class="q-txt">전반적인 과목 및 강사 건의</div>
+              <textarea placeholder="과목 및 강사에 대한 건의사항을 작성해 주세요." rows="4" disabled></textarea>
+            </div>
+
+            <button style="opacity:.5;cursor:not-allowed;" disabled>설문 제출하기</button>
+
+          </div>
+        </div>
+      </div>
 
     </div>
   </div>
