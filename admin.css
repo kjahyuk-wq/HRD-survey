@@ -148,6 +148,28 @@ header h1 { font-size: 1.3rem; font-weight: 700; margin: 0; color: #fff; }
   transition: width 0.5s ease;
 }
 
+/* 수강생 일괄 액션 */
+.student-bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.bulk-delete-btn {
+  background: #ef4444;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 0.4rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.bulk-delete-btn:hover:not(:disabled) { background: #dc2626; }
+.bulk-delete-btn:disabled { background: #fca5a5; cursor: not-allowed; }
+
 /* 수강생 테이블 */
 .student-table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid #eef2f7; }
 

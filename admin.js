@@ -324,12 +324,19 @@ async function loadStudents() {
     }
 
     document.getElementById('student-list').innerHTML = `
+      <div class="student-bulk-actions">
+        <button class="bulk-delete-btn" id="bulk-delete-btn" onclick="deleteSelectedStudents()" disabled>선택 삭제</button>
+      </div>
       <div class="student-table-wrap">
         <table class="student-table">
-          <thead><tr><th>이름</th><th>교번</th><th>상태</th><th></th></tr></thead>
+          <thead><tr>
+            <th style="width:36px"><input type="checkbox" id="select-all-checkbox" onclick="toggleSelectAll(this)"></th>
+            <th>이름</th><th>교번</th><th>상태</th><th></th>
+          </tr></thead>
           <tbody>
             ${students.map(s => `
               <tr>
+                <td><input type="checkbox" class="student-checkbox" data-id="${escapeAttr(s._id)}" data-name="${escapeAttr(s.name)}" data-empno="${escapeAttr(s.empNo)}" onchange="updateBulkDeleteBtn()"></td>
                 <td>${s.name}</td>
                 <td>${s.empNo}</td>
                 <td>${s.completed
@@ -368,6 +375,54 @@ async function addStudent() {
     await loadStudents();
   } catch (e) { alert('등록 중 오류가 발생했습니다.'); }
   finally { addBtns.forEach(b => { b.disabled = false; b.textContent = '+ 등록'; }); }
+}
+
+function toggleSelectAll(checkbox) {
+  document.querySelectorAll('.student-checkbox').forEach(cb => cb.checked = checkbox.checked);
+  updateBulkDeleteBtn();
+}
+
+function updateBulkDeleteBtn() {
+  const all = document.querySelectorAll('.student-checkbox');
+  const checked = document.querySelectorAll('.student-checkbox:checked');
+  const btn = document.getElementById('bulk-delete-btn');
+  const selectAll = document.getElementById('select-all-checkbox');
+  if (btn) {
+    btn.disabled = checked.length === 0;
+    btn.textContent = checked.length > 0 ? `선택 삭제 (${checked.length}명)` : '선택 삭제';
+  }
+  if (selectAll && all.length > 0) {
+    selectAll.indeterminate = checked.length > 0 && checked.length < all.length;
+    selectAll.checked = checked.length === all.length;
+  }
+}
+
+async function deleteSelectedStudents() {
+  const course = document.getElementById('student-course-select').value;
+  const checked = document.querySelectorAll('.student-checkbox:checked');
+  if (!checked.length) return;
+  const count = checked.length;
+  if (!confirm(`선택한 ${count}명의 수강생을 삭제하시겠습니까?\n해당 수강생들의 설문 응답도 함께 삭제됩니다.`)) return;
+  const btn = document.getElementById('bulk-delete-btn');
+  btn.disabled = true;
+  btn.textContent = '삭제 중...';
+  try {
+    const courseId = courseIdMap[course];
+    await Promise.all(Array.from(checked).map(async cb => {
+      const studentId = cb.dataset.id;
+      const name = cb.dataset.name;
+      const empNo = cb.dataset.empno;
+      const respSnap = await getDocs(query(collection(db, 'courses', courseId, 'responses'), where('empNo', '==', empNo)));
+      const matching = respSnap.docs.filter(d => d.data().name === name);
+      await Promise.all(matching.map(d => deleteDoc(d.ref)));
+      await deleteDoc(doc(db, 'courses', courseId, 'students', studentId));
+    }));
+    await loadStudents();
+  } catch (e) {
+    alert('삭제 중 오류가 발생했습니다.');
+    btn.disabled = false;
+    btn.textContent = `선택 삭제 (${count}명)`;
+  }
 }
 
 async function deleteStudent(name, empNo, course, studentId, btnEl) {
