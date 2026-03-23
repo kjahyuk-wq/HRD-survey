@@ -1,7 +1,7 @@
 import { db } from './firebase-config.js';
 import {
   collection, query, where, orderBy, getDocs,
-  addDoc, deleteDoc, doc, serverTimestamp, onSnapshot
+  addDoc, deleteDoc, doc, serverTimestamp, onSnapshot, Timestamp
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 
 const ADMIN_PASSWORD = "hrd2024!";
@@ -58,17 +58,17 @@ function logout() {
 
 // ── 탭 전환 ──────────────────────────────
 function switchTab(tab) {
-  ['courses', 'stats', 'preview', 'attendance', 'qr'].forEach(t => {
+  ['courses', 'stats', 'preview', 'attendance', 'attlog'].forEach(t => {
     document.getElementById(`tab-${t}`).style.display = t === tab ? 'block' : 'none';
   });
-  const tabNames = ['courses', 'preview', 'stats', 'attendance', 'qr'];
+  const tabNames = ['courses', 'preview', 'stats', 'attendance', 'attlog'];
   document.querySelectorAll('.tab-btn').forEach((btn, i) => {
     btn.classList.toggle('active', tabNames[i] === tab);
   });
   if (tab === 'stats') populateStatsSelect();
   if (tab === 'preview') populatePreviewSelect();
   if (tab === 'attendance') initAttendanceTab();
-  if (tab === 'qr') initQrTab();
+  if (tab === 'attlog') initAttlogTab();
 }
 
 // ── 설문 미리보기 ──────────────────────────────
@@ -1205,15 +1205,19 @@ function generateAttToken() {
 
 function initAttendanceTab() {
   loadAttCourses();
-  if (attSessionId) {
-    document.getElementById('att-log-card').style.display = 'block';
-  }
-}
-
-function initQrTab() {
   const hasSession = !!attSessionId;
   document.getElementById('att-qr-no-session').style.display = hasSession ? 'none' : 'block';
   document.getElementById('att-qr-card').style.display = hasSession ? 'block' : 'none';
+}
+
+function initAttlogTab() {
+  // 출석현황 탭 진입 시 수기 입력 시간 기본값을 현재 시각으로 설정
+  const timeEl = document.getElementById('manual-att-time');
+  if (timeEl && !timeEl.value) {
+    const now = new Date();
+    now.setSeconds(0, 0);
+    timeEl.value = now.toISOString().slice(0, 16);
+  }
 }
 
 async function loadAttCourses() {
@@ -1243,7 +1247,8 @@ function startAttendanceSession() {
   attSessionId = `${course}__${session}`;
   attCourseId = courseIdMap[course] || '';
   document.getElementById('att-session-info').textContent = `${course} · ${session}`;
-  document.getElementById('att-log-card').style.display = 'block';
+  document.getElementById('att-qr-no-session').style.display = 'none';
+  document.getElementById('att-qr-card').style.display = 'block';
   renderAttQR();
   startAttCountdown();
   subscribeAttendanceLogs();
@@ -1258,8 +1263,8 @@ function stopAttendanceSession(silent = false) {
     attCourseId = null;
     attLogData = [];
     document.getElementById('att-qr-card').style.display = 'none';
-    document.getElementById('att-log-card').style.display = 'none';
     document.getElementById('att-qr-no-session').style.display = 'block';
+    renderAttLogs();
   }
 }
 
@@ -1384,11 +1389,12 @@ document.addEventListener('fullscreenchange', () => {
 
 async function addManualAttendance() {
   if (!attSessionId) {
-    alert('먼저 세션을 시작해 주세요.');
+    alert('먼저 출결관리 탭에서 세션을 시작해 주세요.');
     return;
   }
   const nameEl = document.getElementById('manual-att-name');
   const codeEl = document.getElementById('manual-att-code');
+  const timeEl = document.getElementById('manual-att-time');
   const name = nameEl.value.trim();
   const code = codeEl.value.trim();
   if (!name || !code) {
@@ -1396,6 +1402,9 @@ async function addManualAttendance() {
     return;
   }
   const parts = attSessionId.split('__');
+  const attendedAt = timeEl.value
+    ? Timestamp.fromDate(new Date(timeEl.value))
+    : serverTimestamp();
   try {
     await addDoc(collection(db, 'attendance_logs'), {
       sessionId: attSessionId,
@@ -1404,10 +1413,14 @@ async function addManualAttendance() {
       name,
       participantCode: code,
       deviceToken: 'manual',
-      attendedAt: serverTimestamp()
+      attendedAt
     });
     nameEl.value = '';
     codeEl.value = '';
+    // 시간은 현재 시각으로 리셋
+    const now = new Date();
+    now.setSeconds(0, 0);
+    timeEl.value = now.toISOString().slice(0, 16);
     nameEl.focus();
   } catch (e) {
     alert('입력 중 오류가 발생했습니다.');
