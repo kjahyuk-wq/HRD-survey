@@ -1265,11 +1265,11 @@ function renderAttQR() {
   const session = encodeURIComponent(parts[1] || '');
   const cid = encodeURIComponent(attCourseId || '');
   const attendUrl = `${DEPLOY_BASE_URL}/attend.html?token=${token}&session=${session}&course=${course}&cid=${cid}`;
+  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=10&data=${encodeURIComponent(attendUrl)}`;
   const img = document.getElementById('att-qr-img');
-  if (img) {
-    img.src = `https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=10&data=${encodeURIComponent(attendUrl)}`;
-    img.alt = '';
-  }
+  if (img) img.src = qrSrc;
+  const fsImg = document.getElementById('att-fs-img');
+  if (fsImg) fsImg.src = qrSrc;
 }
 
 function startAttCountdown() {
@@ -1280,10 +1280,14 @@ function startAttCountdown() {
     const slotStart = Math.floor(now / (ATT_TOKEN_SECONDS * 1000)) * ATT_TOKEN_SECONDS * 1000;
     const elapsed = (now - slotStart) / 1000;
     const remaining = ATT_TOKEN_SECONDS - elapsed;
-    document.getElementById('att-countdown-label').textContent =
-      `다음 QR 갱신까지 ${Math.ceil(remaining)}초`;
-    document.getElementById('att-countdown-bar').style.width =
-      `${(remaining / ATT_TOKEN_SECONDS) * 100}%`;
+    const label = `다음 QR 갱신까지 ${Math.ceil(remaining)}초`;
+    const pct = `${(remaining / ATT_TOKEN_SECONDS) * 100}%`;
+    document.getElementById('att-countdown-label').textContent = label;
+    document.getElementById('att-countdown-bar').style.width = pct;
+    const fsLabel = document.getElementById('att-fs-countdown');
+    const fsBar = document.getElementById('att-fs-bar');
+    if (fsLabel) fsLabel.textContent = label;
+    if (fsBar) fsBar.style.width = pct;
     if (remaining <= 1) setTimeout(renderAttQR, 1100);
   };
   update();
@@ -1351,15 +1355,29 @@ function exportAttendanceExcel() {
 }
 
 function toggleAttendanceFullscreen() {
-  const card = document.getElementById('att-qr-card');
-  if (!document.fullscreenElement) {
-    card.requestFullscreen?.();
-  } else {
-    document.exitFullscreen?.();
-  }
+  const overlay = document.getElementById('att-fs-overlay');
+  const sessionInfo = document.getElementById('att-session-info');
+  overlay.style.display = 'flex';
+  document.getElementById('att-fs-session').textContent = sessionInfo ? sessionInfo.textContent : '';
+  // QR 이미지 동기화
+  const src = document.getElementById('att-qr-img')?.src || '';
+  document.getElementById('att-fs-img').src = src;
+  overlay.requestFullscreen?.().catch(() => {});
 }
+
+function closeAttendanceFullscreen() {
+  document.getElementById('att-fs-overlay').style.display = 'none';
+  if (document.fullscreenElement) document.exitFullscreen?.();
+}
+
+document.addEventListener('fullscreenchange', () => {
+  if (!document.fullscreenElement) {
+    document.getElementById('att-fs-overlay').style.display = 'none';
+  }
+});
 
 window.startAttendanceSession = startAttendanceSession;
 window.stopAttendanceSession = stopAttendanceSession;
 window.exportAttendanceExcel = exportAttendanceExcel;
 window.toggleAttendanceFullscreen = toggleAttendanceFullscreen;
+window.closeAttendanceFullscreen = closeAttendanceFullscreen;

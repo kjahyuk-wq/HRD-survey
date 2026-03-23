@@ -435,14 +435,14 @@
             <span id="att-session-info" style="font-size:0.85rem;color:#0066cc;margin-left:0.5rem;"></span>
           </div>
           <div style="text-align:center;padding:1rem;">
-            <img id="att-qr-img" style="border-radius:12px;width:260px;height:260px;display:block;margin:0 auto;" alt="QR 코드 생성 중...">
+            <img id="att-qr-img" style="border-radius:12px;width:260px;height:260px;display:block;margin:0 auto;" alt="">
             <div style="margin-top:0.8rem;">
               <div id="att-countdown-label" style="font-size:1.1rem;font-weight:600;color:#333;margin-bottom:0.4rem;"></div>
               <div style="background:#eee;border-radius:8px;height:10px;width:260px;margin:0 auto;">
                 <div id="att-countdown-bar" style="height:10px;border-radius:8px;background:#0066cc;transition:width 1s linear;width:100%;"></div>
               </div>
             </div>
-            <button onclick="toggleAttendanceFullscreen()" style="margin-top:1rem;padding:0.4rem 1rem;border-radius:6px;border:1px solid #ccc;cursor:pointer;background:#f8f9fa;">⛶ 전체화면</button>
+            <button onclick="toggleAttendanceFullscreen()" style="margin-top:1rem;padding:0.5rem 1.2rem;border-radius:6px;border:1.5px solid #aaa;cursor:pointer;background:#f3f4f6;color:#333;font-size:0.95rem;font-weight:600;">⛶ 전체화면</button>
           </div>
         </div>
 
@@ -463,6 +463,19 @@
       </div>
 
     </div>
+  </div>
+
+  <!-- 전체화면 QR 오버레이 -->
+  <div id="att-fs-overlay" style="display:none;position:fixed;inset:0;background:#fff;z-index:9999;flex-direction:column;align-items:center;justify-content:center;gap:1.5rem;">
+    <div id="att-fs-session" style="font-size:1.4rem;font-weight:700;color:#1e293b;letter-spacing:-0.3px;"></div>
+    <img id="att-fs-img" style="width:min(65vw,65vh);height:min(65vw,65vh);border-radius:16px;" alt="">
+    <div style="text-align:center;">
+      <div id="att-fs-countdown" style="font-size:1.1rem;font-weight:600;color:#444;margin-bottom:0.5rem;"></div>
+      <div style="background:#e5e7eb;border-radius:8px;height:12px;width:300px;max-width:80vw;">
+        <div id="att-fs-bar" style="height:12px;border-radius:8px;background:#0066cc;transition:width 1s linear;width:100%;"></div>
+      </div>
+    </div>
+    <button onclick="closeAttendanceFullscreen()" style="padding:0.6rem 2rem;border-radius:8px;border:1.5px solid #ccc;cursor:pointer;background:#f3f4f6;color:#333;font-size:1rem;font-weight:600;">✕ 전체화면 종료</button>
   </div>
 
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
