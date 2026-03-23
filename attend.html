@@ -42,7 +42,7 @@
     .status-sub { font-size: 0.9rem; color: #6b7280; }
     .form-group { margin-bottom: 1rem; text-align: left; }
     .form-group label { display: block; font-size: 0.85rem; font-weight: 600; color: #374151; margin-bottom: 0.4rem; }
-    .form-group input {
+    .form-group input, .form-group select {
       width: 100%;
       padding: 0.8rem 1rem;
       border: 1.5px solid #d1d5db;
@@ -50,8 +50,9 @@
       font-size: 1rem;
       outline: none;
       transition: border-color 0.2s;
+      background: #fff;
     }
-    .form-group input:focus { border-color: #2563eb; }
+    .form-group input:focus, .form-group select:focus { border-color: #2563eb; }
     .submit-btn {
       width: 100%;
       padding: 0.9rem;
@@ -67,10 +68,26 @@
     }
     .submit-btn:hover { background: #1d4ed8; }
     .submit-btn:disabled { background: #93c5fd; cursor: not-allowed; }
+    .refresh-btn {
+      width: 100%;
+      padding: 0.8rem;
+      background: #f3f4f6;
+      color: #374151;
+      border: 1.5px solid #d1d5db;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 1rem;
+      transition: background 0.2s;
+    }
+    .refresh-btn:hover { background: #e5e7eb; }
     .error-msg { color: #dc2626; font-size: 0.85rem; margin-top: 0.5rem; display: none; }
     .success-name { font-size: 1.3rem; font-weight: 700; color: #2563eb; margin: 0.4rem 0; }
     .success-time { font-size: 0.9rem; color: #6b7280; }
     .hidden { display: none !important; }
+    .loading-msg { color: #6b7280; font-size: 0.9rem; margin-top: 0.5rem; }
+    .manual-toggle { font-size: 0.8rem; color: #2563eb; cursor: pointer; margin-top: 0.5rem; display: inline-block; text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -80,11 +97,18 @@
     <div class="title">출석 확인</div>
     <div id="session-info" class="session-badge"></div>
 
+    <!-- 로딩 -->
+    <div id="screen-loading" class="hidden">
+      <div class="status-icon">⏳</div>
+      <div class="status-msg">확인 중...</div>
+    </div>
+
     <!-- 토큰 만료 -->
     <div id="screen-expired" class="hidden">
       <div class="status-icon">⏰</div>
       <div class="status-msg">출석 시간이 초과되었습니다</div>
       <div class="status-sub">관리자에게 문의해 주세요.</div>
+      <button class="refresh-btn" onclick="location.reload()">🔄 새로고침</button>
     </div>
 
     <!-- 이미 출석 -->
@@ -96,14 +120,27 @@
 
     <!-- 입력 폼 -->
     <div id="screen-form" class="hidden">
-      <div class="form-group">
-        <label for="input-name">이름</label>
-        <input type="text" id="input-name" placeholder="홍길동" maxlength="20" autocomplete="name">
+      <!-- 수강생 선택 드롭다운 (수강생 명단이 있을 때) -->
+      <div id="student-select-group" class="form-group hidden">
+        <label for="student-select">이름 선택</label>
+        <select id="student-select" onchange="onStudentSelect()">
+          <option value="">-- 이름을 선택하세요 --</option>
+        </select>
+        <span class="manual-toggle" onclick="toggleManualInput()">직접 입력하기</span>
       </div>
-      <div class="form-group">
-        <label for="input-code">교번</label>
-        <input type="number" id="input-code" placeholder="예: 12345" min="1" inputmode="numeric">
+
+      <!-- 수동 입력 (수강생 명단이 없거나 직접 입력 선택 시) -->
+      <div id="manual-input-group">
+        <div class="form-group">
+          <label for="input-name">이름</label>
+          <input type="text" id="input-name" placeholder="홍길동" maxlength="20" autocomplete="name">
+        </div>
+        <div class="form-group">
+          <label for="input-code">교번</label>
+          <input type="number" id="input-code" placeholder="예: 12345" min="1" inputmode="numeric">
+        </div>
       </div>
+
       <div id="form-error" class="error-msg">이름과 교번을 모두 입력해 주세요.</div>
       <button class="submit-btn" id="submit-btn" onclick="submitAttendance()">출석 확인</button>
     </div>
@@ -145,7 +182,7 @@
     }
 
     function show(id) {
-      ['screen-expired', 'screen-duplicate', 'screen-form', 'screen-success'].forEach(s => {
+      ['screen-loading', 'screen-expired', 'screen-duplicate', 'screen-form', 'screen-success'].forEach(s => {
         document.getElementById(s).classList.toggle('hidden', s !== id);
       });
     }
@@ -161,15 +198,73 @@
     const urlToken = params.get('token') || '';
     const sessionLabel = decodeURIComponent(params.get('session') || '');
     const courseName = decodeURIComponent(params.get('course') || '');
+    const courseId = decodeURIComponent(params.get('cid') || '');
     const sessionId = `${courseName}__${sessionLabel}`;
 
-    document.getElementById('session-info').textContent = `${courseName} · ${sessionLabel}`;
+    document.getElementById('session-info').textContent =
+      (courseName && sessionLabel) ? `${courseName} · ${sessionLabel}` : '출석 확인';
+
+    // 수강생 데이터
+    let students = []; // [{name, empNo}]
+
+    // 수강생 선택 드롭다운 콜백
+    window.onStudentSelect = function() {
+      const sel = document.getElementById('student-select');
+      const idx = parseInt(sel.value, 10);
+      if (!isNaN(idx) && students[idx]) {
+        document.getElementById('input-name').value = students[idx].name;
+        document.getElementById('input-code').value = students[idx].empNo;
+      } else {
+        document.getElementById('input-name').value = '';
+        document.getElementById('input-code').value = '';
+      }
+    };
+
+    // 직접 입력 토글
+    window.toggleManualInput = function() {
+      const manualGroup = document.getElementById('manual-input-group');
+      const selectGroup = document.getElementById('student-select-group');
+      const isHidden = manualGroup.style.display === 'none';
+      if (isHidden) {
+        manualGroup.style.display = 'block';
+        document.querySelector('.manual-toggle').textContent = '목록에서 선택하기';
+      } else {
+        manualGroup.style.display = 'none';
+        document.querySelector('.manual-toggle').textContent = '직접 입력하기';
+        document.getElementById('input-name').value = '';
+        document.getElementById('input-code').value = '';
+        document.getElementById('student-select').value = '';
+      }
+    };
+
+    // 수강생 목록 불러오기
+    async function loadStudents() {
+      if (!courseId) return;
+      try {
+        const snap = await getDocs(collection(db, 'courses', courseId, 'students'));
+        students = snap.docs
+          .map(d => ({ name: d.data().name || '', empNo: String(d.data().empNo || '') }))
+          .filter(s => s.name)
+          .sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+
+        if (students.length > 0) {
+          const sel = document.getElementById('student-select');
+          sel.innerHTML = '<option value="">-- 이름을 선택하세요 --</option>' +
+            students.map((s, i) => `<option value="${i}">${s.name} (교번: ${s.empNo})</option>`).join('');
+          document.getElementById('student-select-group').classList.remove('hidden');
+          document.getElementById('manual-input-group').style.display = 'none';
+        }
+      } catch (e) {
+        // 불러오기 실패 시 수동 입력 유지
+      }
+    }
 
     // 토큰 검증
-    if (urlToken !== getCurrentToken() && urlToken !== getPrevToken()) {
+    show('screen-loading');
+
+    if (!urlToken || (urlToken !== getCurrentToken() && urlToken !== getPrevToken())) {
       show('screen-expired');
     } else {
-      // 기기 중복 확인
       const deviceToken = getOrCreateDeviceToken();
 
       (async () => {
@@ -183,12 +278,14 @@
           );
           if (!dupSnap.empty) {
             show('screen-duplicate');
-          } else {
-            show('screen-form');
+            return;
           }
         } catch (e) {
-          show('screen-form');
+          // 읽기 권한 없으면 중복 체크 생략, 제출 시 처리
         }
+
+        await loadStudents();
+        show('screen-form');
       })();
 
       window.submitAttendance = async function () {
@@ -206,7 +303,6 @@
         btn.textContent = '처리 중...';
 
         try {
-          // 재확인: 혹시 사이 시간에 다른 기기/중복 방지 로직 생략 (deviceToken 기반 충분)
           await addDoc(collection(db, 'attendance_logs'), {
             sessionId,
             courseName,

@@ -25,7 +25,7 @@ service cloud.firestore {
 
     // 출결관리
     match /attendance_logs/{logId} {
-      allow read: if false;   // 관리자는 SDK(서비스 계정 또는 클라이언트 직접 접근)로만 읽음
+      allow read: if true;    // 관리자 실시간 현황 및 교육생 중복 확인용
       allow create: if true;  // 교육생 QR 출석 등록 허용
     }
   }

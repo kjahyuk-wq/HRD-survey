@@ -413,7 +413,9 @@
         <div class="section-card">
           <div class="section-title">출결 세션 설정</div>
           <div style="display:flex;gap:0.7rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem;">
-            <input type="text" id="att-course-name" placeholder="과정명 (예: 헌법과생활법률)" style="flex:1;min-width:180px;">
+            <select id="att-course-name" style="flex:1;min-width:200px;">
+              <option value="">-- 교육과정 선택 --</option>
+            </select>
             <select id="att-session-label" style="flex:1;min-width:160px;">
               <option>1일차 오전</option>
               <option>1일차 오후</option>
@@ -433,7 +435,7 @@
             <span id="att-session-info" style="font-size:0.85rem;color:#0066cc;margin-left:0.5rem;"></span>
           </div>
           <div style="text-align:center;padding:1rem;">
-            <canvas id="att-qr-canvas" style="border-radius:12px;"></canvas>
+            <img id="att-qr-img" style="border-radius:12px;width:260px;height:260px;display:block;margin:0 auto;" alt="QR 코드 생성 중...">
             <div style="margin-top:0.8rem;">
               <div id="att-countdown-label" style="font-size:1.1rem;font-weight:600;color:#333;margin-bottom:0.4rem;"></div>
               <div style="background:#eee;border-radius:8px;height:10px;width:260px;margin:0 auto;">

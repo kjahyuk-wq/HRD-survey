@@ -1192,6 +1192,7 @@ const ATT_TOKEN_SECONDS = 30;
 const DEPLOY_BASE_URL = 'https://hrd-survey.pages.dev';
 
 let attSessionId = null;
+let attCourseId = null;
 let attCountdownInterval = null;
 let attUnsubscribe = null;
 let attLogData = [];
@@ -1202,22 +1203,39 @@ function generateAttToken() {
 }
 
 function initAttendanceTab() {
+  loadAttCourses();
   if (attSessionId) {
     document.getElementById('att-qr-card').style.display = 'block';
     document.getElementById('att-log-card').style.display = 'block';
   }
 }
 
+async function loadAttCourses() {
+  const sel = document.getElementById('att-course-name');
+  const current = sel.value;
+  try {
+    const snap = await getDocs(collection(db, 'courses'));
+    snap.docs.forEach(d => { courseIdMap[d.data().name] = d.id; });
+    const courses = snap.docs.map(d => d.data().name);
+    sel.innerHTML = '<option value="">-- 교육과정 선택 --</option>' +
+      courses.map(c => `<option value="${escapeAttr(c)}"${c === current ? ' selected' : ''}>${escapeHtml(c)}</option>`).join('');
+  } catch (e) {
+    console.error('과정 목록 불러오기 실패:', e);
+  }
+}
+
 function startAttendanceSession() {
-  const course = document.getElementById('att-course-name').value.trim();
+  const sel = document.getElementById('att-course-name');
+  const course = sel.value;
   const session = document.getElementById('att-session-label').value;
   if (!course) {
-    document.getElementById('att-course-name').focus();
-    alert('과정명을 입력해 주세요.');
+    sel.focus();
+    alert('교육과정을 선택해 주세요.');
     return;
   }
   stopAttendanceSession(true);
   attSessionId = `${course}__${session}`;
+  attCourseId = courseIdMap[course] || '';
   document.getElementById('att-session-info').textContent = `${course} · ${session}`;
   document.getElementById('att-qr-card').style.display = 'block';
   document.getElementById('att-log-card').style.display = 'block';
@@ -1232,6 +1250,7 @@ function stopAttendanceSession(silent = false) {
   if (attUnsubscribe) { attUnsubscribe(); attUnsubscribe = null; }
   if (!silent) {
     attSessionId = null;
+    attCourseId = null;
     attLogData = [];
     document.getElementById('att-qr-card').style.display = 'none';
     document.getElementById('att-log-card').style.display = 'none';
@@ -1244,13 +1263,17 @@ function renderAttQR() {
   const parts = attSessionId.split('__');
   const course = encodeURIComponent(parts[0]);
   const session = encodeURIComponent(parts[1] || '');
-  const url = `${DEPLOY_BASE_URL}/attend.html?token=${token}&session=${session}&course=${course}`;
-  const canvas = document.getElementById('att-qr-canvas');
-  QRCode.toCanvas(canvas, url, {
+  const cid = encodeURIComponent(attCourseId || '');
+  const url = `${DEPLOY_BASE_URL}/attend.html?token=${token}&session=${session}&course=${course}&cid=${cid}`;
+  QRCode.toDataURL(url, {
     width: 260,
     margin: 2,
     color: { dark: '#1e293b', light: '#ffffff' }
-  }, err => { if (err) console.error('QR 생성 오류:', err); });
+  }, (err, dataUrl) => {
+    if (err) { console.error('QR 생성 오류:', err); return; }
+    const img = document.getElementById('att-qr-img');
+    if (img) img.src = dataUrl;
+  });
 }
 
 function startAttCountdown() {
