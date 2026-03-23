@@ -43,6 +43,7 @@
         <button class="tab-btn active" onclick="switchTab('courses')">📋 교육과정·수강생 관리</button>
         <button class="tab-btn" onclick="switchTab('preview')">👁 설문 미리보기</button>
         <button class="tab-btn" onclick="switchTab('stats')">📊 설문 통계</button>
+        <button class="tab-btn" onclick="switchTab('attendance')">✅ 출결관리</button>
       </div>
 
       <!-- 교육과정·수강생 관리 탭 -->
@@ -407,10 +408,63 @@
         </div>
       </div>
 
+      <!-- 출결관리 탭 -->
+      <div id="tab-attendance" style="display:none;">
+        <div class="section-card">
+          <div class="section-title">출결 세션 설정</div>
+          <div style="display:flex;gap:0.7rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem;">
+            <input type="text" id="att-course-name" placeholder="과정명 (예: 헌법과생활법률)" style="flex:1;min-width:180px;">
+            <select id="att-session-label" style="flex:1;min-width:160px;">
+              <option>1일차 오전</option>
+              <option>1일차 오후</option>
+              <option>2일차 오전</option>
+              <option>2일차 오후</option>
+              <option>3일차 오전</option>
+              <option>3일차 오후</option>
+            </select>
+            <button class="add-btn" onclick="startAttendanceSession()">▶ 세션 시작</button>
+            <button class="delete-btn" onclick="stopAttendanceSession()">■ 세션 종료</button>
+          </div>
+        </div>
+
+        <div class="section-card" id="att-qr-card" style="display:none;">
+          <div class="section-title">
+            출석 QR 코드
+            <span id="att-session-info" style="font-size:0.85rem;color:#0066cc;margin-left:0.5rem;"></span>
+          </div>
+          <div style="text-align:center;padding:1rem;">
+            <canvas id="att-qr-canvas" style="border-radius:12px;"></canvas>
+            <div style="margin-top:0.8rem;">
+              <div id="att-countdown-label" style="font-size:1.1rem;font-weight:600;color:#333;margin-bottom:0.4rem;"></div>
+              <div style="background:#eee;border-radius:8px;height:10px;width:260px;margin:0 auto;">
+                <div id="att-countdown-bar" style="height:10px;border-radius:8px;background:#0066cc;transition:width 1s linear;width:100%;"></div>
+              </div>
+            </div>
+            <button onclick="toggleAttendanceFullscreen()" style="margin-top:1rem;padding:0.4rem 1rem;border-radius:6px;border:1px solid #ccc;cursor:pointer;background:#f8f9fa;">⛶ 전체화면</button>
+          </div>
+        </div>
+
+        <div class="section-card" id="att-log-card" style="display:none;">
+          <div class="section-title">
+            실시간 출석 현황
+            <span id="att-count-badge" class="badge" style="margin-left:0.5rem;"></span>
+            <button class="excel-export-btn" onclick="exportAttendanceExcel()" style="float:right;font-size:0.8rem;padding:0.3rem 0.8rem;">📥 엑셀 다운로드</button>
+          </div>
+          <div class="student-table-wrap">
+            <table class="student-table">
+              <thead><tr><th>이름</th><th>교번</th><th>세션</th><th>출석시간</th></tr></thead>
+              <tbody id="att-log-tbody"></tbody>
+            </table>
+          </div>
+          <div id="att-log-empty" class="no-data" style="display:none;">아직 출석한 교육생이 없습니다.</div>
+        </div>
+      </div>
+
     </div>
   </div>
 
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
   <script type="module" src="admin.js"></script>
 </body>
 </html>

@@ -1,7 +1,7 @@
 import { db } from './firebase-config.js';
 import {
   collection, query, where, orderBy, getDocs,
-  addDoc, deleteDoc, doc, serverTimestamp
+  addDoc, deleteDoc, doc, serverTimestamp, onSnapshot
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 
 const ADMIN_PASSWORD = "hrd2024!";
@@ -58,15 +58,16 @@ function logout() {
 
 // ── 탭 전환 ──────────────────────────────
 function switchTab(tab) {
-  ['courses', 'stats', 'preview'].forEach(t => {
+  ['courses', 'stats', 'preview', 'attendance'].forEach(t => {
     document.getElementById(`tab-${t}`).style.display = t === tab ? 'block' : 'none';
   });
-  const tabNames = ['courses', 'preview', 'stats'];
+  const tabNames = ['courses', 'preview', 'stats', 'attendance'];
   document.querySelectorAll('.tab-btn').forEach((btn, i) => {
     btn.classList.toggle('active', tabNames[i] === tab);
   });
   if (tab === 'stats') populateStatsSelect();
   if (tab === 'preview') populatePreviewSelect();
+  if (tab === 'attendance') initAttendanceTab();
 }
 
 // ── 설문 미리보기 ──────────────────────────────
@@ -1184,3 +1185,159 @@ window.loadStats = loadStats;
 window.exportStatsExcel = exportStatsExcel;
 window.exportResultsExcel = exportResultsExcel;
 window.loadPreviewInstructors = loadPreviewInstructors;
+
+// ── 출결관리 ──────────────────────────────
+const ATT_TOKEN_SECONDS = 30;
+// TODO: Cloudflare Pages 도메인으로 변경하세요
+const DEPLOY_BASE_URL = 'https://hrd-survey.pages.dev';
+
+let attSessionId = null;
+let attCountdownInterval = null;
+let attUnsubscribe = null;
+let attLogData = [];
+
+function generateAttToken() {
+  const slot = Math.floor(Date.now() / (ATT_TOKEN_SECONDS * 1000));
+  return btoa(slot.toString()).replace(/=/g, '');
+}
+
+function initAttendanceTab() {
+  if (attSessionId) {
+    document.getElementById('att-qr-card').style.display = 'block';
+    document.getElementById('att-log-card').style.display = 'block';
+  }
+}
+
+function startAttendanceSession() {
+  const course = document.getElementById('att-course-name').value.trim();
+  const session = document.getElementById('att-session-label').value;
+  if (!course) {
+    document.getElementById('att-course-name').focus();
+    alert('과정명을 입력해 주세요.');
+    return;
+  }
+  stopAttendanceSession(true);
+  attSessionId = `${course}__${session}`;
+  document.getElementById('att-session-info').textContent = `${course} · ${session}`;
+  document.getElementById('att-qr-card').style.display = 'block';
+  document.getElementById('att-log-card').style.display = 'block';
+  renderAttQR();
+  startAttCountdown();
+  subscribeAttendanceLogs();
+}
+
+function stopAttendanceSession(silent = false) {
+  if (!silent && !attSessionId) return;
+  if (attCountdownInterval) { clearInterval(attCountdownInterval); attCountdownInterval = null; }
+  if (attUnsubscribe) { attUnsubscribe(); attUnsubscribe = null; }
+  if (!silent) {
+    attSessionId = null;
+    attLogData = [];
+    document.getElementById('att-qr-card').style.display = 'none';
+    document.getElementById('att-log-card').style.display = 'none';
+  }
+}
+
+function renderAttQR() {
+  if (!attSessionId) return;
+  const token = generateAttToken();
+  const parts = attSessionId.split('__');
+  const course = encodeURIComponent(parts[0]);
+  const session = encodeURIComponent(parts[1] || '');
+  const url = `${DEPLOY_BASE_URL}/attend.html?token=${token}&session=${session}&course=${course}`;
+  const canvas = document.getElementById('att-qr-canvas');
+  QRCode.toCanvas(canvas, url, {
+    width: 260,
+    margin: 2,
+    color: { dark: '#1e293b', light: '#ffffff' }
+  }, err => { if (err) console.error('QR 생성 오류:', err); });
+}
+
+function startAttCountdown() {
+  if (attCountdownInterval) clearInterval(attCountdownInterval);
+  const update = () => {
+    if (!attSessionId) return;
+    const now = Date.now();
+    const slotStart = Math.floor(now / (ATT_TOKEN_SECONDS * 1000)) * ATT_TOKEN_SECONDS * 1000;
+    const elapsed = (now - slotStart) / 1000;
+    const remaining = ATT_TOKEN_SECONDS - elapsed;
+    document.getElementById('att-countdown-label').textContent =
+      `다음 QR 갱신까지 ${Math.ceil(remaining)}초`;
+    document.getElementById('att-countdown-bar').style.width =
+      `${(remaining / ATT_TOKEN_SECONDS) * 100}%`;
+    if (remaining <= 1) setTimeout(renderAttQR, 1100);
+  };
+  update();
+  attCountdownInterval = setInterval(update, 1000);
+}
+
+function subscribeAttendanceLogs() {
+  if (attUnsubscribe) attUnsubscribe();
+  if (!attSessionId) return;
+  const q = query(
+    collection(db, 'attendance_logs'),
+    where('sessionId', '==', attSessionId),
+    orderBy('attendedAt', 'desc')
+  );
+  attUnsubscribe = onSnapshot(q, snap => {
+    attLogData = snap.docs.map(d => ({
+      ...d.data(),
+      attendedAt: d.data().attendedAt?.toDate?.()?.toISOString() ?? null
+    }));
+    renderAttLogs();
+  });
+}
+
+function renderAttLogs() {
+  const tbody = document.getElementById('att-log-tbody');
+  const empty = document.getElementById('att-log-empty');
+  const badge = document.getElementById('att-count-badge');
+  badge.textContent = `${attLogData.length}명`;
+  if (!attLogData.length) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+  tbody.innerHTML = attLogData.map(log => `
+    <tr>
+      <td>${escapeHtml(log.name || '')}</td>
+      <td>${escapeHtml(String(log.participantCode || ''))}</td>
+      <td>${escapeHtml(log.sessionLabel || '')}</td>
+      <td>${formatDateTime(log.attendedAt)}</td>
+    </tr>`).join('');
+}
+
+function exportAttendanceExcel() {
+  if (!attLogData.length) { alert('출석 데이터가 없습니다.'); return; }
+  const wb = XLSX.utils.book_new();
+  const data = [
+    ['이름', '교번', '과정명', '세션', '출석시간'],
+    ...attLogData.map(log => [
+      log.name || '',
+      log.participantCode || '',
+      log.courseName || '',
+      log.sessionLabel || '',
+      log.attendedAt ? formatDateTime(log.attendedAt) : ''
+    ])
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  ws['!cols'] = [{wch:10},{wch:8},{wch:20},{wch:12},{wch:20}];
+  XLSX.utils.book_append_sheet(wb, ws, '출석명단');
+  const parts = (attSessionId || 'attendance').split('__');
+  XLSX.writeFile(wb, `출석_${parts[0]}_${parts[1] || ''}_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+function toggleAttendanceFullscreen() {
+  const card = document.getElementById('att-qr-card');
+  if (!document.fullscreenElement) {
+    card.requestFullscreen?.();
+  } else {
+    document.exitFullscreen?.();
+  }
+}
+
+window.startAttendanceSession = startAttendanceSession;
+window.stopAttendanceSession = stopAttendanceSession;
+window.exportAttendanceExcel = exportAttendanceExcel;
+window.toggleAttendanceFullscreen = toggleAttendanceFullscreen;

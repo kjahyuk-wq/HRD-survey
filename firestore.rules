@@ -1,0 +1,32 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 기존 규칙 (만족도조사)
+    match /courses/{courseId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /courses/{courseId}/instructors/{instructorId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /courses/{courseId}/students/{studentId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /responses/{responseId} {
+      allow read: if false;
+      allow create: if true;
+    }
+
+    // 출결관리
+    match /attendance_logs/{logId} {
+      allow read: if false;   // 관리자는 SDK(서비스 계정 또는 클라이언트 직접 접근)로만 읽음
+      allow create: if true;  // 교육생 QR 출석 등록 허용
+    }
+  }
+}
