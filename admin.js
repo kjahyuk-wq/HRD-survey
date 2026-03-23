@@ -1158,6 +1158,14 @@ function formatDateTime(isoStr) {
   return `${d.getFullYear()}.${pad(d.getMonth()+1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+function formatDateTimeSec(isoStr) {
+  if (!isoStr) return '';
+  const d = new Date(isoStr);
+  if (isNaN(d)) return isoStr;
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}.${pad(d.getMonth()+1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
 function escapeHtml(str) {
   return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
@@ -1210,14 +1218,150 @@ function initAttendanceTab() {
   document.getElementById('att-qr-card').style.display = hasSession ? 'block' : 'none';
 }
 
+// ── 출석현황 탭 ──────────────────────────────
+let attlogUnsubscribe = null;
+let attlogStudents = [];
+let attlogData = [];
+let attlogCourseId = '';
+
 function initAttlogTab() {
-  // 출석현황 탭 진입 시 수기 입력 시간 기본값을 현재 시각으로 설정
+  loadAttlogCourses();
+  setManualTimeNow();
+}
+
+function setManualTimeNow() {
   const timeEl = document.getElementById('manual-att-time');
-  if (timeEl && !timeEl.value) {
+  if (timeEl) {
     const now = new Date();
-    now.setSeconds(0, 0);
-    timeEl.value = now.toISOString().slice(0, 16);
+    // datetime-local value: YYYY-MM-DDTHH:MM
+    const pad = n => String(n).padStart(2, '0');
+    timeEl.value = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
   }
+}
+
+async function loadAttlogCourses() {
+  const sel = document.getElementById('attlog-course-select');
+  const current = sel.value;
+  try {
+    const snap = await getDocs(collection(db, 'courses'));
+    snap.docs.forEach(d => { courseIdMap[d.data().name] = d.id; });
+    const courses = snap.docs.map(d => d.data().name);
+    sel.innerHTML = '<option value="">-- 교육과정 선택 --</option>' +
+      courses.map(c => `<option value="${escapeAttr(c)}"${c === current ? ' selected' : ''}>${escapeHtml(c)}</option>`).join('');
+    if (current) loadAttlogData();
+  } catch (e) { console.error('과정 목록 불러오기 실패:', e); }
+}
+
+function onAttlogCourseChange() {
+  const course = document.getElementById('attlog-course-select').value;
+  document.getElementById('attlog-manual-card').style.display = course ? 'block' : 'none';
+  document.getElementById('attlog-table-card').style.display = course ? 'block' : 'none';
+  if (course) loadAttlogData();
+  else {
+    if (attlogUnsubscribe) { attlogUnsubscribe(); attlogUnsubscribe = null; }
+    attlogStudents = [];
+    attlogData = [];
+  }
+}
+
+async function loadAttlogData() {
+  const course = document.getElementById('attlog-course-select').value;
+  const session = document.getElementById('attlog-session-select').value;
+  if (!course) return;
+
+  attlogCourseId = courseIdMap[course] || '';
+  const sessionId = `${course}__${session}`;
+
+  // 수강생 목록 로드
+  try {
+    if (attlogCourseId) {
+      const snap = await getDocs(collection(db, 'courses', attlogCourseId, 'students'));
+      attlogStudents = snap.docs
+        .map(d => ({ name: d.data().name || '', empNo: String(d.data().empNo || '') }))
+        .sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+    }
+  } catch (e) { attlogStudents = []; }
+
+  // 출석 로그 실시간 구독
+  if (attlogUnsubscribe) { attlogUnsubscribe(); attlogUnsubscribe = null; }
+  const q = query(collection(db, 'attendance_logs'), where('sessionId', '==', sessionId));
+  attlogUnsubscribe = onSnapshot(q, snap => {
+    attlogData = snap.docs.map(d => ({
+      ...d.data(),
+      attendedAt: d.data().attendedAt?.toDate?.()?.toISOString() ?? null
+    }));
+    renderAttlogTable();
+  }, err => console.error('출석현황 구독 오류:', err));
+
+  document.getElementById('attlog-manual-card').style.display = 'block';
+  document.getElementById('attlog-table-card').style.display = 'block';
+}
+
+function renderAttlogTable() {
+  const tbody = document.getElementById('attlog-tbody');
+  const badge = document.getElementById('attlog-count-badge');
+
+  // empNo → 출석 기록 맵
+  const attMap = new Map();
+  attlogData.forEach(log => {
+    const key = String(log.participantCode || '');
+    if (!attMap.has(key)) attMap.set(key, log); // 중복 시 첫 번째
+  });
+
+  const attendedCount = attlogStudents.filter(s => attMap.has(s.empNo)).length;
+  badge.textContent = `${attendedCount}명 / ${attlogStudents.length}명 출석`;
+
+  let rows = '';
+
+  if (attlogStudents.length === 0 && attlogData.length === 0) {
+    rows = '<tr><td colspan="3" class="no-data">교육생이 없습니다.</td></tr>';
+  } else {
+    // 등록된 수강생
+    rows = attlogStudents.map(s => {
+      const log = attMap.get(s.empNo);
+      const statusHtml = log
+        ? `<span style="color:#16a34a;font-weight:700;">✅ 완료</span><br><small style="color:#6b7280;">${formatDateTimeSec(log.attendedAt)}</small>`
+        : `<span style="color:#9ca3af;font-weight:600;">⏳ 미출석</span>`;
+      return `<tr><td>${escapeHtml(s.name)}</td><td>${escapeHtml(s.empNo)}</td><td>${statusHtml}</td></tr>`;
+    }).join('');
+
+    // 수강생 명단에 없는 추가 출석자
+    const studentEmpNos = new Set(attlogStudents.map(s => s.empNo));
+    const extras = attlogData.filter(log => !studentEmpNos.has(String(log.participantCode || '')));
+    if (extras.length) {
+      rows += `<tr><td colspan="3" style="font-size:0.78rem;color:#9ca3af;background:#f9fafb;padding:0.3rem 0.8rem;">— 외부 추가 —</td></tr>`;
+      rows += extras.map(log => {
+        const statusHtml = `<span style="color:#16a34a;font-weight:700;">✅ 완료</span><br><small style="color:#6b7280;">${formatDateTimeSec(log.attendedAt)}</small>`;
+        return `<tr><td>${escapeHtml(log.name||'')}</td><td>${escapeHtml(String(log.participantCode||''))}</td><td>${statusHtml}</td></tr>`;
+      }).join('');
+    }
+  }
+
+  tbody.innerHTML = rows;
+}
+
+function exportAttlogExcel() {
+  const course = document.getElementById('attlog-course-select').value;
+  const session = document.getElementById('attlog-session-select').value;
+  const attMap = new Map();
+  attlogData.forEach(log => {
+    const key = String(log.participantCode || '');
+    if (!attMap.has(key)) attMap.set(key, log);
+  });
+  const wb = XLSX.utils.book_new();
+  const rows = [['이름', '교번', '출석여부', '출석시간']];
+  attlogStudents.forEach(s => {
+    const log = attMap.get(s.empNo);
+    rows.push([s.name, s.empNo, log ? '출석' : '미출석', log ? formatDateTimeSec(log.attendedAt) : '']);
+  });
+  const studentEmpNos = new Set(attlogStudents.map(s => s.empNo));
+  attlogData.filter(l => !studentEmpNos.has(String(l.participantCode||''))).forEach(log => {
+    rows.push([log.name||'', log.participantCode||'', '출석', formatDateTimeSec(log.attendedAt)]);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:12},{wch:10},{wch:10},{wch:22}];
+  XLSX.utils.book_append_sheet(wb, ws, '출석현황');
+  XLSX.writeFile(wb, `출석현황_${course}_${session}_${new Date().toISOString().slice(0,10)}.xlsx`);
 }
 
 async function loadAttCourses() {
@@ -1388,8 +1532,10 @@ document.addEventListener('fullscreenchange', () => {
 });
 
 async function addManualAttendance() {
-  if (!attSessionId) {
-    alert('먼저 출결관리 탭에서 세션을 시작해 주세요.');
+  const course = document.getElementById('attlog-course-select').value;
+  const session = document.getElementById('attlog-session-select').value;
+  if (!course) {
+    alert('교육과정을 먼저 선택해 주세요.');
     return;
   }
   const nameEl = document.getElementById('manual-att-name');
@@ -1401,15 +1547,14 @@ async function addManualAttendance() {
     alert('이름과 교번을 모두 입력해 주세요.');
     return;
   }
-  const parts = attSessionId.split('__');
   const attendedAt = timeEl.value
     ? Timestamp.fromDate(new Date(timeEl.value))
     : serverTimestamp();
   try {
     await addDoc(collection(db, 'attendance_logs'), {
-      sessionId: attSessionId,
-      courseName: parts[0] || '',
-      sessionLabel: parts[1] || '',
+      sessionId: `${course}__${session}`,
+      courseName: course,
+      sessionLabel: session,
       name,
       participantCode: code,
       deviceToken: 'manual',
@@ -1417,10 +1562,7 @@ async function addManualAttendance() {
     });
     nameEl.value = '';
     codeEl.value = '';
-    // 시간은 현재 시각으로 리셋
-    const now = new Date();
-    now.setSeconds(0, 0);
-    timeEl.value = now.toISOString().slice(0, 16);
+    setManualTimeNow();
     nameEl.focus();
   } catch (e) {
     alert('입력 중 오류가 발생했습니다.');
@@ -1433,3 +1575,6 @@ window.exportAttendanceExcel = exportAttendanceExcel;
 window.toggleAttendanceFullscreen = toggleAttendanceFullscreen;
 window.closeAttendanceFullscreen = closeAttendanceFullscreen;
 window.addManualAttendance = addManualAttendance;
+window.onAttlogCourseChange = onAttlogCourseChange;
+window.loadAttlogData = loadAttlogData;
+window.exportAttlogExcel = exportAttlogExcel;

@@ -455,31 +455,52 @@
 
       <!-- 출석현황 탭 -->
       <div id="tab-attlog" style="display:none;">
-        <div class="section-card" id="att-log-card">
-          <div class="section-title">
-            출석 현황
-            <span id="att-count-badge" class="badge" style="margin-left:0.5rem;"></span>
-            <button class="excel-export-btn" onclick="exportAttendanceExcel()" style="float:right;font-size:0.8rem;padding:0.3rem 0.8rem;">📥 엑셀 다운로드</button>
-          </div>
 
-          <!-- 수기 입력 -->
-          <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem;padding:0.8rem;background:#f8f9fa;border-radius:10px;">
+        <!-- 과정/세션 선택 -->
+        <div class="section-card">
+          <div class="section-title">출석 현황 조회</div>
+          <div style="display:flex;gap:0.7rem;flex-wrap:wrap;align-items:center;">
+            <select id="attlog-course-select" style="flex:1;min-width:200px;" onchange="onAttlogCourseChange()">
+              <option value="">-- 교육과정 선택 --</option>
+            </select>
+            <select id="attlog-session-select" style="flex:1;min-width:160px;" onchange="loadAttlogData()">
+              <option>1일차 오전</option>
+              <option>1일차 오후</option>
+              <option>2일차 오전</option>
+              <option>2일차 오후</option>
+              <option>3일차 오전</option>
+              <option>3일차 오후</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 수기 입력 -->
+        <div class="section-card" id="attlog-manual-card" style="display:none;">
+          <div class="section-title">수기 출석 추가</div>
+          <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
             <input type="text" id="manual-att-name" placeholder="이름" maxlength="20"
               style="flex:1;min-width:90px;padding:0.5rem 0.8rem;border:1.5px solid #d1d5db;border-radius:8px;font-size:0.95rem;">
             <input type="number" id="manual-att-code" placeholder="교번" min="1" inputmode="numeric"
               style="flex:1;min-width:90px;padding:0.5rem 0.8rem;border:1.5px solid #d1d5db;border-radius:8px;font-size:0.95rem;">
             <input type="datetime-local" id="manual-att-time"
-              style="flex:1;min-width:160px;padding:0.5rem 0.8rem;border:1.5px solid #d1d5db;border-radius:8px;font-size:0.95rem;">
+              style="flex:1;min-width:170px;padding:0.5rem 0.8rem;border:1.5px solid #d1d5db;border-radius:8px;font-size:0.95rem;">
             <button class="add-btn" onclick="addManualAttendance()" style="white-space:nowrap;">✍️ 수기 추가</button>
           </div>
+        </div>
 
+        <!-- 출석 현황 테이블 -->
+        <div class="section-card" id="attlog-table-card" style="display:none;">
+          <div class="section-title">
+            출석 현황
+            <span id="attlog-count-badge" style="font-size:0.85rem;color:#0066cc;font-weight:600;margin-left:0.5rem;"></span>
+            <button class="excel-export-btn" onclick="exportAttlogExcel()" style="float:right;font-size:0.8rem;padding:0.3rem 0.8rem;">📥 엑셀 다운로드</button>
+          </div>
           <div class="student-table-wrap">
             <table class="student-table">
-              <thead><tr><th>이름</th><th>교번</th><th>세션</th><th>출석시간</th></tr></thead>
-              <tbody id="att-log-tbody"></tbody>
+              <thead><tr><th>이름</th><th>교번</th><th>출석</th></tr></thead>
+              <tbody id="attlog-tbody"></tbody>
             </table>
           </div>
-          <div id="att-log-empty" class="no-data" style="display:none;">아직 출석한 교육생이 없습니다.</div>
         </div>
       </div>
 

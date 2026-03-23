@@ -83,7 +83,8 @@
     .refresh-btn:hover { background: #e5e7eb; }
     .error-msg { color: #dc2626; font-size: 0.85rem; margin-top: 0.5rem; display: none; }
     .success-name { font-size: 1.3rem; font-weight: 700; color: #2563eb; margin: 0.4rem 0; }
-    .success-time { font-size: 0.9rem; color: #6b7280; }
+    .success-detail { font-size: 0.92rem; color: #374151; margin-top: 0.6rem; line-height: 1.7; }
+    .success-time { font-size: 0.85rem; color: #6b7280; margin-top: 0.2rem; }
     .hidden { display: none !important; }
   </style>
 </head>
@@ -134,7 +135,7 @@
       <div class="status-icon">✅</div>
       <div class="status-msg">출석이 확인되었습니다</div>
       <div class="success-name" id="success-name"></div>
-      <div class="success-time" id="success-time"></div>
+      <div class="success-detail" id="success-detail"></div>
     </div>
   </div>
 
@@ -172,9 +173,12 @@
     }
 
     function pad(n) { return String(n).padStart(2, '0'); }
+    function escapeHtml(str) {
+      return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
     function formatNow() {
       const d = new Date();
-      return `${d.getFullYear()}.${pad(d.getMonth()+1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      return `${d.getFullYear()}년 ${pad(d.getMonth()+1)}월 ${pad(d.getDate())}일 ${pad(d.getHours())}시 ${pad(d.getMinutes())}분 ${pad(d.getSeconds())}초`;
     }
 
     // URL 파라미터 파싱
@@ -238,7 +242,8 @@
           });
 
           document.getElementById('success-name').textContent = `${name}님`;
-          document.getElementById('success-time').textContent = formatNow();
+          document.getElementById('success-detail').innerHTML =
+            `${escapeHtml(courseName)} · ${escapeHtml(sessionLabel)} 세션<br>${formatNow()}에<br>출석 완료했습니다.`;
           show('screen-success');
         } catch (e) {
           btn.disabled = false;
