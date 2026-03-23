@@ -44,6 +44,7 @@
         <button class="tab-btn" onclick="switchTab('preview')">👁 설문 미리보기</button>
         <button class="tab-btn" onclick="switchTab('stats')">📊 설문 통계</button>
         <button class="tab-btn" onclick="switchTab('attendance')">✅ 출결관리</button>
+        <button class="tab-btn" onclick="switchTab('qr')">📱 QR 출석</button>
       </div>
 
       <!-- 교육과정·수강생 관리 탭 -->
@@ -429,6 +430,39 @@
           </div>
         </div>
 
+        <div class="section-card" id="att-log-card" style="display:none;">
+          <div class="section-title">
+            실시간 출석 현황
+            <span id="att-count-badge" class="badge" style="margin-left:0.5rem;"></span>
+            <button class="excel-export-btn" onclick="exportAttendanceExcel()" style="float:right;font-size:0.8rem;padding:0.3rem 0.8rem;">📥 엑셀 다운로드</button>
+          </div>
+
+          <!-- 수기 입력 -->
+          <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem;padding:0.8rem;background:#f8f9fa;border-radius:10px;">
+            <input type="text" id="manual-att-name" placeholder="이름" maxlength="20"
+              style="flex:1;min-width:100px;padding:0.5rem 0.8rem;border:1.5px solid #d1d5db;border-radius:8px;font-size:0.95rem;">
+            <input type="number" id="manual-att-code" placeholder="교번" min="1" inputmode="numeric"
+              style="flex:1;min-width:100px;padding:0.5rem 0.8rem;border:1.5px solid #d1d5db;border-radius:8px;font-size:0.95rem;">
+            <button class="add-btn" onclick="addManualAttendance()" style="white-space:nowrap;">✍️ 수기 추가</button>
+          </div>
+
+          <div class="student-table-wrap">
+            <table class="student-table">
+              <thead><tr><th>이름</th><th>교번</th><th>세션</th><th>출석시간</th></tr></thead>
+              <tbody id="att-log-tbody"></tbody>
+            </table>
+          </div>
+          <div id="att-log-empty" class="no-data" style="display:none;">아직 출석한 교육생이 없습니다.</div>
+        </div>
+      </div>
+
+      <!-- QR 출석 탭 -->
+      <div id="tab-qr" style="display:none;">
+        <div class="section-card" id="att-qr-no-session" style="text-align:center;padding:2rem;">
+          <div style="font-size:2.5rem;margin-bottom:0.8rem;">📋</div>
+          <div style="font-size:1rem;font-weight:600;color:#374151;">출결관리 탭에서 세션을 먼저 시작해 주세요.</div>
+        </div>
+
         <div class="section-card" id="att-qr-card" style="display:none;">
           <div class="section-title">
             출석 QR 코드
@@ -444,21 +478,6 @@
             </div>
             <button onclick="toggleAttendanceFullscreen()" style="margin-top:1rem;padding:0.5rem 1.2rem;border-radius:6px;border:1.5px solid #aaa;cursor:pointer;background:#f3f4f6;color:#333;font-size:0.95rem;font-weight:600;">⛶ 전체화면</button>
           </div>
-        </div>
-
-        <div class="section-card" id="att-log-card" style="display:none;">
-          <div class="section-title">
-            실시간 출석 현황
-            <span id="att-count-badge" class="badge" style="margin-left:0.5rem;"></span>
-            <button class="excel-export-btn" onclick="exportAttendanceExcel()" style="float:right;font-size:0.8rem;padding:0.3rem 0.8rem;">📥 엑셀 다운로드</button>
-          </div>
-          <div class="student-table-wrap">
-            <table class="student-table">
-              <thead><tr><th>이름</th><th>교번</th><th>세션</th><th>출석시간</th></tr></thead>
-              <tbody id="att-log-tbody"></tbody>
-            </table>
-          </div>
-          <div id="att-log-empty" class="no-data" style="display:none;">아직 출석한 교육생이 없습니다.</div>
         </div>
       </div>
 

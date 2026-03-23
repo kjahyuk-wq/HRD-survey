@@ -58,16 +58,17 @@ function logout() {
 
 // ── 탭 전환 ──────────────────────────────
 function switchTab(tab) {
-  ['courses', 'stats', 'preview', 'attendance'].forEach(t => {
+  ['courses', 'stats', 'preview', 'attendance', 'qr'].forEach(t => {
     document.getElementById(`tab-${t}`).style.display = t === tab ? 'block' : 'none';
   });
-  const tabNames = ['courses', 'preview', 'stats', 'attendance'];
+  const tabNames = ['courses', 'preview', 'stats', 'attendance', 'qr'];
   document.querySelectorAll('.tab-btn').forEach((btn, i) => {
     btn.classList.toggle('active', tabNames[i] === tab);
   });
   if (tab === 'stats') populateStatsSelect();
   if (tab === 'preview') populatePreviewSelect();
   if (tab === 'attendance') initAttendanceTab();
+  if (tab === 'qr') initQrTab();
 }
 
 // ── 설문 미리보기 ──────────────────────────────
@@ -1205,9 +1206,14 @@ function generateAttToken() {
 function initAttendanceTab() {
   loadAttCourses();
   if (attSessionId) {
-    document.getElementById('att-qr-card').style.display = 'block';
     document.getElementById('att-log-card').style.display = 'block';
   }
+}
+
+function initQrTab() {
+  const hasSession = !!attSessionId;
+  document.getElementById('att-qr-no-session').style.display = hasSession ? 'none' : 'block';
+  document.getElementById('att-qr-card').style.display = hasSession ? 'block' : 'none';
 }
 
 async function loadAttCourses() {
@@ -1237,7 +1243,6 @@ function startAttendanceSession() {
   attSessionId = `${course}__${session}`;
   attCourseId = courseIdMap[course] || '';
   document.getElementById('att-session-info').textContent = `${course} · ${session}`;
-  document.getElementById('att-qr-card').style.display = 'block';
   document.getElementById('att-log-card').style.display = 'block';
   renderAttQR();
   startAttCountdown();
@@ -1254,6 +1259,7 @@ function stopAttendanceSession(silent = false) {
     attLogData = [];
     document.getElementById('att-qr-card').style.display = 'none';
     document.getElementById('att-log-card').style.display = 'none';
+    document.getElementById('att-qr-no-session').style.display = 'block';
   }
 }
 
@@ -1376,8 +1382,41 @@ document.addEventListener('fullscreenchange', () => {
   }
 });
 
+async function addManualAttendance() {
+  if (!attSessionId) {
+    alert('먼저 세션을 시작해 주세요.');
+    return;
+  }
+  const nameEl = document.getElementById('manual-att-name');
+  const codeEl = document.getElementById('manual-att-code');
+  const name = nameEl.value.trim();
+  const code = codeEl.value.trim();
+  if (!name || !code) {
+    alert('이름과 교번을 모두 입력해 주세요.');
+    return;
+  }
+  const parts = attSessionId.split('__');
+  try {
+    await addDoc(collection(db, 'attendance_logs'), {
+      sessionId: attSessionId,
+      courseName: parts[0] || '',
+      sessionLabel: parts[1] || '',
+      name,
+      participantCode: code,
+      deviceToken: 'manual',
+      attendedAt: serverTimestamp()
+    });
+    nameEl.value = '';
+    codeEl.value = '';
+    nameEl.focus();
+  } catch (e) {
+    alert('입력 중 오류가 발생했습니다.');
+  }
+}
+
 window.startAttendanceSession = startAttendanceSession;
 window.stopAttendanceSession = stopAttendanceSession;
 window.exportAttendanceExcel = exportAttendanceExcel;
 window.toggleAttendanceFullscreen = toggleAttendanceFullscreen;
 window.closeAttendanceFullscreen = closeAttendanceFullscreen;
+window.addManualAttendance = addManualAttendance;
