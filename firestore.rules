@@ -23,10 +23,5 @@ service cloud.firestore {
       allow create: if true;
     }
 
-    // 출결관리
-    match /attendance_logs/{logId} {
-      allow read: if true;    // 관리자 실시간 현황 및 교육생 중복 확인용
-      allow create: if true;  // 교육생 QR 출석 등록 허용
-    }
   }
 }
