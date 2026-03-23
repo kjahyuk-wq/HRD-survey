@@ -1264,16 +1264,12 @@ function renderAttQR() {
   const course = encodeURIComponent(parts[0]);
   const session = encodeURIComponent(parts[1] || '');
   const cid = encodeURIComponent(attCourseId || '');
-  const url = `${DEPLOY_BASE_URL}/attend.html?token=${token}&session=${session}&course=${course}&cid=${cid}`;
-  QRCode.toDataURL(url, {
-    width: 260,
-    margin: 2,
-    color: { dark: '#1e293b', light: '#ffffff' }
-  }, (err, dataUrl) => {
-    if (err) { console.error('QR 생성 오류:', err); return; }
-    const img = document.getElementById('att-qr-img');
-    if (img) img.src = dataUrl;
-  });
+  const attendUrl = `${DEPLOY_BASE_URL}/attend.html?token=${token}&session=${session}&course=${course}&cid=${cid}`;
+  const img = document.getElementById('att-qr-img');
+  if (img) {
+    img.src = `https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=10&data=${encodeURIComponent(attendUrl)}`;
+    img.alt = '';
+  }
 }
 
 function startAttCountdown() {
