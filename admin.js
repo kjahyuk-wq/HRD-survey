@@ -1295,15 +1295,18 @@ function subscribeAttendanceLogs() {
   if (!attSessionId) return;
   const q = query(
     collection(db, 'attendance_logs'),
-    where('sessionId', '==', attSessionId),
-    orderBy('attendedAt', 'desc')
+    where('sessionId', '==', attSessionId)
   );
   attUnsubscribe = onSnapshot(q, snap => {
-    attLogData = snap.docs.map(d => ({
-      ...d.data(),
-      attendedAt: d.data().attendedAt?.toDate?.()?.toISOString() ?? null
-    }));
+    attLogData = snap.docs
+      .map(d => ({
+        ...d.data(),
+        attendedAt: d.data().attendedAt?.toDate?.()?.toISOString() ?? null
+      }))
+      .sort((a, b) => (b.attendedAt || '') > (a.attendedAt || '') ? 1 : -1);
     renderAttLogs();
+  }, err => {
+    console.error('출석 현황 구독 오류:', err);
   });
 }
 
