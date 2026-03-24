@@ -1,6 +1,6 @@
 import { db } from './firebase-config.js';
 import {
-  collection, query, where, orderBy, getDocs,
+  collectionGroup, collection, query, where, orderBy, getDocs,
   addDoc, updateDoc, getDoc, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 
@@ -19,51 +19,41 @@ async function doLogin() {
   btn.disabled = true;
 
   try {
-    // 전체 과정을 순서대로 검색해서 수강생 찾기 (컬렉션 그룹 색인 불필요)
-    const coursesSnap = await getDocs(collection(db, 'courses'));
-    let match = null;
-    let matchCourseId = null;
-    let matchCourseName = null;
+    // collectionGroup 쿼리로 모든 과정의 수강생을 단일 쿼리로 검색 (N+1 → 2 쿼리)
+    const q = query(collectionGroup(db, 'students'), where('empNo', '==', empNo));
+    const snap = await getDocs(q);
+    const found = snap.docs.find(d => d.data().name === name);
 
-    for (const courseDoc of coursesSnap.docs) {
-      const q = query(collection(db, 'courses', courseDoc.id, 'students'), where('empNo', '==', empNo));
-      const snap = await getDocs(q);
-      const found = snap.docs.find(d => d.data().name === name);
-      if (found) {
-        match = found;
-        matchCourseId = courseDoc.id;
-        matchCourseName = courseDoc.data().name;
-        break;
-      }
-    }
-
-    if (!match) {
+    if (!found) {
       showLoginError('등록된 수강생 정보를 찾을 수 없습니다.\n이름 또는 교번을 확인하거나 담당자에게 문의해 주세요.');
       reset(); return;
     }
 
-    const studentData = match.data();
+    const studentData = found.data();
     if (studentData.completed) {
       showLoginError('이미 설문에 참여하셨습니다.\n감사합니다!');
       reset(); return;
     }
 
-    const courseName = matchCourseName;
+    const matchCourseId = found.ref.parent.parent.id;
+    const courseDoc = await getDoc(found.ref.parent.parent);
+    const matchCourseName = courseDoc.data().name;
+
     const instrSnap = await getDocs(query(collection(db, 'courses', matchCourseId, 'instructors'), orderBy('createdAt')));
     const instructors = instrSnap.docs.map(d => d.data());
 
     currentUser = {
       name, empNo,
-      course: courseName,
+      course: matchCourseName,
       courseId: matchCourseId,
-      studentRef: match.ref,
+      studentRef: found.ref,
       instructors
     };
 
     document.getElementById('page-login').style.display = 'none';
     document.getElementById('page-survey').style.display = 'block';
     document.getElementById('confirm-greeting').textContent = `${name}님, 안녕하세요!`;
-    document.getElementById('confirm-course-name').textContent = courseName;
+    document.getElementById('confirm-course-name').textContent = matchCourseName;
     updateSurveyMeta(instructors.length);
     document.getElementById('screen-confirm').style.display = 'block';
     window.scrollTo({ top: 0, behavior: 'smooth' });

@@ -18,6 +18,11 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // collectionGroup 쿼리용 (로그인 시 단일 쿼리로 수강생 검색)
+    match /{path=**}/students/{studentId} {
+      allow read: if true;
+    }
+
     match /responses/{responseId} {
       allow read: if false;
       allow create: if true;
