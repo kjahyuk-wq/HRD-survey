@@ -1,8 +1,9 @@
-import { db } from './firebase-config.js';
+import { db, auth } from './firebase-config.js';
 import {
   collectionGroup, collection, query, where, orderBy, getDocs,
   addDoc, updateDoc, getDoc, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
+import { signInAnonymously } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
 
 let currentUser = { name: '', empNo: '', course: '', courseId: '', studentRef: null, instructors: [] };
 
@@ -19,7 +20,12 @@ async function doLogin() {
   btn.disabled = true;
 
   try {
-    // collectionGroup 쿼리로 모든 과정의 수강생을 단일 쿼리로 검색 (N+1 → 2 쿼리)
+    // Firestore 보안 규칙 통과를 위한 익명 로그인 (교육생에게 보이지 않음)
+    if (!auth.currentUser) {
+      await signInAnonymously(auth);
+    }
+
+    // collectionGroup 쿼리로 모든 과정의 수강생을 단일 쿼리로 검색
     const q = query(collectionGroup(db, 'students'), where('empNo', '==', empNo));
     const snap = await getDocs(q);
     const found = snap.docs.find(d => d.data().name === name);
@@ -127,7 +133,6 @@ function renderInstructorQuestions(instructors) {
 }
 
 async function submitSurvey() {
-  // Q1-Q9 리커트 수집
   const answers = [];
   for (let i = 1; i <= 9; i++) {
     const selected = document.querySelector(`input[name="q${i}"]:checked`);
@@ -139,10 +144,8 @@ async function submitSurvey() {
     answers.push(parseInt(selected.value));
   }
 
-  // Q10 주관식 (선택)
   const q10Comment = document.getElementById('q10-comment').value.trim();
 
-  // Q11-Q16 인구통계 수집 (필수)
   const demographics = {};
   for (let i = 11; i <= 16; i++) {
     const selected = document.querySelector(`input[name="q${i}"]:checked`);
@@ -154,7 +157,6 @@ async function submitSurvey() {
     demographics[`q${i}`] = selected.value;
   }
 
-  // 강사 평가 수집
   const instructorScores = {};
   for (let idx = 0; idx < currentUser.instructors.length; idx++) {
     const selected = document.querySelector(`input[name="instructor_${idx}"]:checked`);
@@ -170,7 +172,6 @@ async function submitSurvey() {
     instructorScores[key] = parseInt(selected.value);
   }
 
-  // 후반 주관식 3문항 (선택)
   const comment1 = document.getElementById('comment1').value.trim();
   const comment2 = document.getElementById('comment2').value.trim();
   const comment3 = document.getElementById('comment3').value.trim();

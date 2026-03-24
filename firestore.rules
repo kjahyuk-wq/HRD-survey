@@ -2,30 +2,44 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // 기존 규칙 (만족도조사)
+    // 관리자: Firebase Email 인증 사용자
+    function isAdmin() {
+      return request.auth != null && request.auth.token.email != null;
+    }
+
+    // 인증된 사용자: 관리자 + 익명(교육생)
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
     match /courses/{courseId} {
-      allow read: if true;
-      allow write: if false;
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+
+      // 강사 정보 (설문 문항 생성에 필요)
+      match /instructors/{instructorId} {
+        allow read: if isAuthenticated();
+        allow write: if isAdmin();
+      }
+
+      // 수강생 정보 (익명 교육생은 읽기·완료처리만, 관리자는 전체)
+      match /students/{studentId} {
+        allow read: if isAuthenticated();
+        allow create: if isAdmin();
+        allow update: if isAuthenticated(); // 교육생 설문 완료 처리
+        allow delete: if isAdmin();
+      }
+
+      // 설문 응답 (관리자만 읽기, 익명 교육생은 제출만)
+      match /responses/{responseId} {
+        allow read: if isAdmin();
+        allow create: if isAuthenticated();
+      }
     }
 
-    match /courses/{courseId}/instructors/{instructorId} {
-      allow read: if true;
-      allow write: if false;
-    }
-
-    match /courses/{courseId}/students/{studentId} {
-      allow read: if true;
-      allow write: if false;
-    }
-
-    // collectionGroup 쿼리용 (로그인 시 단일 쿼리로 수강생 검색)
+    // collectionGroup 쿼리용 (교육생 로그인 시 단일 쿼리 검색)
     match /{path=**}/students/{studentId} {
-      allow read: if true;
-    }
-
-    match /responses/{responseId} {
-      allow read: if false;
-      allow create: if true;
+      allow read: if isAuthenticated();
     }
 
   }
