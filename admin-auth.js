@@ -4,7 +4,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
 
 // Firebase Console > Authentication > Users 에 이 이메일로 계정을 생성하세요
-const ADMIN_EMAIL = 'admin@hrd-data.firebaseapp.com';
+const ADMIN_EMAIL = 'kjahyuk@korea.kr';
 
 export async function checkLogin() {
   const pw = document.getElementById('pw-input').value;
