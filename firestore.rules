@@ -30,10 +30,11 @@ service cloud.firestore {
         allow delete: if isAdmin();
       }
 
-      // 설문 응답 (관리자만 읽기, 익명 교육생은 제출만)
+      // 설문 응답 (관리자만 읽기·삭제, 익명 교육생은 제출만)
       match /responses/{responseId} {
         allow read: if isAdmin();
         allow create: if isAuthenticated();
+        allow delete: if isAdmin();
       }
     }
 
