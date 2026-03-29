@@ -2,7 +2,7 @@ import { auth } from './firebase-config.js';
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
 
 import { checkLogin, logout } from './admin-auth.js';
-import { loadCourseList, addCourse, deleteCourse, toggleInstructors, addInstructor, deleteInstructor } from './admin-courses.js';
+import { loadCourseList, addCourse, deleteCourse, toggleInstructors, addInstructor, deleteInstructor, handleInstExcelUpload, uploadExcelInstructors } from './admin-courses.js';
 import { loadStudents, addStudent, deleteStudent, toggleSelectAll, updateBulkDeleteBtn, deleteSelectedStudents, handleExcelUpload, uploadExcelStudents } from './admin-students.js';
 import { populateStatsSelect, loadStats } from './admin-stats.js';
 import { exportStatsExcel, exportResultsExcel } from './admin-excel.js';
@@ -55,6 +55,8 @@ window.updateBulkDeleteBtn = updateBulkDeleteBtn;
 window.deleteSelectedStudents = deleteSelectedStudents;
 window.handleExcelUpload = handleExcelUpload;
 window.uploadExcelStudents = uploadExcelStudents;
+window.handleInstExcelUpload = handleInstExcelUpload;
+window.uploadExcelInstructors = uploadExcelInstructors;
 window.loadStats = loadStats;
 window.exportStatsExcel = exportStatsExcel;
 window.exportResultsExcel = exportResultsExcel;
