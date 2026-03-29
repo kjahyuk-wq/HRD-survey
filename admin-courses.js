@@ -206,18 +206,31 @@ async function loadInstructors(courseName, panelIdx) {
 function renderInstructorPanel(courseName, panelIdx, instructors) {
   const panel = document.getElementById(`inst-panel-${panelIdx}`);
   const ec = escapeAttr(courseName);
+
   const listHtml = instructors.length === 0
     ? '<div class="inst-empty">등록된 강사가 없습니다. 강사를 추가해 주세요.</div>'
-    : instructors.map((inst) => {
-        const name = typeof inst === 'string' ? inst : inst.name;
-        const edu  = typeof inst === 'string' ? '' : (inst.education || '');
-        const label = edu ? `<span class="inst-edu-tag">${escapeHtml(edu)}</span> ${escapeHtml(name)}` : escapeHtml(name);
-        const en = escapeAttr(name), ee = escapeAttr(edu), eid = escapeAttr(inst._id || '');
-        return `<div class="inst-item">
-          <span class="inst-label">${label}</span>
-          <button class="delete-btn" onclick="deleteInstructor('${ec}', ${panelIdx}, '${en}', '${ee}', '${eid}', this)">삭제</button>
-        </div>`;
-      }).join('');
+    : `<div class="student-bulk-actions">
+        <button class="bulk-delete-btn" id="inst-bulk-delete-btn-${panelIdx}" onclick="deleteSelectedInstructors('${ec}', ${panelIdx})" disabled>선택 삭제</button>
+      </div>
+      <table class="student-table">
+        <thead><tr>
+          <th style="width:36px"><input type="checkbox" id="inst-select-all-${panelIdx}" onclick="toggleInstSelectAll(${panelIdx}, this)"></th>
+          <th>강의명</th><th>강사명</th><th></th>
+        </tr></thead>
+        <tbody>
+          ${instructors.map((inst) => {
+            const name = typeof inst === 'string' ? inst : inst.name;
+            const edu  = typeof inst === 'string' ? '' : (inst.education || '');
+            const en = escapeAttr(name), ee = escapeAttr(edu), eid = escapeAttr(inst._id || '');
+            return `<tr>
+              <td><input type="checkbox" class="inst-checkbox-${panelIdx}" data-id="${eid}" data-name="${en}" onchange="updateInstBulkDeleteBtn(${panelIdx})"></td>
+              <td>${escapeHtml(edu)}</td>
+              <td>${escapeHtml(name)}</td>
+              <td><button class="delete-btn" onclick="deleteInstructor('${ec}', ${panelIdx}, '${en}', '${ee}', '${eid}', this)">삭제</button></td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`;
 
   panel.innerHTML = `
     <div class="inst-add-row">
@@ -264,4 +277,41 @@ export async function deleteInstructor(courseName, panelIdx, name, education, in
     await deleteDoc(doc(db, 'courses', courseId, 'instructors', instId));
     await loadInstructors(courseName, panelIdx);
   } catch (e) { alert('삭제 중 오류가 발생했습니다.'); btnEl.disabled = false; btnEl.textContent = '삭제'; }
+}
+
+export function toggleInstSelectAll(panelIdx, checkbox) {
+  document.querySelectorAll(`.inst-checkbox-${panelIdx}`).forEach(cb => cb.checked = checkbox.checked);
+  updateInstBulkDeleteBtn(panelIdx);
+}
+
+export function updateInstBulkDeleteBtn(panelIdx) {
+  const all = document.querySelectorAll(`.inst-checkbox-${panelIdx}`);
+  const checked = document.querySelectorAll(`.inst-checkbox-${panelIdx}:checked`);
+  const btn = document.getElementById(`inst-bulk-delete-btn-${panelIdx}`);
+  const selectAll = document.getElementById(`inst-select-all-${panelIdx}`);
+  if (btn) {
+    btn.disabled = checked.length === 0;
+    btn.textContent = checked.length > 0 ? `선택 삭제 (${checked.length}명)` : '선택 삭제';
+  }
+  if (selectAll && all.length > 0) {
+    selectAll.indeterminate = checked.length > 0 && checked.length < all.length;
+    selectAll.checked = checked.length === all.length;
+  }
+}
+
+export async function deleteSelectedInstructors(courseName, panelIdx) {
+  const checked = document.querySelectorAll(`.inst-checkbox-${panelIdx}:checked`);
+  if (!checked.length) return;
+  const count = checked.length;
+  if (!confirm(`선택한 ${count}명의 강사를 삭제하시겠습니까?`)) return;
+  const btn = document.getElementById(`inst-bulk-delete-btn-${panelIdx}`);
+  btn.disabled = true; btn.textContent = '삭제 중...';
+  try {
+    const courseId = state.courseIdMap[courseName];
+    await Promise.all(Array.from(checked).map(cb => deleteDoc(doc(db, 'courses', courseId, 'instructors', cb.dataset.id))));
+    await loadInstructors(courseName, panelIdx);
+  } catch (e) {
+    alert('삭제 중 오류가 발생했습니다.');
+    btn.disabled = false; btn.textContent = `선택 삭제 (${count}명)`;
+  }
 }
