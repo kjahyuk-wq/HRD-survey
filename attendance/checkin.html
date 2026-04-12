@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <meta name="theme-color" content="#003d99">
+  <title>출석 체크인 - HRD Survey</title>
+  <link rel="stylesheet" href="attendance.css">
+  <style>
+    body { background: #f0f4f8; }
+    .page-wrap { max-width: 480px; margin: 0 auto; min-height: 100vh; }
+    .qr-img-wrap { position: relative; }
+    canvas#qr-canvas { display: block; margin: 0 auto; max-width: 100%; }
+    .expired-overlay {
+      position: absolute; inset: 0;
+      background: rgba(255,255,255,0.9);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      border-radius: 12px;
+      gap: 0.8rem;
+    }
+    .expired-icon { font-size: 3rem; }
+    .expired-text { font-size: 1rem; font-weight: 700; color: #dc2626; }
+    .course-picker { border: 1.5px solid #cbd5e1; border-radius: 10px; padding: 0.6rem; width: 100%; font-size: 1rem; }
+    .course-item {
+      padding: 0.8rem 1rem;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 10px;
+      cursor: pointer;
+      margin-bottom: 0.5rem;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .course-item:hover { border-color: #0066cc; background: #eff6ff; }
+    .course-item .c-name { font-weight: 600; font-size: 0.95rem; }
+    .course-item .c-dates { font-size: 0.78rem; color: #64748b; margin-top: 0.2rem; }
+  </style>
+</head>
+<body>
+<div class="page-wrap">
+  <div class="warning-banner">
+    본인 외 대리 출석 적발 시 학칙에 의거하여 강제 퇴교 처리 후 소속기관에 통보됩니다.
+  </div>
+
+  <div class="att-header">
+    <div>
+      <h1>📋 출석 체크인</h1>
+      <div class="sub">HRD 인력개발교육원</div>
+    </div>
+    <div id="today-date" style="font-size:0.82rem;opacity:0.85;"></div>
+  </div>
+
+  <!-- 스크린 1: 로그인 -->
+  <div id="screen-login" class="screen active">
+    <div class="card">
+      <h2 style="font-size:1.05rem;font-weight:700;margin-bottom:1rem;">본인 확인</h2>
+      <p style="font-size:0.85rem;color:#64748b;margin-bottom:1.2rem;line-height:1.6;">
+        리플릿에 인쇄된 <strong>교번</strong>과 <strong>이름</strong>을 입력해 주세요.
+      </p>
+      <div class="form-group">
+        <label>이름</label>
+        <input type="text" id="input-name" placeholder="홍길동" maxlength="20" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label>교번</label>
+        <input type="number" id="input-empno" placeholder="리플릿의 교번 숫자" min="1" inputmode="numeric">
+      </div>
+      <div id="login-error" class="error-text" style="display:none;margin-bottom:0.8rem;"></div>
+      <button class="btn btn-primary" id="login-btn" onclick="doLogin()">확인하기</button>
+    </div>
+  </div>
+
+  <!-- 스크린 2: 과정 선택 (동일 교번이 여러 과정인 경우) -->
+  <div id="screen-course-pick" class="screen">
+    <div class="card">
+      <h2 style="font-size:1.05rem;font-weight:700;margin-bottom:0.5rem;">오늘 수강 과정 선택</h2>
+      <p style="font-size:0.85rem;color:#64748b;margin-bottom:1rem;">오늘 출석할 과정을 선택해 주세요.</p>
+      <div id="course-picker-list"></div>
+    </div>
+  </div>
+
+  <!-- 스크린 3: 휴강일 / 비수업일 -->
+  <div id="screen-no-class" class="screen">
+    <div class="card">
+      <div class="status-msg">
+        <div class="status-icon">🏖️</div>
+        <div class="status-title" id="no-class-title">오늘은 휴강일입니다</div>
+        <div class="status-desc" id="no-class-desc">출석 체크가 비활성화되어 있습니다.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 스크린 4: 이미 출석 완료 -->
+  <div id="screen-already" class="screen">
+    <div class="card">
+      <div class="status-msg">
+        <div class="status-icon">✅</div>
+        <div class="status-title">이미 출석 처리되었습니다</div>
+        <div class="status-desc" id="already-desc"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 스크린 5: 출석 시간 외 -->
+  <div id="screen-no-session" class="screen">
+    <div class="card">
+      <div class="status-msg">
+        <div class="status-icon">⏰</div>
+        <div class="status-title">현재 출석 시간이 아닙니다</div>
+        <div class="status-desc" id="no-session-desc"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 스크린 6: QR 표시 -->
+  <div id="screen-qr" class="screen">
+    <div class="card">
+      <div class="qr-wrap">
+        <div>
+          <div class="qr-name" id="qr-student-name"></div>
+          <div style="text-align:center;">
+            <span class="qr-session-badge" id="qr-session-badge"></span>
+          </div>
+        </div>
+        <div class="qr-img-wrap" id="qr-img-wrap">
+          <canvas id="qr-canvas" width="280" height="280"></canvas>
+          <div class="expired-overlay" id="expired-overlay" style="display:none;">
+            <div class="expired-icon">⏱</div>
+            <div class="expired-text">QR이 만료되었습니다</div>
+            <button class="btn btn-secondary btn-sm" onclick="reissueQr()">다시 발급받기</button>
+          </div>
+        </div>
+        <div class="countdown-wrap">
+          <div class="countdown" id="countdown">5:00</div>
+          <div class="countdown-label">유효시간 남은 시간</div>
+        </div>
+        <div class="qr-meta">
+          QR 코드를 강의실 문 앞 패드에 보여주세요
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- qrious: canvas 기반 QR 라이브러리 -->
+<script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
+<script type="module" src="checkin.js"></script>
+</body>
+</html>

@@ -1,0 +1,398 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #f0f4f8;
+  color: #1e293b;
+  min-height: 100vh;
+}
+
+/* ── 헤더 ── */
+.att-header {
+  background: linear-gradient(135deg, #003d99, #0066cc);
+  color: #fff;
+  padding: 1.1rem 1.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  box-shadow: 0 2px 12px rgba(0,61,153,0.25);
+}
+.att-header h1 { font-size: 1.1rem; font-weight: 700; }
+.att-header .sub { font-size: 0.78rem; opacity: 0.8; margin-top: 0.15rem; }
+
+/* ── 경고 배너 ── */
+.warning-banner {
+  background: #dc2626;
+  color: #fff;
+  text-align: center;
+  padding: 0.75rem 1rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+}
+
+/* ── 카드 ── */
+.card {
+  background: #fff;
+  border-radius: 16px;
+  padding: 1.4rem 1.2rem;
+  margin: 1rem auto;
+  max-width: 480px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+}
+
+.container { max-width: 960px; margin: 0 auto; padding: 1rem; }
+
+/* ── 폼 ── */
+.form-group { margin-bottom: 1rem; }
+.form-group label { display: block; font-size: 0.85rem; font-weight: 600; color: #475569; margin-bottom: 0.4rem; }
+.form-group input, .form-group select {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 10px;
+  font-size: 1rem;
+  color: #1e293b;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.form-group input:focus, .form-group select:focus { border-color: #0066cc; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary { background: #0066cc; color: #fff; width: 100%; }
+.btn-primary:hover:not(:disabled) { background: #0052a3; }
+.btn-secondary { background: #e2eaf6; color: #0066cc; }
+.btn-secondary:hover:not(:disabled) { background: #c7daf5; }
+.btn-danger { background: #dc2626; color: #fff; }
+.btn-sm { padding: 0.45rem 0.9rem; font-size: 0.85rem; }
+
+/* ── 스크린 전환 ── */
+.screen { display: none; }
+.screen.active { display: block; }
+
+/* ── QR 영역 ── */
+.qr-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.2rem 0;
+}
+#qr-canvas {
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+}
+.qr-meta { text-align: center; font-size: 0.88rem; color: #64748b; }
+.qr-name { font-size: 1.1rem; font-weight: 700; color: #1e293b; margin-bottom: 0.3rem; }
+.qr-session-badge {
+  display: inline-block;
+  padding: 0.3rem 0.8rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+.badge-single { background: #dbeafe; color: #1d4ed8; }
+.badge-morning { background: #fef3c7; color: #92400e; }
+.badge-afternoon { background: #ede9fe; color: #6d28d9; }
+
+/* ── 카운트다운 ── */
+.countdown-wrap { text-align: center; }
+.countdown {
+  font-size: 2.4rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #0066cc;
+  line-height: 1;
+}
+.countdown.urgent { color: #dc2626; animation: pulse 1s ease-in-out infinite; }
+.countdown-label { font-size: 0.78rem; color: #94a3b8; margin-top: 0.25rem; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* ── 상태 메시지 ── */
+.status-msg {
+  text-align: center;
+  padding: 2rem 1rem;
+}
+.status-icon { font-size: 3.5rem; margin-bottom: 0.8rem; }
+.status-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.5rem; }
+.status-desc { font-size: 0.88rem; color: #64748b; line-height: 1.6; }
+
+.error-text { color: #dc2626; font-size: 0.85rem; margin-top: 0.5rem; }
+
+/* ── 스캔 페이지 ── */
+.scan-page { max-width: 640px; margin: 0 auto; padding: 1rem; }
+
+.session-info {
+  background: #fff;
+  border-radius: 12px;
+  padding: 0.9rem 1.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.8rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+.session-label { font-size: 0.8rem; color: #64748b; }
+.session-value { font-size: 1rem; font-weight: 700; color: #0066cc; }
+
+#qr-reader {
+  background: #000;
+  border-radius: 16px;
+  overflow: hidden;
+  width: 100% !important;
+}
+
+/* html5-qrcode 스타일 오버라이드 */
+#qr-reader video { border-radius: 16px; }
+#qr-reader__scan_region { border-radius: 16px; }
+#qr-reader__dashboard { display: none !important; }
+
+.scan-result {
+  border-radius: 16px;
+  padding: 1.5rem;
+  text-align: center;
+  margin: 0.8rem 0;
+  display: none;
+}
+.scan-result.success { background: #dcfce7; border: 2px solid #16a34a; }
+.scan-result.error { background: #fee2e2; border: 2px solid #dc2626; }
+.scan-result.warning { background: #fef3c7; border: 2px solid #d97706; }
+.scan-result-icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
+.scan-result-text { font-size: 1.15rem; font-weight: 700; color: #1e293b; }
+.scan-result-sub { font-size: 0.85rem; color: #475569; margin-top: 0.3rem; }
+
+/* 오늘 출석자 목록 */
+.attendance-today {
+  background: #fff;
+  border-radius: 16px;
+  padding: 1rem;
+  margin-top: 0.8rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+.attendance-today h3 { font-size: 0.9rem; font-weight: 700; color: #475569; margin-bottom: 0.6rem; }
+.att-list-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 0.88rem;
+}
+.att-list-item:last-child { border-bottom: none; }
+.att-empno { color: #64748b; font-size: 0.8rem; }
+.att-time { color: #94a3b8; font-size: 0.78rem; }
+.att-badge {
+  font-size: 0.72rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+/* ── 관리자 대시보드 ── */
+.tab-bar {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+  background: #fff;
+  border-radius: 12px;
+  padding: 0.4rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+.tab-btn {
+  flex: 1;
+  padding: 0.6rem;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.tab-btn.active { background: #0066cc; color: #fff; }
+
+/* 과정 설정 폼 */
+.config-section { margin-bottom: 1.5rem; }
+.config-section h3 {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #475569;
+  margin-bottom: 0.8rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.sessions-toggle { display: flex; gap: 0.6rem; }
+.session-opt {
+  flex: 1;
+  padding: 0.65rem;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  text-align: center;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  color: #475569;
+}
+.session-opt.selected { border-color: #0066cc; background: #eff6ff; color: #0066cc; }
+
+.time-row { display: flex; gap: 0.6rem; align-items: center; }
+.time-row input[type="time"] {
+  flex: 1;
+  padding: 0.6rem 0.8rem;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 0.92rem;
+}
+.time-sep { color: #94a3b8; font-size: 0.85rem; white-space: nowrap; }
+
+/* 날짜 태그 */
+.date-tags { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
+.date-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.date-tag-schedule { background: #dbeafe; color: #1d4ed8; }
+.date-tag-holiday { background: #fee2e2; color: #dc2626; }
+.date-tag button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: inherit;
+  opacity: 0.7;
+  padding: 0;
+  line-height: 1;
+}
+.date-tag button:hover { opacity: 1; }
+
+.date-add-row { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem; }
+.date-add-row input[type="date"] {
+  flex: 1;
+  padding: 0.55rem 0.8rem;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 0.88rem;
+}
+
+/* 출석 현황 테이블 */
+.att-table-wrap { overflow-x: auto; margin-top: 0.8rem; }
+table.att-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+.att-table th {
+  background: #f8faff;
+  color: #475569;
+  font-weight: 600;
+  padding: 0.6rem 0.8rem;
+  border-bottom: 2px solid #e2e8f0;
+  white-space: nowrap;
+  text-align: left;
+}
+.att-table td {
+  padding: 0.55rem 0.8rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+.att-table tr:hover td { background: #f8faff; }
+.att-table .absent td { background: #fff5f5; }
+.att-table .absent td:first-child { border-left: 3px solid #dc2626; }
+
+.status-chip {
+  display: inline-block;
+  padding: 0.2rem 0.55rem;
+  border-radius: 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.chip-present { background: #dcfce7; color: #15803d; }
+.chip-absent { background: #fee2e2; color: #dc2626; }
+.chip-holiday { background: #f1f5f9; color: #64748b; }
+
+/* 출석률 요약 */
+.rate-summary {
+  display: flex;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+.rate-card {
+  flex: 1;
+  min-width: 100px;
+  background: #fff;
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  text-align: center;
+}
+.rate-card .num { font-size: 1.5rem; font-weight: 700; color: #0066cc; }
+.rate-card .label { font-size: 0.75rem; color: #64748b; margin-top: 0.2rem; }
+.rate-card.highlight .num { color: #dc2626; }
+
+/* 필터 바 */
+.filter-bar {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 0.8rem;
+}
+.filter-bar select, .filter-bar input {
+  padding: 0.5rem 0.7rem;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
+/* 로딩 */
+.loading { text-align: center; color: #94a3b8; padding: 2rem; font-size: 0.9rem; }
+
+/* 공휴일 목록 */
+.holiday-preset {
+  font-size: 0.78rem;
+  color: #64748b;
+  margin-top: 0.4rem;
+  line-height: 1.6;
+}
+.holiday-preset span {
+  display: inline-block;
+  background: #f1f5f9;
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+  margin: 0.1rem;
+}
+
+/* 반응형 */
+@media (max-width: 480px) {
+  .att-header h1 { font-size: 1rem; }
+  .card { margin: 0.6rem; }
+  .rate-summary { gap: 0.5rem; }
+}

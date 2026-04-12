@@ -1,0 +1,9 @@
+rules_version = '2';
+// 로컬 테스트 전용 - 프로덕션 적용 금지
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}

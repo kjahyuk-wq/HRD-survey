@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>출결 관리 - HRD 관리자</title>
+  <link rel="stylesheet" href="attendance.css">
+  <style>
+    body { background: #f0f4f8; }
+
+    .login-box {
+      max-width: 360px; margin: 4rem auto; padding: 2rem;
+      background: #fff; border-radius: 20px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.10);
+      text-align: center;
+    }
+    .login-box h2 { font-size: 1.1rem; margin-bottom: 1.2rem; }
+
+    .section-card {
+      background: #fff; border-radius: 16px;
+      padding: 1.2rem; margin-bottom: 1rem;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    }
+    .section-card h3 {
+      font-size: 0.95rem; font-weight: 700;
+      color: #334155; margin-bottom: 1rem;
+      padding-bottom: 0.5rem; border-bottom: 1.5px solid #e2e8f0;
+    }
+
+    /* 과정 선택 */
+    .course-select-wrap { display: flex; gap: 0.6rem; align-items: center; }
+    #course-select { flex: 1; padding: 0.65rem 0.8rem; border: 1.5px solid #cbd5e1; border-radius: 10px; font-size: 0.92rem; }
+
+    /* 설정 그리드 */
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+    @media(max-width:480px) { .two-col { grid-template-columns: 1fr; } }
+
+    .time-group { }
+    .time-group label { display: block; font-size: 0.8rem; font-weight: 600; color: #64748b; margin-bottom: 0.3rem; }
+    .time-group input { width: 100%; padding: 0.55rem 0.8rem; border: 1.5px solid #cbd5e1; border-radius: 8px; font-size: 0.92rem; }
+    .time-group input:focus { outline: none; border-color: #0066cc; }
+
+    /* 날짜 입력 */
+    .date-input-row { display: flex; gap: 0.5rem; align-items: flex-end; flex-wrap: wrap; margin-top: 0.5rem; }
+    .date-input-row input[type="date"] {
+      padding: 0.55rem 0.8rem; border: 1.5px solid #cbd5e1; border-radius: 8px; font-size: 0.88rem; flex: 1; min-width: 140px;
+    }
+    .date-input-row input:focus { outline: none; border-color: #0066cc; }
+
+    /* 공휴일 안내 */
+    .holiday-info { font-size: 0.78rem; color: #64748b; background: #f8faff; border-radius: 8px; padding: 0.6rem 0.8rem; margin-top: 0.5rem; }
+
+    /* 필터 */
+    .filter-row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+    .filter-row select, .filter-row input { padding: 0.5rem 0.7rem; border: 1.5px solid #cbd5e1; border-radius: 8px; font-size: 0.85rem; }
+
+    /* 탭 컨텐츠 */
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* 저장 버튼 영역 */
+    .save-row { display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 1rem; }
+
+    /* 미출석 강조 */
+    .absent-row td { color: #dc2626; }
+    .absent-row td:first-child { font-weight: 600; }
+
+    /* 테스트 데이터 시드 */
+    .seed-box { background: #fffbeb; border: 1.5px dashed #fbbf24; border-radius: 10px; padding: 0.8rem; margin-top: 0.8rem; font-size: 0.82rem; }
+    .seed-box strong { display: block; margin-bottom: 0.4rem; color: #92400e; }
+  </style>
+</head>
+<body>
+
+<!-- 로그인 -->
+<div id="login-screen">
+  <div class="login-box">
+    <div style="font-size:2.5rem;margin-bottom:0.6rem;">📊</div>
+    <h2>출결 관리 시스템</h2>
+    <p style="font-size:0.83rem;color:#64748b;margin-bottom:1.2rem;">관리자 암호를 입력하세요 (테스트: admin)</p>
+    <div class="form-group">
+      <input type="password" id="admin-pw" placeholder="관리자 암호" style="width:100%;padding:0.7rem;border:1.5px solid #cbd5e1;border-radius:10px;font-size:1rem;">
+    </div>
+    <button class="btn btn-primary" onclick="adminLogin()" style="width:100%;">로그인</button>
+    <div id="login-err" class="error-text" style="margin-top:0.5rem;display:none;"></div>
+  </div>
+</div>
+
+<!-- 대시보드 -->
+<div id="dashboard" style="display:none;">
+  <div class="att-header">
+    <div>
+      <h1>📊 출결 관리</h1>
+      <div class="sub">HRD 인력개발교육원 관리자</div>
+    </div>
+    <div style="display:flex;gap:0.5rem;">
+      <a href="scan.html" class="btn btn-secondary btn-sm" style="background:rgba(255,255,255,0.15);color:#fff;text-decoration:none;">📷 QR 스캔</a>
+      <button class="btn btn-secondary btn-sm" onclick="adminLogout()" style="background:rgba(255,255,255,0.15);color:#fff;">로그아웃</button>
+    </div>
+  </div>
+
+  <div class="container">
+
+    <!-- 과정 선택 -->
+    <div class="section-card">
+      <h3>교육과정 선택</h3>
+      <div class="course-select-wrap">
+        <select id="course-select" onchange="onCourseChange()">
+          <option value="">-- 과정을 선택하세요 --</option>
+        </select>
+        <button class="btn btn-secondary btn-sm" onclick="loadCourses()">새로고침</button>
+      </div>
+      <div id="course-loading" class="loading" style="display:none;">불러오는 중...</div>
+
+      <!-- 테스트 데이터 시드 -->
+      <div class="seed-box">
+        <strong>🧪 테스트 데이터 생성</strong>
+        빠른 테스트를 위해 샘플 과정 + 학생 + 출석 설정을 생성합니다.
+        <br><br>
+        <button class="btn btn-secondary btn-sm" onclick="seedTestData()">테스트 데이터 생성</button>
+        <span id="seed-status" style="margin-left:0.5rem;font-size:0.8rem;color:#64748b;"></span>
+      </div>
+    </div>
+
+    <!-- 탭 -->
+    <div class="tab-bar" id="main-tabs" style="display:none;">
+      <button class="tab-btn active" onclick="switchTab('config')">⚙️ 출석 설정</button>
+      <button class="tab-btn" onclick="switchTab('records')">📋 출석 현황</button>
+    </div>
+
+    <!-- 탭: 출석 설정 -->
+    <div id="tab-config" class="tab-content active">
+      <div class="section-card">
+        <h3>하루 출석 횟수</h3>
+        <div class="sessions-toggle">
+          <div class="session-opt selected" id="opt-1" onclick="selectSessions(1)">1회 출석</div>
+          <div class="session-opt" id="opt-2" onclick="selectSessions(2)">2회 출석 (오전/오후)</div>
+        </div>
+      </div>
+
+      <div class="section-card" id="time-config" style="display:none;">
+        <h3>출석 시간 설정</h3>
+        <div class="two-col">
+          <div class="time-group">
+            <label>오전 출석 시작</label>
+            <input type="time" id="morning-start" value="09:00">
+          </div>
+          <div class="time-group">
+            <label>오전 출석 종료</label>
+            <input type="time" id="morning-end" value="12:00">
+          </div>
+          <div class="time-group">
+            <label>오후 출석 시작</label>
+            <input type="time" id="afternoon-start" value="13:00">
+          </div>
+          <div class="time-group">
+            <label>오후 출석 종료</label>
+            <input type="time" id="afternoon-end" value="18:00">
+          </div>
+        </div>
+      </div>
+
+      <div class="section-card">
+        <h3>교육 일정 (수업일)</h3>
+        <div id="schedule-dates" class="date-tags"></div>
+        <div class="date-input-row">
+          <input type="date" id="add-schedule-date">
+          <button class="btn btn-secondary btn-sm" onclick="addScheduleDate()">+ 날짜 추가</button>
+          <button class="btn btn-secondary btn-sm" onclick="addDateRange()">범위 추가</button>
+        </div>
+        <div style="margin-top:0.5rem;display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+          <input type="date" id="range-start" style="padding:0.45rem 0.6rem;border:1.5px solid #cbd5e1;border-radius:8px;font-size:0.82rem;">
+          <span style="font-size:0.82rem;color:#94a3b8;">~</span>
+          <input type="date" id="range-end" style="padding:0.45rem 0.6rem;border:1.5px solid #cbd5e1;border-radius:8px;font-size:0.82rem;">
+          <button class="btn btn-secondary btn-sm" onclick="applyDateRange()">범위 적용</button>
+        </div>
+      </div>
+
+      <div class="section-card">
+        <h3>휴강일 설정</h3>
+        <div class="holiday-info">
+          법정 공휴일(신정·삼일절·어린이날·현충일·광복절·개천절·한글날·성탄절)은 자동 반영됩니다.
+          설날·추석·부처님오신날 등 음력 공휴일은 아래에 수동으로 추가해 주세요.
+        </div>
+        <div id="holiday-dates" class="date-tags" style="margin-top:0.7rem;"></div>
+        <div class="date-input-row">
+          <input type="date" id="add-holiday-date">
+          <button class="btn btn-danger btn-sm" onclick="addHolidayDate()">+ 휴강일 추가</button>
+        </div>
+      </div>
+
+      <div class="save-row">
+        <button class="btn btn-primary" onclick="saveConfig()" id="save-btn">설정 저장</button>
+      </div>
+      <div id="save-status" style="text-align:right;font-size:0.85rem;margin-top:0.4rem;display:none;"></div>
+    </div>
+
+    <!-- 탭: 출석 현황 -->
+    <div id="tab-records" class="tab-content">
+      <!-- 요약 -->
+      <div class="rate-summary" id="rate-summary" style="display:none;">
+        <div class="rate-card">
+          <div class="num" id="rate-total">0</div>
+          <div class="label">전체 교육생</div>
+        </div>
+        <div class="rate-card">
+          <div class="num" id="rate-present">0</div>
+          <div class="label">출석</div>
+        </div>
+        <div class="rate-card highlight">
+          <div class="num" id="rate-absent">0</div>
+          <div class="label">미출석</div>
+        </div>
+        <div class="rate-card">
+          <div class="num" id="rate-pct">0%</div>
+          <div class="label">출석률</div>
+        </div>
+      </div>
+
+      <!-- 필터 -->
+      <div class="section-card">
+        <div class="filter-row">
+          <select id="filter-date" onchange="applyFilter()">
+            <option value="">날짜 전체</option>
+          </select>
+          <select id="filter-session" onchange="applyFilter()">
+            <option value="">회차 전체</option>
+            <option value="single">단일</option>
+            <option value="morning">오전</option>
+            <option value="afternoon">오후</option>
+          </select>
+          <button class="btn btn-secondary btn-sm" onclick="exportExcel()">엑셀 다운로드</button>
+        </div>
+
+        <div class="att-table-wrap">
+          <table class="att-table" id="att-table">
+            <thead>
+              <tr>
+                <th>이름</th><th>교번</th><th>날짜</th><th>회차</th><th>출석시각</th><th>상태</th>
+              </tr>
+            </thead>
+            <tbody id="att-tbody">
+              <tr><td colspan="6" class="loading">과정을 선택하면 출석 현황이 표시됩니다.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- SheetJS for Excel -->
+<script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+<script type="module" src="admin-attendance.js"></script>
+</body>
+</html>

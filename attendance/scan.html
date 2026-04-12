@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QR 스캔 - 출결관리</title>
+  <link rel="stylesheet" href="attendance.css">
+  <style>
+    body { background: #0f172a; color: #f1f5f9; }
+    .scan-page { max-width: 600px; }
+
+    /* 세션 인포 다크 */
+    .session-info { background: #1e293b; }
+    .session-label { color: #94a3b8; }
+    .session-value { color: #60a5fa; }
+
+    /* 결과 오버레이 */
+    .scan-result { border-radius: 16px; padding: 1.5rem; text-align: center; margin: 0.8rem 0; display: none; }
+    .scan-result.success { background: #052e16; border: 2px solid #16a34a; }
+    .scan-result.error   { background: #2c0a0a; border: 2px solid #dc2626; }
+    .scan-result.warning { background: #292010; border: 2px solid #d97706; }
+    .scan-result-icon { font-size: 2.8rem; margin-bottom: 0.4rem; }
+    .scan-result-text { font-size: 1.25rem; font-weight: 700; color: #f1f5f9; }
+    .scan-result-sub { font-size: 0.85rem; color: #94a3b8; margin-top: 0.4rem; }
+
+    /* 출석자 목록 다크 */
+    .attendance-today { background: #1e293b; }
+    .attendance-today h3 { color: #94a3b8; }
+    .att-list-item { border-bottom-color: #334155; }
+    .att-empno { color: #94a3b8; }
+    .att-time { color: #64748b; }
+
+    /* 카운터 */
+    .count-bar {
+      display: flex; gap: 1rem;
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 0.8rem 1rem;
+      margin-bottom: 0.8rem;
+    }
+    .count-item { text-align: center; flex: 1; }
+    .count-num { font-size: 1.6rem; font-weight: 700; color: #60a5fa; }
+    .count-label { font-size: 0.72rem; color: #64748b; }
+
+    /* Wake lock 상태 */
+    .wake-status {
+      font-size: 0.75rem;
+      color: #64748b;
+      text-align: right;
+      margin-bottom: 0.4rem;
+    }
+    .wake-status.active { color: #22c55e; }
+
+    /* html5-qrcode 오버라이드 */
+    #qr-reader { background: #000 !important; border-radius: 16px !important; overflow: hidden; }
+    #qr-reader video { width: 100% !important; border-radius: 16px; }
+    #qr-reader__scan_region { border-radius: 16px; }
+    #qr-reader__dashboard { display: none !important; }
+    #qr-reader img[alt="Info icon"] { display: none !important; }
+  </style>
+</head>
+<body>
+
+<div class="att-header">
+  <div>
+    <h1>📷 QR 출석 스캔</h1>
+    <div class="sub" id="scan-date-label"></div>
+  </div>
+  <div id="wake-status" class="wake-status">화면 켜짐 유지 대기</div>
+</div>
+
+<div class="scan-page container">
+
+  <!-- 세션 정보 -->
+  <div class="session-info">
+    <div>
+      <div class="session-label">현재 출석 회차</div>
+      <div class="session-value" id="current-session-display">초기화 중...</div>
+    </div>
+    <div style="text-align:right;">
+      <div class="session-label" id="scan-time-label"></div>
+    </div>
+  </div>
+
+  <!-- 카운터 -->
+  <div class="count-bar">
+    <div class="count-item">
+      <div class="count-num" id="count-total">0</div>
+      <div class="count-label">오늘 총 출석</div>
+    </div>
+    <div class="count-item">
+      <div class="count-num" id="count-morning">0</div>
+      <div class="count-label">오전</div>
+    </div>
+    <div class="count-item">
+      <div class="count-num" id="count-afternoon">0</div>
+      <div class="count-label">오후</div>
+    </div>
+  </div>
+
+  <!-- QR 스캐너 -->
+  <div id="qr-reader"></div>
+
+  <!-- 스캔 결과 -->
+  <div id="scan-result" class="scan-result">
+    <div class="scan-result-icon" id="result-icon"></div>
+    <div class="scan-result-text" id="result-text"></div>
+    <div class="scan-result-sub" id="result-sub"></div>
+  </div>
+
+  <!-- 오늘 출석자 목록 -->
+  <div class="attendance-today">
+    <h3>오늘 출석자 <span id="att-list-count" style="color:#60a5fa;"></span></h3>
+    <div id="att-list-wrap">
+      <div class="loading">스캔하면 출석자가 여기에 표시됩니다.</div>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script type="module" src="scan.js"></script>
+</body>
+</html>
