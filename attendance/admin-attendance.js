@@ -13,6 +13,7 @@ let allAttendance = [];
 let scheduleDates = [];
 let customHolidays = [];
 let dailySessions = 1;
+const todayStr = new Date().toISOString().slice(0, 10);
 
 // ── 관리자 인증 (로컬 테스트용 간이 인증) ──────────────────────────────
 const ADMIN_PW = 'admin';
@@ -101,11 +102,22 @@ async function loadConfig() {
       document.getElementById('morning-end').value = cfg.morningEnd || '12:00';
       document.getElementById('afternoon-start').value = cfg.afternoonStart || '13:00';
       document.getElementById('afternoon-end').value = cfg.afternoonEnd || '18:00';
+
+      // 결재 정보
+      const teamVal = cfg.team || '교육운영팀';
+      const teamEl = document.querySelector(`input[name="team-select"][value="${teamVal}"]`);
+      if (teamEl) teamEl.checked = true;
+      else document.getElementById('team-ops').checked = true;
+      document.getElementById('handler-name').value = cfg.handlerName || '';
+      document.getElementById('manager-name').value = cfg.managerName || '';
     } else {
       currentConfig = null;
       scheduleDates = [];
       customHolidays = [];
       selectSessions(1, true);
+      document.getElementById('team-ops').checked = true;
+      document.getElementById('handler-name').value = '';
+      document.getElementById('manager-name').value = '';
     }
     renderDateTags();
     renderHolidayTags();
@@ -234,6 +246,7 @@ window.saveConfig = async function() {
   const status = document.getElementById('save-status');
   status.style.display = 'none';
 
+  const selectedTeam = document.querySelector('input[name="team-select"]:checked');
   const config = {
     dailySessions,
     morningStart: document.getElementById('morning-start').value || '09:00',
@@ -242,6 +255,9 @@ window.saveConfig = async function() {
     afternoonEnd: document.getElementById('afternoon-end').value || '18:00',
     scheduleDates: [...scheduleDates].sort(),
     customHolidays: [...customHolidays].sort(),
+    team: selectedTeam?.value || '교육운영팀',
+    handlerName: document.getElementById('handler-name').value.trim(),
+    managerName: document.getElementById('manager-name').value.trim(),
     updatedAt: serverTimestamp()
   };
 
@@ -262,163 +278,585 @@ window.saveConfig = async function() {
 };
 
 // ── 출석 현황 로드 ──────────────────────────────
+let currentDateTab = null;
+
 async function loadAttendanceRecords() {
   if (!currentCourseId) return;
 
-  const tbody = document.getElementById('att-tbody');
-  tbody.innerHTML = '<tr><td colspan="6" class="loading">불러오는 중...</td></tr>';
+  const bar = document.getElementById('date-tab-bar');
+  bar.innerHTML = '<span style="font-size:0.85rem;color:#94a3b8;">불러오는 중...</span>';
 
   try {
     const snap = await getDocs(collection(db, 'courses', currentCourseId, 'attendance'));
     allAttendance = snap.docs.map(d => ({ ...d.data(), _id: d.id }));
-
-    // 날짜 필터 옵션 구성
-    const dates = [...new Set(allAttendance.map(a => a.date))].sort();
-    const dateFilter = document.getElementById('filter-date');
-    dateFilter.innerHTML = '<option value="">날짜 전체</option>' +
-      dates.map(d => `<option value="${d}">${formatFullDate(d)}</option>`).join('');
-
-    applyFilter();
+    renderDateTabBar();
     updateSummary();
   } catch(e) {
-    tbody.innerHTML = `<tr><td colspan="6" style="color:#dc2626;">불러오기 실패: ${e.message}</td></tr>`;
+    bar.innerHTML = `<span style="color:#dc2626;">불러오기 실패: ${e.message}</span>`;
   }
 }
 
-window.applyFilter = function() {
-  const dateVal = document.getElementById('filter-date').value;
-  const sessionVal = document.getElementById('filter-session').value;
+function getAllHolidays() {
+  const yr = new Date().getFullYear();
+  return [
+    ...customHolidays,
+    ...getBuiltinHolidays(yr),
+    ...getBuiltinHolidays(yr + 1),
+  ];
+}
 
-  let filtered = [...allAttendance];
-  if (dateVal) filtered = filtered.filter(a => a.date === dateVal);
-  if (sessionVal) filtered = filtered.filter(a => a.session === sessionVal);
+function renderDateTabBar() {
+  const bar = document.getElementById('date-tab-bar');
+  const holidays = getAllHolidays();
+  const dates = [...scheduleDates].filter(d => !holidays.includes(d)).sort();
 
-  renderTable(filtered, dateVal, sessionVal);
-  updateSummary(filtered);
-};
-
-function renderTable(records, dateFilter, sessionFilter) {
-  const tbody = document.getElementById('att-tbody');
-
-  // 미출석자 계산
-  const absentRows = buildAbsentRows(records, dateFilter, sessionFilter);
-
-  // 출석 행 + 미출석 행 합산
-  const presentRows = records.map(a => {
-    const sessionLabel = { single: '단일', morning: '오전', afternoon: '오후' }[a.session] || a.session;
-    const checkedTime = a.checkedAt ? formatTime(a.checkedAt) : '-';
-    return `
-      <tr>
-        <td>${escapeHtml(a.name)}</td>
-        <td>${escapeHtml(a.empNo)}</td>
-        <td>${formatFullDate(a.date)}</td>
-        <td><span class="status-chip chip-${a.session === 'morning' ? 'present' : 'present'}">${sessionLabel}</span></td>
-        <td>${checkedTime}</td>
-        <td><span class="status-chip chip-present">출석</span></td>
-      </tr>`;
-  });
-
-  const absentHtml = absentRows.map(a => `
-    <tr class="absent-row">
-      <td>${escapeHtml(a.name)}</td>
-      <td>${escapeHtml(a.empNo)}</td>
-      <td>${formatFullDate(a.date)}</td>
-      <td>${a.sessionLabel}</td>
-      <td>-</td>
-      <td><span class="status-chip chip-absent">미출석</span></td>
-    </tr>`);
-
-  if (!presentRows.length && !absentHtml.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="loading">출석 기록이 없습니다.</td></tr>';
+  if (!dates.length) {
+    bar.innerHTML = '<span style="font-size:0.85rem;color:#94a3b8;">수업일이 없습니다. 출석 설정에서 수업일을 추가해 주세요.</span>';
+    document.getElementById('records-card').style.display = 'none';
     return;
   }
 
-  tbody.innerHTML = [...presentRows, ...absentHtml].join('');
+  bar.innerHTML = dates.map(d =>
+    `<button class="date-tab-btn${d === currentDateTab ? ' active' : ''}" data-date="${d}" onclick="switchDateTab('${d}')">${formatDate(d)}</button>`
+  ).join('');
+
+  if (!currentDateTab || !dates.includes(currentDateTab)) {
+    switchDateTab(dates[0]);
+  } else {
+    renderAttendanceTable(currentDateTab);
+  }
 }
 
-function buildAbsentRows(records, dateFilter, sessionFilter) {
-  if (!currentConfig || !allStudents.length) return [];
+window.switchDateTab = function(date) {
+  currentDateTab = date;
+  document.querySelectorAll('.date-tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.date === date);
+  });
+  renderAttendanceTable(date);
+  updateSummary();
+};
 
-  // 비교 대상 날짜+세션 목록
-  const targetDates = dateFilter ? [dateFilter] : scheduleDates;
-  const allHolidays = [
-    ...(customHolidays),
-    ...getBuiltinHolidays(new Date().getFullYear()),
-    ...getBuiltinHolidays(new Date().getFullYear() + 1),
+function renderAttendanceTable(date) {
+  const thead = document.getElementById('att-thead');
+  const tbody = document.getElementById('att-tbody');
+  document.getElementById('records-card').style.display = 'block';
+
+  // 교번순 정렬
+  const students = [...allStudents].sort((a, b) =>
+    String(a.empNo).localeCompare(String(b.empNo), undefined, { numeric: true })
+  );
+
+  if (!students.length) {
+    thead.innerHTML = '';
+    tbody.innerHTML = '<tr><td colspan="5" class="loading">등록된 교육생이 없습니다.</td></tr>';
+    document.getElementById('records-title').textContent = `${formatFullDate(date)} 출석 현황`;
+    return;
+  }
+
+  const sessions = dailySessions === 2 ? ['morning', 'afternoon'] : ['single'];
+
+  // 헤더
+  if (dailySessions === 2) {
+    thead.innerHTML = `<tr>
+      <th style="width:72px">교번</th><th>이름</th>
+      <th>오전 시각</th><th>오전 상태</th>
+      <th>오후 시각</th><th>오후 상태</th>
+      <th style="width:56px">저장</th>
+    </tr>`;
+  } else {
+    thead.innerHTML = `<tr>
+      <th style="width:72px">교번</th><th>이름</th>
+      <th>출석 시각</th><th>상태</th>
+      <th style="width:56px">저장</th>
+    </tr>`;
+  }
+
+  // 날짜별 출석 레코드 맵: key = `${empNo}_${session}`, manual 우선
+  const recMap = {};
+  allAttendance.filter(a => a.date === date).forEach(a => {
+    const key = `${a.empNo}_${a.session}`;
+    if (!recMap[key] || a.manual) recMap[key] = a;
+  });
+
+  const statusOpts = [
+    ['present', '출석'], ['late', '지각'], ['leave', '조퇴'], ['absent', '미출석']
   ];
 
-  const rows = [];
-  for (const date of targetDates) {
-    if (allHolidays.includes(date)) continue;
-    const sessions = dailySessions === 2
-      ? (sessionFilter ? [sessionFilter] : ['morning', 'afternoon'])
-      : ['single'];
+  tbody.innerHTML = students.map(stu => {
+    const cells = sessions.map(sess => {
+      const rec = recMap[`${stu.empNo}_${sess}`];
+      let timeVal = '', statusVal = 'absent';
 
+      if (rec) {
+        if (rec.manual) {
+          timeVal = rec.manualTime || '';
+          statusVal = rec.status || 'absent';
+        } else {
+          timeVal = rec.checkedAt ? formatTime(rec.checkedAt) : '';
+          statusVal = rec.status || 'present';
+        }
+      }
+
+      const key = `${stu.empNo}_${date}_${sess}`;
+      const opts = statusOpts.map(([v, l]) =>
+        `<option value="${v}"${statusVal === v ? ' selected' : ''}>${l}</option>`
+      ).join('');
+
+      return `
+        <td><input type="time" id="time_${key}" value="${timeVal}" class="edit-time"
+          onchange="markRowChanged('${stu.empNo}')"></td>
+        <td><select id="status_${key}" class="edit-status"
+          onchange="markRowChanged('${stu.empNo}')">${opts}</select></td>`;
+    }).join('');
+
+    return `<tr id="row_${stu.empNo}" data-empno="${escapeHtml(String(stu.empNo))}" data-name="${escapeHtml(stu.name)}" data-date="${date}">
+      <td>${escapeHtml(String(stu.empNo))}</td>
+      <td>${escapeHtml(stu.name)}</td>
+      ${cells}
+      <td><button class="btn btn-secondary btn-sm" id="savebtn_${stu.empNo}"
+        onclick="saveStudentManual(this)"
+        style="padding:0.25rem 0.6rem;font-size:0.78rem;">저장</button></td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('records-title').textContent = `${formatFullDate(date)} 출석 현황 (${students.length}명)`;
+}
+
+window.markRowChanged = function(empNo) {
+  document.getElementById(`row_${empNo}`)?.classList.add('row-changed');
+  const btn = document.getElementById(`savebtn_${empNo}`);
+  if (btn) {
+    btn.textContent = '저장*';
+    Object.assign(btn.style, { background: '#f59e0b', color: '#fff', borderColor: '#f59e0b' });
+  }
+};
+
+window.saveStudentManual = async function(btnEl) {
+  const row = btnEl.closest('tr');
+  const empNo = row.dataset.empno;
+  const name = row.dataset.name;
+  const date = row.dataset.date;
+  const btn = document.getElementById(`savebtn_${empNo}`);
+
+  btn.disabled = true; btn.textContent = '저장중...';
+
+  const sessions = dailySessions === 2 ? ['morning', 'afternoon'] : ['single'];
+
+  try {
     for (const sess of sessions) {
-      if (sessionFilter && sess !== sessionFilter) continue;
-      const attended = new Set(records.filter(a => a.date === date && a.session === sess).map(a => a.empNo));
-      const sessionLabel = { single: '단일', morning: '오전', afternoon: '오후' }[sess] || sess;
+      const key = `${empNo}_${date}_${sess}`;
+      const manualTime = document.getElementById(`time_${key}`)?.value || '';
+      const status = document.getElementById(`status_${key}`)?.value || 'absent';
+      const docId = `manual_${empNo}_${date}_${sess}`;
 
+      await setDoc(doc(db, 'courses', currentCourseId, 'attendance', docId), {
+        empNo, name, date, session: sess, status, manualTime,
+        manual: true, courseId: currentCourseId, updatedAt: serverTimestamp()
+      });
+
+      // 로컬 상태 동기화
+      const newRec = { empNo, name, date, session: sess, status, manualTime, manual: true, courseId: currentCourseId, _id: docId };
+      const idx = allAttendance.findIndex(a => a._id === docId);
+      if (idx >= 0) allAttendance[idx] = newRec;
+      else allAttendance.push(newRec);
+    }
+
+    row.classList.remove('row-changed');
+    btn.textContent = '저장됨';
+    Object.assign(btn.style, { background: '#16a34a', color: '#fff', borderColor: '#16a34a' });
+    setTimeout(() => {
+      btn.disabled = false; btn.textContent = '저장';
+      Object.assign(btn.style, { background: '', color: '', borderColor: '' });
+    }, 2000);
+    updateSummary();
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = '오류';
+    Object.assign(btn.style, { background: '#dc2626', color: '#fff', borderColor: '#dc2626' });
+    alert('저장 실패: ' + e.message);
+    setTimeout(() => {
+      btn.textContent = '저장*';
+      Object.assign(btn.style, { background: '#f59e0b', color: '#fff', borderColor: '#f59e0b' });
+    }, 2000);
+  }
+};
+
+function updateSummary() {
+  const summary = document.getElementById('rate-summary');
+  if (!currentConfig || !allStudents.length) { summary.style.display = 'none'; return; }
+  summary.style.display = 'flex';
+
+  const holidays = getAllHolidays();
+  const dates = currentDateTab
+    ? [currentDateTab]
+    : scheduleDates.filter(d => !holidays.includes(d));
+  const sessions = dailySessions === 2 ? ['morning', 'afternoon'] : ['single'];
+
+  let totalSlots = 0, presentCount = 0;
+  for (const d of dates) {
+    for (const sess of sessions) {
       for (const stu of allStudents) {
-        if (!attended.has(stu.empNo)) {
-          rows.push({ name: stu.name, empNo: stu.empNo, date, sessionLabel });
+        totalSlots++;
+        const recs = allAttendance.filter(a => a.empNo === stu.empNo && a.date === d && a.session === sess);
+        const rec = recs.find(r => r.manual) || recs[0];
+        if (rec) {
+          const st = rec.status || (rec.manual ? 'absent' : 'present');
+          if (st !== 'absent') presentCount++;
         }
       }
     }
   }
-  return rows;
-}
 
-function updateSummary(records) {
-  const summary = document.getElementById('rate-summary');
-  summary.style.display = 'flex';
+  const absentCount = totalSlots - presentCount;
+  const pct = totalSlots > 0 ? Math.round((presentCount / totalSlots) * 100) : 0;
 
-  const dateFilter = document.getElementById('filter-date').value;
-  const sessionFilter = document.getElementById('filter-session').value;
-  const absentRows = buildAbsentRows(records || allAttendance, dateFilter, sessionFilter);
-
-  const present = (records || allAttendance).length;
-  const absent = absentRows.length;
-  const total = present + absent;
-  const pct = total > 0 ? Math.round((present / total) * 100) : 0;
-
-  document.getElementById('rate-total').textContent = total;
-  document.getElementById('rate-present').textContent = present;
-  document.getElementById('rate-absent').textContent = absent;
+  document.getElementById('rate-total').textContent = allStudents.length;
+  document.getElementById('rate-present').textContent = presentCount;
+  document.getElementById('rate-absent').textContent = absentCount;
   document.getElementById('rate-pct').textContent = `${pct}%`;
 }
 
 // ── 엑셀 다운로드 ──────────────────────────────
 window.exportExcel = function() {
-  if (!allAttendance.length) { alert('다운로드할 출석 데이터가 없습니다.'); return; }
+  // ── 데이터 준비 ─────────────────────────────
+  const holidays = getAllHolidays();
+  const dates = scheduleDates.filter(d => !holidays.includes(d)).sort();
+  const sessions = dailySessions === 2 ? ['morning', 'afternoon'] : ['single'];
 
-  const dateFilter = document.getElementById('filter-date').value;
-  const sessionFilter = document.getElementById('filter-session').value;
+  const students = [...allStudents].sort((a, b) =>
+    String(a.empNo).localeCompare(String(b.empNo), undefined, { numeric: true })
+  );
 
-  let records = [...allAttendance];
-  if (dateFilter) records = records.filter(a => a.date === dateFilter);
-  if (sessionFilter) records = records.filter(a => a.session === sessionFilter);
+  if (!students.length) { alert('등록된 교육생이 없습니다.'); return; }
+  if (!dates.length) { alert('수업일이 등록되어 있지 않습니다.'); return; }
 
-  const absentRows = buildAbsentRows(records, dateFilter, sessionFilter);
+  const courseSelect = document.getElementById('course-select');
+  const courseName = courseSelect.options[courseSelect.selectedIndex]?.text || '과정명';
+  const team = currentConfig?.team || '';
+  const handler = currentConfig?.handlerName || '';
+  const manager = currentConfig?.managerName || '';
 
-  const wsData = [
-    ['이름', '교번', '날짜', '회차', '출석시각', '상태'],
-    ...records.map(a => [
-      a.name, a.empNo, a.date,
-      { single:'단일', morning:'오전', afternoon:'오후' }[a.session] || a.session,
-      a.checkedAt instanceof Timestamp ? a.checkedAt.toDate().toLocaleString('ko-KR') : '-',
-      '출석'
-    ]),
-    ...absentRows.map(a => [a.name, a.empNo, a.date, a.sessionLabel, '-', '미출석'])
-  ];
+  const STATUS_KO = { present: '출석', late: '지각', leave: '조퇴', absent: '미출석' };
+  const SESS_HDR = dailySessions === 2
+    ? { morning: ['오전 상태', '오전 시각'], afternoon: ['오후 상태', '오후 시각'] }
+    : { single: ['출석 상태', '출석 시각'] };
 
+  // 총 컬럼: 교번(1) + 이름(1) + 날짜 × 세션 × 2(상태+시각)
+  const slotsPerDate = sessions.length * 2;
+  const totalCols = 2 + dates.length * slotsPerDate;
+
+  // ── 1차 루프: 학생 데이터 행 생성 + 통계 집계 ────────────────
+  let totalPresent = 0, totalAbsent = 0;
+  const studentRows = students.map(stu => {
+    const row = [String(stu.empNo), stu.name];
+    for (const d of dates) {
+      for (const sess of sessions) {
+        const recs = allAttendance.filter(a =>
+          a.empNo === stu.empNo && a.date === d && a.session === sess
+        );
+        const rec = recs.find(rv => rv.manual) || recs[0];
+        let statusKo = '미출석', timeStr = '';
+        if (rec) {
+          const st = rec.status || (rec.manual ? 'absent' : 'present');
+          statusKo = STATUS_KO[st] || '미출석';
+          if (st !== 'absent') {
+            timeStr = rec.manual
+              ? (rec.manualTime || '')
+              : (rec.checkedAt ? formatTime(rec.checkedAt) : '');
+            totalPresent++;
+          } else {
+            totalAbsent++;
+          }
+        } else {
+          totalAbsent++;
+        }
+        row.push(statusKo, timeStr);
+      }
+    }
+    return row;
+  });
+
+  const totalSlots = students.length * dates.length * sessions.length;
+  const pct = totalSlots > 0 ? Math.round((totalPresent / totalSlots) * 100) : 0;
+  const periodStr = dates.length
+    ? `${formatFullDate(dates[0])} ~ ${formatFullDate(dates[dates.length - 1])}`
+    : '-';
+
+  // ── 워크시트 데이터(AOA) 및 병합/높이 구성 ──────────────────
+  const wsData = [];
+  const merges = [];
+  const rowHeights = [];
+  let r = 0;
+
+  const push = (data, h) => {
+    const row = [...data];
+    while (row.length < totalCols) row.push('');
+    wsData.push(row);
+    rowHeights.push(h || 18);
+    return r++;
+  };
+
+  // R0: 과정명 (대제목)
+  const R_TITLE    = push([courseName], 46);
+  merges.push({ s: { r: R_TITLE, c: 0 }, e: { r: R_TITLE, c: totalCols - 1 } });
+
+  // R1: 출석부 (소제목)
+  const R_SUBTITLE = push(['출  석  부'], 28);
+  merges.push({ s: { r: R_SUBTITLE, c: 0 }, e: { r: R_SUBTITLE, c: totalCols - 1 } });
+
+  // R2: 빈 줄 (구분)
+  push([], 8);
+
+  // R3: 출석 현황 요약 (과정명 바로 아래)
+  const R_SUMMARY  = push([
+    '전체 교육생', `${students.length}명`,
+    '출석', `${totalPresent}건`,
+    '미출석', `${totalAbsent}건`,
+    '출석률', `${pct}%`
+  ], 22);
+
+  // R4: 교육기간
+  const R_PERIOD   = push(['교육기간', periodStr], 20);
+  merges.push({ s: { r: R_PERIOD, c: 1 }, e: { r: R_PERIOD, c: totalCols - 1 } });
+
+  // R5: 빈 줄
+  push([], 10);
+
+  // R6: 헤더 1행 — 교번(2행 병합), 이름(2행 병합), 날짜(slotsPerDate 열 병합)
+  const R_HDR1 = push(['교번', '이름'], 22);
+  merges.push({ s: { r: R_HDR1, c: 0 }, e: { r: R_HDR1 + 1, c: 0 } });
+  merges.push({ s: { r: R_HDR1, c: 1 }, e: { r: R_HDR1 + 1, c: 1 } });
+  {
+    let c = 2;
+    for (const d of dates) {
+      wsData[R_HDR1][c] = formatFullDate(d);
+      merges.push({ s: { r: R_HDR1, c }, e: { r: R_HDR1, c: c + slotsPerDate - 1 } });
+      c += slotsPerDate;
+    }
+  }
+
+  // R7: 헤더 2행 — 세션별 상태/시각
+  const R_HDR2 = push(['', ''], 20);
+  {
+    let c = 2;
+    for (const d of dates) {
+      for (const sess of sessions) {
+        const [lbl1, lbl2] = SESS_HDR[sess];
+        wsData[R_HDR2][c] = lbl1;
+        wsData[R_HDR2][c + 1] = lbl2;
+        c += 2;
+      }
+    }
+  }
+
+  // R8~: 학생 데이터
+  const R_DATA_START = r;
+  for (const row of studentRows) push(row, 18);
+  const R_DATA_END = r - 1;
+
+  // 빈 줄
+  push([], 14);
+
+  // 결재란: 작성자 / 결재자 두 줄
+  const R_WRITER = push(['작 성 자', handler ? `${handler}  (인)` : ''], 28);
+  const R_APPROVER = push(['결 재 자', manager ? `${manager}  (인)` : ''], 28);
+
+  // 결재란 값 셀을 나머지 전체 열에 병합
+  if (totalCols > 2) {
+    merges.push({ s: { r: R_WRITER,   c: 1 }, e: { r: R_WRITER,   c: totalCols - 1 } });
+    merges.push({ s: { r: R_APPROVER, c: 1 }, e: { r: R_APPROVER, c: totalCols - 1 } });
+  }
+
+  // ── 워크시트 생성 ─────────────────────────────
   const ws = XLSX.utils.aoa_to_sheet(wsData);
-  ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 8 }, { wch: 20 }, { wch: 8 }];
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, '출석현황');
+  ws['!merges'] = merges;
 
-  const courseName = document.getElementById('course-select').options[document.getElementById('course-select').selectedIndex]?.text || 'course';
-  XLSX.writeFile(wb, `출석현황_${courseName}_${new Date().toISOString().slice(0,10)}.xlsx`);
+  // 열 너비 설정
+  const colWidths = [{ wch: 10 }, { wch: 14 }];
+  for (let i = 0; i < dates.length * sessions.length; i++) {
+    colWidths.push({ wch: 9 }, { wch: 9 }); // 상태, 시각
+  }
+  ws['!cols'] = colWidths;
+
+  // 행 높이 설정
+  ws['!rows'] = rowHeights.map(h => ({ hpt: h }));
+
+  // 인쇄 설정 (가로 방향, 1페이지 너비 맞춤)
+  ws['!pageSetup'] = { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
+  ws['!margins']   = { left: 0.4, right: 0.4, top: 0.7, bottom: 0.7, header: 0.2, footer: 0.2 };
+
+  // ── 셀 스타일 정의 ────────────────────────────
+  const bdr = (rgb = 'C8D4E0', style = 'thin') => {
+    const b = { style, color: { rgb } };
+    return { top: b, bottom: b, left: b, right: b };
+  };
+
+  const S = {
+    title: {
+      font: { bold: true, sz: 20, color: { rgb: 'FFFFFF' }, name: '맑은 고딕' },
+      fill: { patternType: 'solid', fgColor: { rgb: '1F3864' } },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: bdr('0F2040', 'medium')
+    },
+    subtitle: {
+      font: { bold: true, sz: 13, color: { rgb: '1F3864' }, name: '맑은 고딕' },
+      fill: { patternType: 'solid', fgColor: { rgb: 'DDEEFF' } },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: bdr('A0C0D8')
+    },
+    summLabel: {
+      font: { bold: true, sz: 9, color: { rgb: '374151' }, name: '맑은 고딕' },
+      fill: { patternType: 'solid', fgColor: { rgb: 'E0ECFF' } },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: bdr('A0B8CC')
+    },
+    summValue: {
+      font: { bold: true, sz: 12, color: { rgb: '1F3864' }, name: '맑은 고딕' },
+      fill: { patternType: 'solid', fgColor: { rgb: 'F4F8FF' } },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: bdr('A0B8CC')
+    },
+    summEmpty: {
+      fill: { patternType: 'solid', fgColor: { rgb: 'FAFCFF' } },
+      border: bdr('D8E4F0')
+    },
+    periodLabel: {
+      font: { bold: true, sz: 9, color: { rgb: '374151' }, name: '맑은 고딕' },
+      fill: { patternType: 'solid', fgColor: { rgb: 'F0F4FA' } },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: bdr('B8C8D8')
+    },
+    periodValue: {
+      font: { sz: 9, color: { rgb: '374151' }, name: '맑은 고딕' },
+      fill: { patternType: 'solid', fgColor: { rgb: 'FAFCFF' } },
+      alignment: { horizontal: 'left', vertical: 'center' },
+      border: bdr('B8C8D8')
+    },
+    hdrFixed: {
+      font: { bold: true, sz: 10, color: { rgb: 'FFFFFF' }, name: '맑은 고딕' },
+      fill: { patternType: 'solid', fgColor: { rgb: '1F3864' } },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: bdr('1A4F8A')
+    },
+    hdrDate: {
+      font: { bold: true, sz: 9, color: { rgb: 'FFFFFF' }, name: '맑은 고딕' },
+      fill: { patternType: 'solid', fgColor: { rgb: '2E75B6' } },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: bdr('1A4F8A')
+    },
+    hdrSub: {
+      font: { bold: true, sz: 8, color: { rgb: 'FFFFFF' }, name: '맑은 고딕' },
+      fill: { patternType: 'solid', fgColor: { rgb: '4472C4' } },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: bdr('1A4F8A')
+    },
+    dataEven: {
+      font: { sz: 10, name: '맑은 고딕' },
+      fill: { patternType: 'solid', fgColor: { rgb: 'FFFFFF' } },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: bdr('D0D8E4')
+    },
+    dataOdd: {
+      font: { sz: 10, name: '맑은 고딕' },
+      fill: { patternType: 'solid', fgColor: { rgb: 'EEF4FF' } },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: bdr('D0D8E4')
+    },
+    absent: {
+      font: { sz: 10, color: { rgb: 'CC0000' }, name: '맑은 고딕' },
+      fill: { patternType: 'solid', fgColor: { rgb: 'FFF0F0' } },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: bdr('E0B0B0')
+    },
+    apprLabel: {
+      font: { bold: true, sz: 10, name: '맑은 고딕' },
+      fill: { patternType: 'solid', fgColor: { rgb: 'EEF2F8' } },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: bdr('888888', 'medium')
+    },
+    apprValue: {
+      font: { sz: 10, name: '맑은 고딕' },
+      fill: { patternType: 'solid', fgColor: { rgb: 'FFFFFF' } },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: bdr('888888', 'medium')
+    },
+    apprSign: {
+      font: { sz: 10, name: '맑은 고딕' },
+      fill: { patternType: 'solid', fgColor: { rgb: 'FAFCFF' } },
+      alignment: { horizontal: 'center', vertical: 'bottom' },
+      border: bdr('888888', 'medium')
+    },
+    blank: {}
+  };
+
+  // ── 각 셀에 스타일 적용 ───────────────────────
+  for (let rowR = 0; rowR < wsData.length; rowR++) {
+    for (let colC = 0; colC < totalCols; colC++) {
+      const addr = XLSX.utils.encode_cell({ r: rowR, c: colC });
+      if (!ws[addr]) ws[addr] = { v: '', t: 's' };
+
+      let s = S.blank;
+
+      if (rowR === R_TITLE) {
+        s = S.title;
+      } else if (rowR === R_SUBTITLE) {
+        s = S.subtitle;
+      } else if (rowR === R_SUMMARY) {
+        if (colC < 8) s = colC % 2 === 0 ? S.summLabel : S.summValue;
+        else s = S.summEmpty;
+      } else if (rowR === R_PERIOD) {
+        s = colC === 0 ? S.periodLabel : S.periodValue;
+      } else if (rowR === R_HDR1) {
+        s = colC <= 1 ? S.hdrFixed : S.hdrDate;
+      } else if (rowR === R_HDR2) {
+        s = colC <= 1 ? S.hdrFixed : S.hdrSub;
+      } else if (rowR >= R_DATA_START && rowR <= R_DATA_END) {
+        const cellVal = wsData[rowR][colC];
+        const isEven = (rowR - R_DATA_START) % 2 === 0;
+        s = cellVal === '미출석' ? S.absent : (isEven ? S.dataEven : S.dataOdd);
+      } else if (rowR === R_WRITER || rowR === R_APPROVER) {
+        s = colC === 0 ? S.apprLabel : S.apprValue;
+      }
+
+      ws[addr].s = s;
+    }
+  }
+
+  // ── 워크북 저장 ──────────────────────────────
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '출석부');
+  XLSX.writeFile(wb, `출석부_${courseName}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+};
+
+// ── 기기 잠금 초기화 ──────────────────────────────
+window.resetDeviceLock = async function() {
+  const empNo = document.getElementById('reset-empno').value.trim();
+  const statusEl = document.getElementById('reset-status');
+  if (!empNo) { statusEl.textContent = '교번을 입력해 주세요.'; statusEl.style.color = '#dc2626'; return; }
+  if (!currentCourseId) { statusEl.textContent = '과정을 먼저 선택해 주세요.'; statusEl.style.color = '#dc2626'; return; }
+
+  const btn = document.getElementById('reset-lock-btn');
+  btn.disabled = true; btn.textContent = '처리 중...';
+  statusEl.textContent = '';
+
+  try {
+    // courses/{courseId}/attendanceConfig/reset_{empNo}_{date} — 기존 규칙으로 허용됨
+    await setDoc(doc(db, 'courses', currentCourseId, 'attendanceConfig', `reset_${empNo}_${todayStr}`), {
+      empNo,
+      courseId: currentCourseId,
+      date: todayStr,
+      resetAt: serverTimestamp()
+    });
+    statusEl.style.color = '#16a34a';
+    statusEl.textContent = `✅ 교번 ${empNo} 기기 잠금 초기화 완료. 교육생이 다시 로그인하면 해제됩니다.`;
+    document.getElementById('reset-empno').value = '';
+    setTimeout(() => { statusEl.textContent = ''; }, 6000);
+  } catch(e) {
+    statusEl.style.color = '#dc2626';
+    statusEl.textContent = '초기화 실패: ' + e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = '초기화';
+  }
 };
 
 // ── 테스트 데이터 시드 ──────────────────────────────

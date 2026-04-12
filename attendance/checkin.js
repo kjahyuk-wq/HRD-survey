@@ -1,7 +1,7 @@
 import { db, auth } from './firebase-config.js';
 import {
   collectionGroup, collection, query, where, getDocs,
-  doc, getDoc, setDoc, updateDoc, serverTimestamp, Timestamp
+  doc, getDoc, setDoc, deleteDoc, updateDoc, serverTimestamp, Timestamp
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { signInAnonymously } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
 
@@ -13,6 +13,7 @@ const QR_TTL_SEC = 300;   // 5분
 // ── 초기화 ──────────────────────────────
 const today = toDateStr(new Date());
 document.getElementById('today-date').textContent = formatDisplayDate(today);
+
 
 function toDateStr(d) {
   return d.toISOString().slice(0, 10);
@@ -142,6 +143,31 @@ function getDailySessionLabel(config) {
 async function proceedWithCourse(name, empNo, candidate) {
   const { courseId, courseName, config } = candidate;
 
+  // ── 기기 잠금 확인 (과정별) ──────────────────────────────
+  const deviceLockKey = `device_locked_${courseId}_${today}`;
+  const existingLock = localStorage.getItem(deviceLockKey);
+  if (existingLock) {
+    try {
+      const locked = JSON.parse(existingLock);
+      if (locked.empNo !== empNo) {
+        // 관리자 초기화 여부 확인 (courses/{courseId}/attendanceConfig/reset_{empNo}_{today})
+        const resetRef = doc(db, 'courses', courseId, 'attendanceConfig', `reset_${empNo}_${today}`);
+        const resetSnap = await getDoc(resetRef);
+        if (resetSnap.exists()) {
+          localStorage.removeItem(deviceLockKey);
+          await deleteDoc(resetRef);
+          // 초기화됨 → 계속 진행
+        } else {
+          showScreen('screen-login');
+          showLoginError(`이 기기는 오늘 이미 ${locked.name} 님의 출석에 사용되었습니다.\n본인 기기를 사용하거나 담당자에게 문의해 주세요.`);
+          return;
+        }
+      }
+    } catch(e) {
+      localStorage.removeItem(deviceLockKey);
+    }
+  }
+
   // 휴강일 체크
   const allHolidays = [
     ...(config.customHolidays || []),
@@ -253,6 +279,9 @@ async function issueNewQr(name, empNo, courseId, courseName, session, cacheKey) 
 
   await setDoc(doc(db, 'qr_tokens', tokenId), tokenData);
   localStorage.setItem(cacheKey, tokenId);
+
+  // 기기 잠금 저장 (과정+날짜 기준, 다른 교육생 로그인 방지)
+  localStorage.setItem(`device_locked_${courseId}_${today}`, JSON.stringify({ empNo, name }));
 
   showQrScreen(name, empNo, session, tokenId, expiresAt.getTime());
 }

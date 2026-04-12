@@ -54,6 +54,12 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
 
+    // 기기 잠금 초기화 (관리자가 생성, 교육생이 읽고 삭제)
+    match /attendanceResets/{docId} {
+      allow read, delete: if isAuthenticated();
+      allow create, update: if isAuthenticated();
+    }
+
     // collectionGroup 쿼리용 (교육생 로그인 시 단일 쿼리 검색)
     match /{path=**}/students/{studentId} {
       allow read: if isAuthenticated();
