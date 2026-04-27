@@ -463,6 +463,68 @@ header h1 { font-size: 1.3rem; font-weight: 700; margin: 0; color: #fff; }
   white-space: nowrap;
 }
 
+/* 강사 행 액션 버튼 그룹 */
+.inst-action-btns {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  justify-content: center;
+  flex-wrap: nowrap;
+}
+
+.inst-move-btn {
+  padding: 0.28rem 0.5rem;
+  font-size: 0.78rem;
+  background: #f0f4f8;
+  border: 1px solid #c8d4e0;
+  border-radius: 6px;
+  color: #445;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  line-height: 1;
+}
+.inst-move-btn:hover:not(:disabled) { background: #d4e4f8; border-color: #0066cc; color: #003d99; }
+.inst-move-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.inst-edit-btn {
+  padding: 0.28rem 0.65rem;
+  font-size: 0.8rem;
+  background: #e8f4ff;
+  border: 1px solid #90c0f0;
+  border-radius: 6px;
+  color: #0055bb;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+.inst-edit-btn:hover { background: #cce3ff; }
+
+.inst-save-btn {
+  padding: 0.28rem 0.65rem;
+  font-size: 0.8rem;
+  background: #0066cc;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 700;
+  transition: background 0.15s;
+}
+.inst-save-btn:hover:not(:disabled) { background: #0052a3; }
+.inst-save-btn:disabled { background: #7aaddd; cursor: not-allowed; }
+
+.inst-cancel-btn {
+  padding: 0.28rem 0.65rem;
+  font-size: 0.8rem;
+  background: #f0f0f0;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  color: #555;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.inst-cancel-btn:hover { background: #e0e0e0; }
+
 .inst-list { display: flex; flex-direction: column; gap: 0.4rem; }
 
 .inst-item {

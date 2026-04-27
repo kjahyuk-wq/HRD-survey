@@ -1,7 +1,7 @@
 import { db } from './firebase-config.js';
 import {
-  collection, query, orderBy, getDocs,
-  addDoc, deleteDoc, doc, serverTimestamp
+  collection, getDocs,
+  addDoc, deleteDoc, doc, serverTimestamp, updateDoc
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { state, escapeHtml, escapeAttr } from './admin-utils.js';
 import { loadXLSX } from './admin-excel.js';
@@ -158,12 +158,19 @@ export async function uploadExcelInstructors(courseName, panelIdx) {
   progress.style.display = 'block';
 
   const courseId = state.courseIdMap[courseName];
+  const currentInsts = panelInstructors[panelIdx] || [];
+  const maxOrder = currentInsts.length > 0
+    ? Math.max(...currentInsts.map(i => i.order ?? 0))
+    : -10;
+
   let success = 0, fail = 0;
   for (let i = 0; i < data.length; i++) {
     const { edu, name } = data[i];
     progress.textContent = `등록 중... (${i+1}/${data.length}) ${name}`;
     try {
-      await addDoc(collection(db, 'courses', courseId, 'instructors'), { name, education: edu, createdAt: serverTimestamp() });
+      await addDoc(collection(db, 'courses', courseId, 'instructors'), {
+        name, education: edu, createdAt: serverTimestamp(), order: maxOrder + (i + 1) * 10
+      });
       success++;
     } catch(_) {
       fail++;
@@ -180,6 +187,10 @@ export async function uploadExcelInstructors(courseName, panelIdx) {
 }
 
 // ── 강사 관리 ──────────────────────────────
+
+// 패널별 현재 강사 목록 저장 (순서 변경, 수정에 활용)
+const panelInstructors = {};
+
 export async function toggleInstructors(courseName, idx) {
   const panel = document.getElementById(`inst-panel-${idx}`);
   if (panel.style.display === 'none') {
@@ -195,8 +206,25 @@ async function loadInstructors(courseName, panelIdx) {
   panel.innerHTML = '<div class="inst-loading">불러오는 중...</div>';
   try {
     const courseId = state.courseIdMap[courseName];
-    const snap = await getDocs(query(collection(db, 'courses', courseId, 'instructors'), orderBy('createdAt')));
-    const instructors = snap.docs.map(d => ({ ...d.data(), _id: d.id }));
+    const snap = await getDocs(collection(db, 'courses', courseId, 'instructors'));
+    let instructors = snap.docs.map(d => ({ ...d.data(), _id: d.id }));
+
+    // order 필드 기준 정렬 (없으면 createdAt 기준)
+    instructors.sort((a, b) => {
+      if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
+      if (a.order !== undefined) return -1;
+      if (b.order !== undefined) return 1;
+      const ta = a.createdAt?.seconds || 0;
+      const tb = b.createdAt?.seconds || 0;
+      return ta - tb;
+    });
+
+    // order 없는 항목에 초기값 부여 (메모리 내)
+    instructors.forEach((inst, i) => {
+      if (inst.order === undefined) inst.order = i * 10;
+    });
+
+    panelInstructors[panelIdx] = instructors;
     renderInstructorPanel(courseName, panelIdx, instructors);
   } catch (e) {
     panel.innerHTML = '<div class="inst-loading">불러오기 실패</div>';
@@ -206,8 +234,9 @@ async function loadInstructors(courseName, panelIdx) {
 function renderInstructorPanel(courseName, panelIdx, instructors) {
   const panel = document.getElementById(`inst-panel-${panelIdx}`);
   const ec = escapeAttr(courseName);
+  const total = instructors.length;
 
-  const listHtml = instructors.length === 0
+  const listHtml = total === 0
     ? '<div class="inst-empty">등록된 강사가 없습니다. 강사를 추가해 주세요.</div>'
     : `<div class="student-bulk-actions">
         <button class="bulk-delete-btn" id="inst-bulk-delete-btn-${panelIdx}" onclick="deleteSelectedInstructors('${ec}', ${panelIdx})" disabled>선택 삭제</button>
@@ -215,18 +244,25 @@ function renderInstructorPanel(courseName, panelIdx, instructors) {
       <table class="student-table">
         <thead><tr>
           <th style="width:36px"><input type="checkbox" id="inst-select-all-${panelIdx}" onclick="toggleInstSelectAll(${panelIdx}, this)"></th>
-          <th>강의명</th><th>강사명</th><th></th>
+          <th>강의명</th><th>강사명</th><th style="width:160px">순서 / 관리</th>
         </tr></thead>
         <tbody>
-          ${instructors.map((inst) => {
-            const name = typeof inst === 'string' ? inst : inst.name;
-            const edu  = typeof inst === 'string' ? '' : (inst.education || '');
+          ${instructors.map((inst, idx) => {
+            const name = inst.name || '';
+            const edu  = inst.education || '';
             const en = escapeAttr(name), ee = escapeAttr(edu), eid = escapeAttr(inst._id || '');
-            return `<tr>
+            return `<tr id="inst-row-${panelIdx}-${idx}">
               <td><input type="checkbox" class="inst-checkbox-${panelIdx}" data-id="${eid}" data-name="${en}" onchange="updateInstBulkDeleteBtn(${panelIdx})"></td>
-              <td>${escapeHtml(edu)}</td>
-              <td>${escapeHtml(name)}</td>
-              <td><button class="delete-btn" onclick="deleteInstructor('${ec}', ${panelIdx}, '${en}', '${ee}', '${eid}', this)">삭제</button></td>
+              <td style="text-align:left">${escapeHtml(edu)}</td>
+              <td style="text-align:left">${escapeHtml(name)}</td>
+              <td>
+                <div class="inst-action-btns">
+                  <button class="inst-move-btn" onclick="moveInstructor('${ec}', ${panelIdx}, ${idx}, 'up')" ${idx === 0 ? 'disabled' : ''} title="위로">▲</button>
+                  <button class="inst-move-btn" onclick="moveInstructor('${ec}', ${panelIdx}, ${idx}, 'down')" ${idx === total - 1 ? 'disabled' : ''} title="아래로">▼</button>
+                  <button class="inst-edit-btn" onclick="startEditInstructor('${ec}', ${panelIdx}, ${idx})">수정</button>
+                  <button class="delete-btn" onclick="deleteInstructor('${ec}', ${panelIdx}, '${en}', '${ee}', '${eid}', this)">삭제</button>
+                </div>
+              </td>
             </tr>`;
           }).join('')}
         </tbody>
@@ -262,7 +298,13 @@ export async function addInstructor(courseName, panelIdx) {
   btn.disabled = true; btn.textContent = '추가 중...';
   try {
     const courseId = state.courseIdMap[courseName];
-    await addDoc(collection(db, 'courses', courseId, 'instructors'), { name, education: edu, createdAt: serverTimestamp() });
+    const currentInsts = panelInstructors[panelIdx] || [];
+    const maxOrder = currentInsts.length > 0
+      ? Math.max(...currentInsts.map(i => i.order ?? 0))
+      : -10;
+    await addDoc(collection(db, 'courses', courseId, 'instructors'), {
+      name, education: edu, createdAt: serverTimestamp(), order: maxOrder + 10
+    });
     document.getElementById(`inst-edu-${panelIdx}`).value = '';
     document.getElementById(`inst-name-${panelIdx}`).value = '';
     await loadInstructors(courseName, panelIdx);
@@ -277,6 +319,81 @@ export async function deleteInstructor(courseName, panelIdx, name, education, in
     await deleteDoc(doc(db, 'courses', courseId, 'instructors', instId));
     await loadInstructors(courseName, panelIdx);
   } catch (e) { alert('삭제 중 오류가 발생했습니다.'); btnEl.disabled = false; btnEl.textContent = '삭제'; }
+}
+
+// ── 순서 변경 ──────────────────────────────
+export async function moveInstructor(courseName, panelIdx, idx, direction) {
+  const instructors = panelInstructors[panelIdx];
+  if (!instructors) return;
+  const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+  if (targetIdx < 0 || targetIdx >= instructors.length) return;
+
+  const instA = instructors[idx];
+  const instB = instructors[targetIdx];
+  const courseId = state.courseIdMap[courseName];
+
+  // order 값 교환
+  const tempOrder = instA.order;
+  instA.order = instB.order;
+  instB.order = tempOrder;
+
+  try {
+    await Promise.all([
+      updateDoc(doc(db, 'courses', courseId, 'instructors', instA._id), { order: instA.order }),
+      updateDoc(doc(db, 'courses', courseId, 'instructors', instB._id), { order: instB.order }),
+    ]);
+    await loadInstructors(courseName, panelIdx);
+  } catch (e) {
+    alert('순서 변경 중 오류가 발생했습니다.');
+    // 롤백
+    const t = instA.order; instA.order = instB.order; instB.order = t;
+  }
+}
+
+// ── 강사 수정 ──────────────────────────────
+export function startEditInstructor(courseName, panelIdx, idx) {
+  const inst = panelInstructors[panelIdx]?.[idx];
+  if (!inst) return;
+  const row = document.getElementById(`inst-row-${panelIdx}-${idx}`);
+  if (!row) return;
+  const ec = escapeAttr(courseName);
+  row.innerHTML = `
+    <td><input type="checkbox" disabled></td>
+    <td><input type="text" id="edit-edu-${panelIdx}-${idx}" value="${escapeAttr(inst.education || '')}" maxlength="50" style="width:100%;padding:.4rem .6rem;border:2px solid #0066cc;border-radius:7px;font-size:.88rem;"></td>
+    <td><input type="text" id="edit-name-${panelIdx}-${idx}" value="${escapeAttr(inst.name || '')}" maxlength="20" style="width:100%;padding:.4rem .6rem;border:2px solid #0066cc;border-radius:7px;font-size:.88rem;"></td>
+    <td>
+      <div class="inst-action-btns">
+        <button class="inst-save-btn" onclick="saveEditInstructor('${ec}', ${panelIdx}, ${idx})">저장</button>
+        <button class="inst-cancel-btn" onclick="cancelEditInstructor('${ec}', ${panelIdx})">취소</button>
+      </div>
+    </td>`;
+  document.getElementById(`edit-edu-${panelIdx}-${idx}`)?.focus();
+}
+
+export async function saveEditInstructor(courseName, panelIdx, idx) {
+  const inst = panelInstructors[panelIdx]?.[idx];
+  if (!inst) return;
+  const eduEl  = document.getElementById(`edit-edu-${panelIdx}-${idx}`);
+  const nameEl = document.getElementById(`edit-name-${panelIdx}-${idx}`);
+  const edu  = eduEl?.value.trim();
+  const name = nameEl?.value.trim();
+  if (!edu)  { eduEl?.focus(); return; }
+  if (!name) { nameEl?.focus(); return; }
+
+  const saveBtn = document.querySelector(`#inst-row-${panelIdx}-${idx} .inst-save-btn`);
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '저장 중...'; }
+  try {
+    const courseId = state.courseIdMap[courseName];
+    await updateDoc(doc(db, 'courses', courseId, 'instructors', inst._id), { name, education: edu });
+    await loadInstructors(courseName, panelIdx);
+  } catch (e) {
+    alert('수정 중 오류가 발생했습니다.');
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '저장'; }
+  }
+}
+
+export async function cancelEditInstructor(courseName, panelIdx) {
+  await loadInstructors(courseName, panelIdx);
 }
 
 export function toggleInstSelectAll(panelIdx, checkbox) {
