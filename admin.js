@@ -3,7 +3,7 @@ import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.10.0/f
 
 import { checkLogin, logout } from './admin-auth.js';
 import { loadCourseList, addCourse, deleteCourse, toggleInstructors, addInstructor, deleteInstructor, handleInstExcelUpload, uploadExcelInstructors, toggleInstSelectAll, updateInstBulkDeleteBtn, deleteSelectedInstructors, moveInstructor, startEditInstructor, saveEditInstructor, cancelEditInstructor } from './admin-courses.js';
-import { loadStudents, addStudent, deleteStudent, toggleSelectAll, updateBulkDeleteBtn, deleteSelectedStudents, handleExcelUpload, uploadExcelStudents } from './admin-students.js';
+import { loadStudents, addStudent, deleteStudent, toggleSelectAll, updateBulkDeleteBtn, deleteSelectedStudents, handleExcelUpload, uploadExcelStudents, startEditStudent, saveEditStudent, cancelEditStudent } from './admin-students.js';
 import { populateStatsSelect, loadStats } from './admin-stats.js';
 import { exportStatsExcel, exportResultsExcel } from './admin-excel.js';
 import { populatePreviewSelect, loadPreviewInstructors } from './admin-preview.js';
@@ -55,6 +55,9 @@ window.updateBulkDeleteBtn = updateBulkDeleteBtn;
 window.deleteSelectedStudents = deleteSelectedStudents;
 window.handleExcelUpload = handleExcelUpload;
 window.uploadExcelStudents = uploadExcelStudents;
+window.startEditStudent = startEditStudent;
+window.saveEditStudent = saveEditStudent;
+window.cancelEditStudent = cancelEditStudent;
 window.handleInstExcelUpload = handleInstExcelUpload;
 window.uploadExcelInstructors = uploadExcelInstructors;
 window.toggleInstSelectAll = toggleInstSelectAll;

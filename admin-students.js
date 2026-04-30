@@ -1,12 +1,14 @@
 import { db } from './firebase-config.js';
 import {
   collection, query, where, getDocs,
-  addDoc, deleteDoc, doc
+  addDoc, deleteDoc, doc, updateDoc
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { state, escapeHtml, escapeAttr, formatDateTime } from './admin-utils.js';
 import { loadXLSX } from './admin-excel.js';
 
 // ── 수강생 관리 ──────────────────────────────
+let studentsCache = [];
+
 export async function loadStudents() {
   const course = document.getElementById('student-course-select').value;
   document.getElementById('student-placeholder').style.display = course ? 'none' : 'block';
@@ -27,6 +29,7 @@ export async function loadStudents() {
       _id: d.id,
       completedAt: d.data().completedAt?.toDate?.()?.toISOString() ?? null
     })).sort((a, b) => Number(a.empNo) - Number(b.empNo));
+    studentsCache = students;
     document.getElementById('student-loading').style.display = 'none';
 
     const total = students.length;
@@ -58,8 +61,8 @@ export async function loadStudents() {
             <th>이름</th><th>교번</th><th>상태</th><th></th>
           </tr></thead>
           <tbody>
-            ${students.map(s => `
-              <tr>
+            ${students.map((s, idx) => `
+              <tr id="student-row-${idx}">
                 <td><input type="checkbox" class="student-checkbox" data-id="${escapeAttr(s._id)}" data-name="${escapeAttr(s.name)}" data-empno="${escapeAttr(s.empNo)}" onchange="updateBulkDeleteBtn()"></td>
                 <td>${escapeHtml(s.name)}</td>
                 <td>${escapeHtml(s.empNo)}</td>
@@ -67,7 +70,12 @@ export async function loadStudents() {
                   ? `<span class="status-done">✅ 완료</span>${s.completedAt ? `<br><small class="completed-at">${formatDateTime(s.completedAt)}</small>` : ''}`
                   : `<span class="status-pending">⏳ 미완료</span>`}
                 </td>
-                <td><button class="delete-btn" onclick="deleteStudent('${escapeAttr(s.name)}','${escapeAttr(s.empNo)}','${escapeAttr(course)}','${escapeAttr(s._id)}',this)">삭제</button></td>
+                <td>
+                  <div class="inst-action-btns">
+                    <button class="inst-edit-btn" onclick="startEditStudent(${idx})">수정</button>
+                    <button class="delete-btn" onclick="deleteStudent('${escapeAttr(s.name)}','${escapeAttr(s.empNo)}','${escapeAttr(course)}','${escapeAttr(s._id)}',this)">삭제</button>
+                  </div>
+                </td>
               </tr>`).join('')}
           </tbody>
         </table>
@@ -160,6 +168,57 @@ export async function deleteStudent(name, empNo, course, studentId, btnEl) {
     await deleteDoc(doc(db, 'courses', courseId, 'students', studentId));
     await loadStudents();
   } catch (e) { alert('삭제 중 오류가 발생했습니다.'); btnEl.disabled = false; btnEl.textContent = '삭제'; }
+}
+
+// ── 수강생 수정 ──────────────────────────────
+export function startEditStudent(idx) {
+  const s = studentsCache[idx];
+  if (!s) return;
+  const row = document.getElementById(`student-row-${idx}`);
+  if (!row) return;
+  const course = document.getElementById('student-course-select').value;
+  const ec = escapeAttr(course);
+  row.innerHTML = `
+    <td><input type="checkbox" disabled></td>
+    <td><input type="text" id="edit-stu-name-${idx}" value="${escapeAttr(s.name)}" maxlength="20" style="width:100%;padding:.4rem .6rem;border:2px solid #0066cc;border-radius:7px;font-size:.88rem;"></td>
+    <td><input type="number" id="edit-stu-empno-${idx}" value="${escapeAttr(s.empNo)}" min="1" style="width:100%;padding:.4rem .6rem;border:2px solid #0066cc;border-radius:7px;font-size:.88rem;"></td>
+    <td></td>
+    <td>
+      <div class="inst-action-btns">
+        <button class="inst-save-btn" onclick="saveEditStudent(${idx})">저장</button>
+        <button class="inst-cancel-btn" onclick="cancelEditStudent()">취소</button>
+      </div>
+    </td>`;
+  document.getElementById(`edit-stu-name-${idx}`)?.focus();
+}
+
+export async function saveEditStudent(idx) {
+  const s = studentsCache[idx];
+  if (!s) return;
+  const course = document.getElementById('student-course-select').value;
+  const nameEl  = document.getElementById(`edit-stu-name-${idx}`);
+  const empNoEl = document.getElementById(`edit-stu-empno-${idx}`);
+  const name  = nameEl?.value.trim();
+  const empNo = empNoEl?.value.trim();
+  if (!name)  { nameEl?.focus(); return; }
+  if (!empNo || !/^\d+$/.test(empNo) || parseInt(empNo) < 1) {
+    alert('교번을 올바르게 입력해 주세요. (1 이상의 숫자)');
+    empNoEl?.focus(); return;
+  }
+  const saveBtn = document.querySelector(`#student-row-${idx} .inst-save-btn`);
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '저장 중...'; }
+  try {
+    const courseId = state.courseIdMap[course];
+    await updateDoc(doc(db, 'courses', courseId, 'students', s._id), { name, empNo });
+    await loadStudents();
+  } catch (e) {
+    alert('수정 중 오류가 발생했습니다.');
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '저장'; }
+  }
+}
+
+export async function cancelEditStudent() {
+  await loadStudents();
 }
 
 // ── 엑셀 일괄 등록 ──────────────────────────────
