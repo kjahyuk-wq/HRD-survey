@@ -1,15 +1,13 @@
 import { db, auth } from './firebase-config.js';
 import {
   doc, getDoc, updateDoc, addDoc,
-  collection, query, where, getDocs,
-  collectionGroup, serverTimestamp, Timestamp, onSnapshot, orderBy, limit
+  collection, serverTimestamp, Timestamp
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { signInAnonymously } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
 
 // ── 상태 ──────────────────────────────
 let isProcessing = false;
 let wakeLock = null;
-let todayAttendance = []; // 오늘 출석 목록 (실시간)
 
 const today = toDateStr(new Date());
 document.getElementById('scan-date-label').textContent = formatDisplayDate(today);
@@ -73,6 +71,8 @@ document.addEventListener('visibilitychange', async () => {
 
 // ── QR 스캐너 초기화 ──────────────────────────────
 let html5Qr = null;
+let cameraList = [];
+let isStarting = false;
 const CAMERA_PREF_KEY = 'attendance:cameraFacing';
 
 function getSavedFacing() {
@@ -80,39 +80,61 @@ function getSavedFacing() {
   return v === 'environment' ? 'environment' : 'user';
 }
 
-async function startScanner(facingMode) {
-  if (!html5Qr) html5Qr = new Html5Qrcode('qr-reader');
+function pickCameraId(facing) {
+  if (!cameraList.length) return null;
+  const wantBack = facing === 'environment';
+  const labelMatch = cameraList.find(c => {
+    const l = (c.label || '').toLowerCase();
+    return wantBack
+      ? /back|rear|environment|후면|뒷/.test(l)
+      : /front|user|face|전면|앞/.test(l);
+  });
+  if (labelMatch) return labelMatch.id;
+  // 라벨로 못 찾으면: 후면=마지막, 전면=첫 번째 (대부분 기기 관례)
+  return wantBack ? cameraList[cameraList.length - 1].id : cameraList[0].id;
+}
+
+async function startScanner(facing) {
+  if (isStarting) return;
+  isStarting = true;
   try {
-    if (html5Qr.isScanning) await html5Qr.stop();
-  } catch (_) {}
-  try {
+    if (!html5Qr) html5Qr = new Html5Qrcode('qr-reader');
+    try { if (html5Qr.isScanning) await html5Qr.stop(); } catch (_) {}
+
+    if (!cameraList.length) {
+      try { cameraList = await Html5Qrcode.getCameras(); } catch (e) {
+        console.warn('카메라 목록 조회 실패:', e);
+      }
+    }
+
+    const cameraId = pickCameraId(facing);
+    const source = cameraId ? cameraId : { facingMode: facing };
+
     await html5Qr.start(
-      { facingMode },
+      source,
       { fps: 10, qrbox: { width: 260, height: 260 }, aspectRatio: 1.0 },
       onScanSuccess,
-      () => {} // 에러 무시 (스캔 시도 중 계속 발생)
+      () => {}
     );
-    localStorage.setItem(CAMERA_PREF_KEY, facingMode);
-    updateCameraSwitchUI(facingMode);
+    localStorage.setItem(CAMERA_PREF_KEY, facing);
+    updateCameraSwitchUI(facing);
   } catch (err) {
     console.error('카메라 시작 오류:', err);
-    showResult('error', '❌', '카메라를 시작할 수 없습니다', '권한이나 카메라 사용 가능 여부를 확인해 주세요.');
+    showResult('error', '❌', '카메라를 시작할 수 없습니다', String(err?.message || err));
+  } finally {
+    isStarting = false;
   }
 }
 
-function updateCameraSwitchUI(facingMode) {
+function updateCameraSwitchUI(facing) {
   document.querySelectorAll('.camera-switch button').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.facing === facingMode);
+    btn.classList.toggle('active', btn.dataset.facing === facing);
   });
 }
 
 function initCameraSwitch() {
   document.querySelectorAll('.camera-switch button').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const facing = btn.dataset.facing;
-      if (facing === getSavedFacing() && html5Qr?.isScanning) return;
-      startScanner(facing);
-    });
+    btn.addEventListener('click', () => startScanner(btn.dataset.facing));
   });
 }
 
@@ -232,77 +254,12 @@ function showResult(type, icon, text, sub) {
   }
 }
 
-// ── 오늘 출석자 실시간 감시 ──────────────────────────────
-function subscribeToTodayAttendance() {
-  // collectionGroup으로 모든 과정의 오늘 출석 기록 구독
-  const q = query(
-    collectionGroup(db, 'attendance'),
-    where('date', '==', today)
-  );
-
-  onSnapshot(q, snap => {
-    todayAttendance = snap.docs.map(d => ({ ...d.data(), _id: d.id }));
-    todayAttendance.sort((a, b) => {
-      const ta = a.checkedAt instanceof Timestamp ? a.checkedAt.toMillis() : 0;
-      const tb = b.checkedAt instanceof Timestamp ? b.checkedAt.toMillis() : 0;
-      return tb - ta; // 최신순
-    });
-    renderAttList();
-    updateCounts();
-  }, err => {
-    console.warn('출석 목록 구독 오류:', err);
-  });
-}
-
-function renderAttList() {
-  const wrap = document.getElementById('att-list-wrap');
-  document.getElementById('att-list-count').textContent = `${todayAttendance.length}명`;
-
-  if (!todayAttendance.length) {
-    wrap.innerHTML = '<div class="loading">아직 출석자가 없습니다.</div>';
-    return;
-  }
-
-  wrap.innerHTML = todayAttendance.slice(0, 50).map(a => {
-    const sessionBadge = {
-      single: '<span class="att-badge" style="background:#dbeafe;color:#1d4ed8;">출석</span>',
-      morning: '<span class="att-badge" style="background:#fef3c7;color:#92400e;">오전</span>',
-      afternoon: '<span class="att-badge" style="background:#ede9fe;color:#6d28d9;">오후</span>',
-    }[a.session] || '';
-    const time = a.checkedAt ? formatTime(a.checkedAt) : '-';
-    return `
-      <div class="att-list-item">
-        <div>
-          <span style="font-weight:600;">${escapeHtml(a.name)}</span>
-          <span class="att-empno"> · ${escapeHtml(a.empNo)}</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:0.4rem;">
-          ${sessionBadge}
-          <span class="att-time">${time}</span>
-        </div>
-      </div>`;
-  }).join('');
-}
-
-function updateCounts() {
-  const total = todayAttendance.length;
-  const morning = todayAttendance.filter(a => a.session === 'morning').length;
-  const afternoon = todayAttendance.filter(a => a.session === 'afternoon').length;
-  document.getElementById('count-total').textContent = total;
-  document.getElementById('count-morning').textContent = morning;
-  document.getElementById('count-afternoon').textContent = afternoon;
-}
-
-function escapeHtml(str) {
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
 // ── 시작 ──────────────────────────────
-signInAnonymously(auth).then(() => {
-  requestWakeLock();
-  initCameraSwitch();
-  startScanner(getSavedFacing());
-  subscribeToTodayAttendance();
-}).catch(e => {
+// 카메라 전환 핸들러는 인증과 무관하게 즉시 부착
+initCameraSwitch();
+startScanner(getSavedFacing());
+requestWakeLock();
+
+signInAnonymously(auth).catch(e => {
   console.error('익명 로그인 실패:', e);
 });

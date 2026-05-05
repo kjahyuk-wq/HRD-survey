@@ -23,25 +23,6 @@
     .scan-result-text { font-size: 1.25rem; font-weight: 700; color: #f1f5f9; }
     .scan-result-sub { font-size: 0.85rem; color: #94a3b8; margin-top: 0.4rem; }
 
-    /* 출석자 목록 다크 */
-    .attendance-today { background: #1e293b; }
-    .attendance-today h3 { color: #94a3b8; }
-    .att-list-item { border-bottom-color: #334155; }
-    .att-empno { color: #94a3b8; }
-    .att-time { color: #64748b; }
-
-    /* 카운터 */
-    .count-bar {
-      display: flex; gap: 1rem;
-      background: #1e293b;
-      border-radius: 12px;
-      padding: 0.8rem 1rem;
-      margin-bottom: 0.8rem;
-    }
-    .count-item { text-align: center; flex: 1; }
-    .count-num { font-size: 1.6rem; font-weight: 700; color: #60a5fa; }
-    .count-label { font-size: 0.72rem; color: #64748b; }
-
     /* Wake lock 상태 */
     .wake-status {
       font-size: 0.75rem;
@@ -107,22 +88,6 @@
     </div>
   </div>
 
-  <!-- 카운터 -->
-  <div class="count-bar">
-    <div class="count-item">
-      <div class="count-num" id="count-total">0</div>
-      <div class="count-label">오늘 총 출석</div>
-    </div>
-    <div class="count-item">
-      <div class="count-num" id="count-morning">0</div>
-      <div class="count-label">오전</div>
-    </div>
-    <div class="count-item">
-      <div class="count-num" id="count-afternoon">0</div>
-      <div class="count-label">오후</div>
-    </div>
-  </div>
-
   <!-- 카메라 전환 -->
   <div class="camera-switch">
     <button type="button" data-facing="user">전면 카메라</button>
@@ -137,14 +102,6 @@
     <div class="scan-result-icon" id="result-icon"></div>
     <div class="scan-result-text" id="result-text"></div>
     <div class="scan-result-sub" id="result-sub"></div>
-  </div>
-
-  <!-- 오늘 출석자 목록 -->
-  <div class="attendance-today">
-    <h3>오늘 출석자 <span id="att-list-count" style="color:#60a5fa;"></span></h3>
-    <div id="att-list-wrap">
-      <div class="loading">스캔하면 출석자가 여기에 표시됩니다.</div>
-    </div>
   </div>
 
 </div>
