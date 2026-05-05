@@ -65,10 +65,6 @@
     .absent-row td { color: #dc2626; }
     .absent-row td:first-child { font-weight: 600; }
 
-    /* 테스트 데이터 시드 */
-    .seed-box { background: #fffbeb; border: 1.5px dashed #fbbf24; border-radius: 10px; padding: 0.8rem; margin-top: 0.8rem; font-size: 0.82rem; }
-    .seed-box strong { display: block; margin-bottom: 0.4rem; color: #92400e; }
-
     /* 날짜 탭 바 */
     .date-tab-bar {
       display: flex; gap: 0.4rem; flex-wrap: wrap;
@@ -106,7 +102,7 @@
   <div class="login-box">
     <div style="font-size:2.5rem;margin-bottom:0.6rem;">📊</div>
     <h2>출결 관리 시스템</h2>
-    <p style="font-size:0.83rem;color:#64748b;margin-bottom:1.2rem;">관리자 암호를 입력하세요 (테스트: admin)</p>
+    <p style="font-size:0.83rem;color:#64748b;margin-bottom:1.2rem;">관리자 암호를 입력하세요</p>
     <div class="form-group">
       <input type="password" id="admin-pw" placeholder="관리자 암호" style="width:100%;padding:0.7rem;border:1.5px solid #cbd5e1;border-radius:10px;font-size:1rem;">
     </div>
@@ -140,15 +136,6 @@
         <button class="btn btn-secondary btn-sm" onclick="loadCourses()">새로고침</button>
       </div>
       <div id="course-loading" class="loading" style="display:none;">불러오는 중...</div>
-
-      <!-- 테스트 데이터 시드 -->
-      <div class="seed-box">
-        <strong>🧪 테스트 데이터 생성</strong>
-        빠른 테스트를 위해 샘플 과정 + 학생 + 출석 설정을 생성합니다.
-        <br><br>
-        <button class="btn btn-secondary btn-sm" onclick="seedTestData()">테스트 데이터 생성</button>
-        <span id="seed-status" style="margin-left:0.5rem;font-size:0.8rem;color:#64748b;"></span>
-      </div>
 
     </div>
 
@@ -216,6 +203,18 @@
         <div class="date-input-row">
           <input type="date" id="add-holiday-date">
           <button class="btn btn-danger btn-sm" onclick="addHolidayDate()">+ 휴강일 추가</button>
+        </div>
+
+        <div style="margin-top:1rem;border-top:1px dashed #e2e8f0;padding-top:0.9rem;">
+          <div style="font-size:0.88rem;font-weight:600;color:#334155;margin-bottom:0.35rem;">공휴일 예외 (해당 날짜는 수업 진행)</div>
+          <div class="holiday-info" style="background:#f0fdf4;color:#166534;">
+            법정 공휴일이지만 수업을 진행해야 하는 날짜를 추가하세요. 추가된 날짜는 휴강일에서 제외됩니다.
+          </div>
+          <div id="excluded-holiday-dates" class="date-tags" style="margin-top:0.7rem;"></div>
+          <div class="date-input-row">
+            <input type="date" id="add-excluded-holiday-date">
+            <button class="btn btn-secondary btn-sm" onclick="addExcludedHolidayDate()">+ 예외 추가</button>
+          </div>
         </div>
       </div>
 

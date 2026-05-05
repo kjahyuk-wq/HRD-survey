@@ -168,11 +168,12 @@ async function proceedWithCourse(name, empNo, candidate) {
     }
   }
 
-  // 휴강일 체크
+  // 휴강일 체크 (excludedHolidays에 등록된 날짜는 휴강에서 제외 — 수업 진행)
+  const excluded = new Set(config.excludedHolidays || []);
   const allHolidays = [
     ...(config.customHolidays || []),
     ...getBuiltinHolidays(new Date().getFullYear())
-  ];
+  ].filter(d => !excluded.has(d));
   if (allHolidays.includes(today)) {
     showScreen('screen-no-class');
     document.getElementById('no-class-title').textContent = '오늘은 휴강일입니다';

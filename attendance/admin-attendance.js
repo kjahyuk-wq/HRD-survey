@@ -12,11 +12,12 @@ let allStudents = [];
 let allAttendance = [];
 let scheduleDates = [];
 let customHolidays = [];
+let excludedHolidays = [];
 let dailySessions = 1;
 const todayStr = new Date().toISOString().slice(0, 10);
 
-// ── 관리자 인증 (로컬 테스트용 간이 인증) ──────────────────────────────
-const ADMIN_PW = 'admin';
+// ── 관리자 인증 ──────────────────────────────
+const ADMIN_PW = 'hrd2024!';
 
 window.adminLogin = async function() {
   const pw = document.getElementById('admin-pw').value;
@@ -96,6 +97,7 @@ async function loadConfig() {
       dailySessions = cfg.dailySessions || 1;
       scheduleDates = [...(cfg.scheduleDates || [])];
       customHolidays = [...(cfg.customHolidays || [])];
+      excludedHolidays = [...(cfg.excludedHolidays || [])];
 
       selectSessions(dailySessions, true);
       document.getElementById('morning-start').value = cfg.morningStart || '09:00';
@@ -114,6 +116,7 @@ async function loadConfig() {
       currentConfig = null;
       scheduleDates = [];
       customHolidays = [];
+      excludedHolidays = [];
       selectSessions(1, true);
       document.getElementById('team-ops').checked = true;
       document.getElementById('handler-name').value = '';
@@ -121,6 +124,7 @@ async function loadConfig() {
     }
     renderDateTags();
     renderHolidayTags();
+    renderExcludedHolidayTags();
   } catch(e) {
     console.error('설정 로드 오류:', e);
   }
@@ -237,6 +241,34 @@ window.removeHolidayDate = function(d) {
   renderHolidayTags();
 };
 
+function renderExcludedHolidayTags() {
+  const wrap = document.getElementById('excluded-holiday-dates');
+  if (!wrap) return;
+  if (!excludedHolidays.length) {
+    wrap.innerHTML = '<span style="font-size:0.82rem;color:#94a3b8;">등록된 예외 없음</span>';
+    return;
+  }
+  const sorted = [...excludedHolidays].sort();
+  wrap.innerHTML = sorted.map(d =>
+    `<span class="date-tag date-tag-schedule">${formatDate(d)}<button onclick="removeExcludedHolidayDate('${d}')">✕</button></span>`
+  ).join('');
+}
+
+window.addExcludedHolidayDate = function() {
+  const val = document.getElementById('add-excluded-holiday-date').value;
+  if (!val) return;
+  if (!excludedHolidays.includes(val)) {
+    excludedHolidays.push(val);
+    renderExcludedHolidayTags();
+  }
+  document.getElementById('add-excluded-holiday-date').value = '';
+};
+
+window.removeExcludedHolidayDate = function(d) {
+  excludedHolidays = excludedHolidays.filter(x => x !== d);
+  renderExcludedHolidayTags();
+};
+
 // ── 설정 저장 ──────────────────────────────
 window.saveConfig = async function() {
   if (!currentCourseId) { alert('과정을 먼저 선택해 주세요.'); return; }
@@ -255,6 +287,7 @@ window.saveConfig = async function() {
     afternoonEnd: document.getElementById('afternoon-end').value || '18:00',
     scheduleDates: [...scheduleDates].sort(),
     customHolidays: [...customHolidays].sort(),
+    excludedHolidays: [...excludedHolidays].sort(),
     team: selectedTeam?.value || '교육운영팀',
     handlerName: document.getElementById('handler-name').value.trim(),
     managerName: document.getElementById('manager-name').value.trim(),
@@ -298,11 +331,13 @@ async function loadAttendanceRecords() {
 
 function getAllHolidays() {
   const yr = new Date().getFullYear();
-  return [
+  const all = [
     ...customHolidays,
     ...getBuiltinHolidays(yr),
     ...getBuiltinHolidays(yr + 1),
   ];
+  const excluded = new Set(excludedHolidays);
+  return all.filter(d => !excluded.has(d));
 }
 
 function renderDateTabBar() {
@@ -856,54 +891,6 @@ window.resetDeviceLock = async function() {
     statusEl.textContent = '초기화 실패: ' + e.message;
   } finally {
     btn.disabled = false; btn.textContent = '초기화';
-  }
-};
-
-// ── 테스트 데이터 시드 ──────────────────────────────
-window.seedTestData = async function() {
-  const status = document.getElementById('seed-status');
-  status.textContent = '생성 중...';
-
-  try {
-    // 테스트 과정 생성
-    const courseRef = await addDoc(collection(db, 'courses'), { name: '[테스트] QR출결 샘플과정' });
-    const courseId = courseRef.id;
-
-    // 테스트 학생 5명 생성
-    const students = [
-      { name: '홍길동', empNo: '1001' },
-      { name: '김철수', empNo: '1002' },
-      { name: '이영희', empNo: '1003' },
-      { name: '박민준', empNo: '1004' },
-      { name: '최지수', empNo: '1005' },
-    ];
-    for (const s of students) {
-      await addDoc(collection(db, 'courses', courseId, 'students'), { ...s, completed: false, completedAt: null });
-    }
-
-    // 오늘 포함 3일 출석 설정
-    const today = new Date();
-    const days = [];
-    for (let i = 0; i < 3; i++) {
-      const d = new Date(today);
-      d.setDate(today.getDate() + i);
-      const dow = d.getDay();
-      if (dow !== 0 && dow !== 6) days.push(d.toISOString().slice(0, 10));
-    }
-
-    await setDoc(doc(db, 'courses', courseId, 'attendanceConfig', 'config'), {
-      dailySessions: 2,
-      morningStart: '09:00', morningEnd: '12:00',
-      afternoonStart: '13:00', afternoonEnd: '18:00',
-      scheduleDates: days,
-      customHolidays: [],
-      updatedAt: serverTimestamp()
-    });
-
-    status.textContent = `✅ 완료! (과정ID: ${courseId.slice(0,8)}...) 과정 목록을 새로고침하세요.`;
-    await loadCourses();
-  } catch(e) {
-    status.textContent = '실패: ' + e.message;
   }
 };
 
