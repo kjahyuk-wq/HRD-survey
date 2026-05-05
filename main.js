@@ -28,12 +28,31 @@ async function doLogin() {
     // collectionGroup 쿼리로 모든 과정의 수강생을 단일 쿼리로 검색
     const q = query(collectionGroup(db, 'students'), where('empNo', '==', empNo));
     const snap = await getDocs(q);
-    const found = snap.docs.find(d => d.data().name === name);
+    const candidates = snap.docs.filter(d => d.data().name === name);
 
-    if (!found) {
+    if (candidates.length === 0) {
       showLoginError('등록된 수강생 정보를 찾을 수 없습니다.\n이름 또는 교번을 확인하거나 담당자에게 문의해 주세요.');
       reset(); return;
     }
+
+    // 활성 과정에 속한 수강생만 통과 — 종료된 과정의 동명이인/동교번 충돌 방지
+    const courseDocs = await Promise.all(candidates.map(c => getDoc(c.ref.parent.parent)));
+    const activeMatches = candidates
+      .map((c, i) => ({ studentDoc: c, courseDoc: courseDocs[i] }))
+      .filter(({ courseDoc }) => courseDoc.exists() && courseDoc.data().active !== false);
+
+    if (activeMatches.length === 0) {
+      showLoginError('등록된 수강생 정보를 찾을 수 없습니다.\n이름 또는 교번을 확인하거나 담당자에게 문의해 주세요.');
+      reset(); return;
+    }
+
+    if (activeMatches.length > 1) {
+      showLoginError('동일한 정보의 수강생이 여러 활성 과정에 등록되어 있습니다.\n담당자에게 문의해 주세요.');
+      reset(); return;
+    }
+
+    const found = activeMatches[0].studentDoc;
+    const courseDoc = activeMatches[0].courseDoc;
 
     const studentData = found.data();
     if (studentData.completed) {
@@ -42,7 +61,6 @@ async function doLogin() {
     }
 
     const matchCourseId = found.ref.parent.parent.id;
-    const courseDoc = await getDoc(found.ref.parent.parent);
     const matchCourseName = courseDoc.data().name;
 
     const instrSnap = await getDocs(query(collection(db, 'courses', matchCourseId, 'instructors'), orderBy('createdAt')));

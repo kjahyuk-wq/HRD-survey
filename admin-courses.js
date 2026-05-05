@@ -17,33 +17,53 @@ export async function loadCourseList() {
     document.getElementById('course-manage-loading').style.display = 'none';
 
     state.courseIdMap = {};
+    state.courseActive = {};
+    // active 과정 먼저, 그 안에서는 입력 순서 유지
     const courses = snap.docs.map(d => {
-      state.courseIdMap[d.data().name] = d.id;
-      return d.data().name;
+      const data = d.data();
+      const isActive = data.active !== false;  // 필드 없으면 활성으로 간주 (마이그레이션)
+      state.courseIdMap[data.name] = d.id;
+      state.courseActive[data.name] = isActive;
+      return { name: data.name, active: isActive };
     });
+    courses.sort((a, b) => (a.active === b.active) ? 0 : (a.active ? -1 : 1));
 
     document.getElementById('course-count').textContent = courses.length + '개';
 
     if (!courses.length) {
       document.getElementById('course-manage-empty').style.display = 'block';
     } else {
-      document.getElementById('course-manage-list').innerHTML = courses.map((name, idx) => `
-        <div class="course-manage-item" id="course-item-${idx}">
+      document.getElementById('course-manage-list').innerHTML = courses.map(({ name, active }, idx) => {
+        const en = escapeAttr(name);
+        const statusBadge = active
+          ? `<span class="course-status active">진행중</span>`
+          : `<span class="course-status closed">종료</span>`;
+        const toggleBtn = active
+          ? `<button class="course-close-btn" onclick="toggleCourseActive('${en}', true, this)">종료</button>`
+          : `<button class="course-reopen-btn" onclick="toggleCourseActive('${en}', false, this)">재활성</button>`;
+        return `
+        <div class="course-manage-item ${active ? '' : 'is-closed'}" id="course-item-${idx}">
           <div class="course-manage-row">
-            <span class="course-manage-name">📚 ${escapeHtml(name)}</span>
+            <span class="course-manage-name">📚 ${escapeHtml(name)} ${statusBadge}</span>
             <div class="course-manage-actions">
-              <button class="instructor-btn" onclick="toggleInstructors('${escapeAttr(name)}', ${idx})">👨‍🏫 강사 관리</button>
-              <button class="delete-btn" onclick="deleteCourse('${escapeAttr(name)}', this)">삭제</button>
+              <button class="instructor-btn" onclick="toggleInstructors('${en}', ${idx})">👨‍🏫 강사 관리</button>
+              ${toggleBtn}
+              <button class="delete-btn" onclick="deleteCourse('${en}', this)">삭제</button>
             </div>
           </div>
           <div class="instructor-panel" id="inst-panel-${idx}" style="display:none;"></div>
-        </div>`).join('');
+        </div>`;
+      }).join('');
     }
 
+    // 수강생 관리 드롭다운 — 종료된 과정엔 [종료] 표시
     const sel = document.getElementById('student-course-select');
     const prev = sel.value;
     sel.innerHTML = '<option value="">-- 교육과정을 선택하세요 --</option>' +
-      courses.map(c => `<option value="${escapeAttr(c)}">${escapeHtml(c)}</option>`).join('');
+      courses.map(({ name, active }) => {
+        const label = active ? name : `[종료] ${name}`;
+        return `<option value="${escapeAttr(name)}">${escapeHtml(label)}</option>`;
+      }).join('');
     if (prev) sel.value = prev;
 
   } catch (e) {
@@ -60,11 +80,33 @@ export async function addCourse() {
   btn.disabled = true; btn.textContent = '추가 중...';
 
   try {
-    await addDoc(collection(db, 'courses'), { name });
+    await addDoc(collection(db, 'courses'), { name, active: true });
     input.value = '';
     await loadCourseList();
   } catch (e) { alert('추가 중 오류가 발생했습니다.'); }
   finally { btn.disabled = false; btn.textContent = '+ 추가'; }
+}
+
+// 활성 ↔ 종료 토글
+export async function toggleCourseActive(name, currentActive, btnEl) {
+  const newActive = !currentActive;
+  const msg = newActive
+    ? `"${name}" 과정을 다시 활성 상태로 전환하시겠습니까?\n수강생들이 다시 로그인할 수 있게 됩니다.`
+    : `"${name}" 과정을 종료 처리하시겠습니까?\n\n• 수강생 로그인 차단(이름·교번 중복 충돌 방지)\n• 통계·응답 데이터는 그대로 보관됨\n• 언제든 재활성 가능`;
+  if (!confirm(msg)) return;
+
+  btnEl.disabled = true;
+  const originalText = btnEl.textContent;
+  btnEl.textContent = '처리 중...';
+  try {
+    const courseId = state.courseIdMap[name];
+    await updateDoc(doc(db, 'courses', courseId), { active: newActive });
+    await loadCourseList();
+  } catch (e) {
+    alert('상태 변경 중 오류가 발생했습니다.');
+    btnEl.disabled = false;
+    btnEl.textContent = originalText;
+  }
 }
 
 export async function deleteCourse(name, btnEl) {

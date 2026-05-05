@@ -30,6 +30,7 @@ export const DEMO_QUESTIONS = [
 // 모듈 간 공유 상태 (ES 모듈 싱글톤으로 공유됨)
 export const state = {
   courseIdMap: {},
+  courseActive: {},  // name → boolean (false면 종료된 과정)
   lastResponses: [],
   lastCourseName: '',
   lastOrderedInstructorKeys: [],

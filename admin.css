@@ -405,6 +405,46 @@ header h1 { font-size: 1.3rem; font-weight: 700; margin: 0; color: #fff; }
 
 .course-manage-name { font-size: 0.95rem; font-weight: 600; color: #333; }
 
+/* 과정 상태 뱃지 */
+.course-status {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.course-status.active { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
+.course-status.closed { background: #f3f4f6; color: #6b7280; border: 1px solid #d1d5db; }
+
+.course-manage-item.is-closed .course-manage-name { color: #888; }
+.course-manage-item.is-closed { opacity: 0.85; }
+
+/* 종료/재활성 버튼 */
+.course-close-btn,
+.course-reopen-btn {
+  padding: 0.3rem 0.8rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  width: auto;
+  box-shadow: none;
+}
+.course-close-btn {
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  color: #c2410c;
+}
+.course-close-btn:hover:not(:disabled) { background: #ffedd5; transform: none; box-shadow: none; }
+.course-reopen-btn {
+  background: #ecfdf5;
+  border: 1px solid #6ee7b7;
+  color: #047857;
+}
+.course-reopen-btn:hover:not(:disabled) { background: #d1fae5; transform: none; box-shadow: none; }
+
 /* 강사 관리 버튼 */
 .instructor-btn {
   padding: 0.3rem 0.8rem;

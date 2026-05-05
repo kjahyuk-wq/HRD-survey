@@ -58,11 +58,20 @@ export function computeStats(responses, orderedInstructorKeys) {
 export async function populateStatsSelect() {
   try {
     const snap = await getDocs(collection(db, 'courses'));
-    snap.docs.forEach(d => { state.courseIdMap[d.data().name] = d.id; });
-    const courses = snap.docs.map(d => d.data().name);
+    const courses = snap.docs.map(d => {
+      const data = d.data();
+      const isActive = data.active !== false;
+      state.courseIdMap[data.name] = d.id;
+      state.courseActive[data.name] = isActive;
+      return { name: data.name, active: isActive };
+    });
+    courses.sort((a, b) => (a.active === b.active) ? 0 : (a.active ? -1 : 1));
     const sel = document.getElementById('stats-course-select');
     sel.innerHTML = '<option value="">-- 교육과정을 선택하세요 --</option>' +
-      courses.map(c => `<option value="${escapeAttr(c)}">${escapeHtml(c)}</option>`).join('');
+      courses.map(({ name, active }) => {
+        const label = active ? name : `[종료] ${name}`;
+        return `<option value="${escapeAttr(name)}">${escapeHtml(label)}</option>`;
+      }).join('');
   } catch (e) {}
 }
 

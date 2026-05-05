@@ -7,12 +7,21 @@ import { state, escapeHtml, escapeAttr } from './admin-utils.js';
 export async function populatePreviewSelect() {
   try {
     const snap = await getDocs(collection(db, 'courses'));
-    snap.docs.forEach(d => { state.courseIdMap[d.data().name] = d.id; });
-    const courses = snap.docs.map(d => d.data().name);
+    const courses = snap.docs.map(d => {
+      const data = d.data();
+      const isActive = data.active !== false;
+      state.courseIdMap[data.name] = d.id;
+      state.courseActive[data.name] = isActive;
+      return { name: data.name, active: isActive };
+    });
+    courses.sort((a, b) => (a.active === b.active) ? 0 : (a.active ? -1 : 1));
     const sel = document.getElementById('preview-course-select');
     const current = sel.value;
     sel.innerHTML = '<option value="">-- 교육과정을 선택하세요 --</option>' +
-      courses.map(c => `<option value="${escapeAttr(c)}"${c === current ? ' selected' : ''}>${escapeHtml(c)}</option>`).join('');
+      courses.map(({ name, active }) => {
+        const label = active ? name : `[종료] ${name}`;
+        return `<option value="${escapeAttr(name)}"${name === current ? ' selected' : ''}>${escapeHtml(label)}</option>`;
+      }).join('');
     if (current) loadPreviewInstructors();
   } catch (e) {}
 }
