@@ -472,16 +472,21 @@ header h1 { font-size: 1.3rem; font-weight: 700; margin: 0; color: #fff; }
   flex-wrap: nowrap;
 }
 
-/* 액션 버튼들은 같은 폭으로 통일 */
+/* 액션 버튼들은 같은 폭으로 통일 (전역 button width:100% 덮어쓰기 포함) */
 .inst-action-btns .inst-edit-btn,
 .inst-action-btns .delete-btn,
 .inst-action-btns .inst-save-btn,
 .inst-action-btns .inst-cancel-btn {
+  width: auto;
+  flex: 0 0 auto;
   min-width: 52px;
   padding: 0.32rem 0.7rem;
   font-size: 0.8rem;
+  font-weight: 600;
   text-align: center;
   box-sizing: border-box;
+  display: inline-block;
+  box-shadow: none;
 }
 
 .inst-move-btn {
