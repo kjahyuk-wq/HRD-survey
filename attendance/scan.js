@@ -76,13 +76,6 @@ async function requestWakeLock() {
   if (!('wakeLock' in navigator)) return;
   try {
     wakeLock = await navigator.wakeLock.request('screen');
-    const el = document.getElementById('wake-status');
-    el.textContent = '화면 켜짐 유지 중';
-    el.classList.add('active');
-    wakeLock.addEventListener('release', () => {
-      el.textContent = '화면 켜짐 유지 해제됨';
-      el.classList.remove('active');
-    });
   } catch (e) {
     console.warn('WakeLock 사용 불가:', e.message);
   }

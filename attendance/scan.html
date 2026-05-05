@@ -14,13 +14,22 @@
     body { background: #0f172a; color: #f1f5f9; }
     .scan-page { max-width: 720px; }
 
-    /* 큰 시계 */
+    /* 큰 시계 (날짜 + 시간 한 줄) */
     .clock-bar {
       background: #1e293b;
       border-radius: 14px;
-      padding: 1rem 1.2rem;
-      margin-bottom: 0.8rem;
-      text-align: center;
+      padding: 1.1rem 1.4rem;
+      margin: 0.6rem 0 0.8rem;
+      display: flex;
+      align-items: baseline;
+      justify-content: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .clock-date {
+      font-size: 1.05rem;
+      color: #94a3b8;
+      font-weight: 500;
     }
     .clock-time {
       font-size: 3.2rem;
@@ -28,12 +37,7 @@
       color: #f1f5f9;
       letter-spacing: 0.04em;
       font-variant-numeric: tabular-nums;
-      line-height: 1.05;
-    }
-    .clock-date {
-      font-size: 0.95rem;
-      color: #94a3b8;
-      margin-top: 0.25rem;
+      line-height: 1;
     }
 
     /* 결과 오버레이 — 더 크게/명확하게 */
@@ -49,38 +53,34 @@
     .scan-result-text { font-size: 1.6rem; font-weight: 800; color: #f1f5f9; }
     .scan-result-sub { font-size: 1rem; color: #cbd5e1; margin-top: 0.5rem; }
 
-    /* Wake lock 상태 */
-    .wake-status {
-      font-size: 0.75rem;
-      color: #64748b;
-      text-align: right;
-      margin-bottom: 0.4rem;
-    }
-    .wake-status.active { color: #22c55e; }
-
-    /* 카메라 전환 */
+    /* 카메라 전환 — 운영자만 보면 되므로 작고 은은하게 */
     .camera-switch {
-      display: flex; gap: 0.4rem;
-      margin-bottom: 0.6rem;
-      background: #1e293b;
-      border-radius: 12px;
-      padding: 0.4rem;
+      display: flex; gap: 0.2rem;
+      justify-content: center;
+      align-items: center;
+      margin: 1rem 0 0.2rem;
+      opacity: 0.45;
+      transition: opacity 0.2s;
     }
+    .camera-switch:hover { opacity: 0.9; }
     .camera-switch button {
-      flex: 1;
       background: transparent;
-      color: #94a3b8;
+      color: #64748b;
       border: none;
-      border-radius: 8px;
-      padding: 0.55rem 0.4rem;
-      font-size: 0.85rem;
-      font-weight: 600;
+      padding: 0.3rem 0.6rem;
+      font-size: 0.72rem;
+      font-weight: 500;
       cursor: pointer;
-      transition: background 0.15s, color 0.15s;
+      border-radius: 4px;
     }
     .camera-switch button.active {
-      background: #2563eb;
-      color: #fff;
+      color: #cbd5e1;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+    .camera-switch .sep {
+      color: #475569;
+      font-size: 0.7rem;
     }
 
     /* html5-qrcode 오버라이드 */
@@ -93,25 +93,12 @@
 </head>
 <body>
 
-<div class="att-header">
-  <div>
-    <h1>📷 QR 출석 스캔</h1>
-    <div class="sub" id="scan-date-label"></div>
-  </div>
-  <div id="wake-status" class="wake-status">화면 켜짐 유지 대기</div>
-</div>
-
 <div class="scan-page container">
 
-  <!-- 시계 -->
+  <!-- 시계 + 날짜 -->
   <div class="clock-bar">
+    <div class="clock-date" id="scan-date-label"></div>
     <div class="clock-time" id="scan-time-label">--:--:--</div>
-  </div>
-
-  <!-- 카메라 전환 -->
-  <div class="camera-switch">
-    <button type="button" data-facing="user">전면 카메라</button>
-    <button type="button" data-facing="environment">후면 카메라</button>
   </div>
 
   <!-- QR 스캐너 -->
@@ -124,9 +111,16 @@
     <div class="scan-result-sub" id="result-sub"></div>
   </div>
 
+  <!-- 카메라 전환 (운영자용, 하단에 작게) -->
+  <div class="camera-switch">
+    <button type="button" data-facing="user">전면</button>
+    <span class="sep">·</span>
+    <button type="button" data-facing="environment">후면</button>
+  </div>
+
 </div>
 
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-<script type="module" src="scan.js?v=4"></script>
+<script type="module" src="scan.js?v=5"></script>
 </body>
 </html>
