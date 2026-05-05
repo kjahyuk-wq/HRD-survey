@@ -72,17 +72,47 @@ document.addEventListener('visibilitychange', async () => {
 });
 
 // ── QR 스캐너 초기화 ──────────────────────────────
-function initScanner() {
-  const html5Qr = new Html5Qrcode('qr-reader');
+let html5Qr = null;
+const CAMERA_PREF_KEY = 'attendance:cameraFacing';
 
-  html5Qr.start(
-    { facingMode: 'user' },
-    { fps: 10, qrbox: { width: 260, height: 260 }, aspectRatio: 1.0 },
-    onScanSuccess,
-    () => {} // 에러 무시 (스캔 시도 중 계속 발생)
-  ).catch(err => {
+function getSavedFacing() {
+  const v = localStorage.getItem(CAMERA_PREF_KEY);
+  return v === 'environment' ? 'environment' : 'user';
+}
+
+async function startScanner(facingMode) {
+  if (!html5Qr) html5Qr = new Html5Qrcode('qr-reader');
+  try {
+    if (html5Qr.isScanning) await html5Qr.stop();
+  } catch (_) {}
+  try {
+    await html5Qr.start(
+      { facingMode },
+      { fps: 10, qrbox: { width: 260, height: 260 }, aspectRatio: 1.0 },
+      onScanSuccess,
+      () => {} // 에러 무시 (스캔 시도 중 계속 발생)
+    );
+    localStorage.setItem(CAMERA_PREF_KEY, facingMode);
+    updateCameraSwitchUI(facingMode);
+  } catch (err) {
     console.error('카메라 시작 오류:', err);
-    showResult('error', '❌', '카메라를 시작할 수 없습니다', '브라우저 권한 설정을 확인해 주세요.');
+    showResult('error', '❌', '카메라를 시작할 수 없습니다', '권한이나 카메라 사용 가능 여부를 확인해 주세요.');
+  }
+}
+
+function updateCameraSwitchUI(facingMode) {
+  document.querySelectorAll('.camera-switch button').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.facing === facingMode);
+  });
+}
+
+function initCameraSwitch() {
+  document.querySelectorAll('.camera-switch button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const facing = btn.dataset.facing;
+      if (facing === getSavedFacing() && html5Qr?.isScanning) return;
+      startScanner(facing);
+    });
   });
 }
 
@@ -270,7 +300,8 @@ function escapeHtml(str) {
 // ── 시작 ──────────────────────────────
 signInAnonymously(auth).then(() => {
   requestWakeLock();
-  initScanner();
+  initCameraSwitch();
+  startScanner(getSavedFacing());
   subscribeToTodayAttendance();
 }).catch(e => {
   console.error('익명 로그인 실패:', e);

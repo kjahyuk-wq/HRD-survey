@@ -51,6 +51,31 @@
     }
     .wake-status.active { color: #22c55e; }
 
+    /* 카메라 전환 */
+    .camera-switch {
+      display: flex; gap: 0.4rem;
+      margin-bottom: 0.6rem;
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 0.4rem;
+    }
+    .camera-switch button {
+      flex: 1;
+      background: transparent;
+      color: #94a3b8;
+      border: none;
+      border-radius: 8px;
+      padding: 0.55rem 0.4rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .camera-switch button.active {
+      background: #2563eb;
+      color: #fff;
+    }
+
     /* html5-qrcode 오버라이드 */
     #qr-reader { background: #000 !important; border-radius: 16px !important; overflow: hidden; }
     #qr-reader video { width: 100% !important; border-radius: 16px; }
@@ -96,6 +121,12 @@
       <div class="count-num" id="count-afternoon">0</div>
       <div class="count-label">오후</div>
     </div>
+  </div>
+
+  <!-- 카메라 전환 -->
+  <div class="camera-switch">
+    <button type="button" data-facing="user">전면 카메라</button>
+    <button type="button" data-facing="environment">후면 카메라</button>
   </div>
 
   <!-- QR 스캐너 -->
