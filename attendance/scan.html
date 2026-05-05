@@ -2,26 +2,52 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <!-- iOS 홈 화면 추가 시 풀스크린 모드 -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="QR 출석">
+  <meta name="theme-color" content="#0f172a">
   <title>QR 스캔 - 출결관리</title>
   <link rel="stylesheet" href="attendance.css">
   <style>
     body { background: #0f172a; color: #f1f5f9; }
-    .scan-page { max-width: 600px; }
+    .scan-page { max-width: 720px; }
 
-    /* 세션 인포 다크 */
-    .session-info { background: #1e293b; }
-    .session-label { color: #94a3b8; }
-    .session-value { color: #60a5fa; }
+    /* 큰 시계 */
+    .clock-bar {
+      background: #1e293b;
+      border-radius: 14px;
+      padding: 1rem 1.2rem;
+      margin-bottom: 0.8rem;
+      text-align: center;
+    }
+    .clock-time {
+      font-size: 3.2rem;
+      font-weight: 800;
+      color: #f1f5f9;
+      letter-spacing: 0.04em;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.05;
+    }
+    .clock-date {
+      font-size: 0.95rem;
+      color: #94a3b8;
+      margin-top: 0.25rem;
+    }
 
-    /* 결과 오버레이 */
-    .scan-result { border-radius: 16px; padding: 1.5rem; text-align: center; margin: 0.8rem 0; display: none; }
-    .scan-result.success { background: #052e16; border: 2px solid #16a34a; }
-    .scan-result.error   { background: #2c0a0a; border: 2px solid #dc2626; }
-    .scan-result.warning { background: #292010; border: 2px solid #d97706; }
-    .scan-result-icon { font-size: 2.8rem; margin-bottom: 0.4rem; }
-    .scan-result-text { font-size: 1.25rem; font-weight: 700; color: #f1f5f9; }
-    .scan-result-sub { font-size: 0.85rem; color: #94a3b8; margin-top: 0.4rem; }
+    /* 결과 오버레이 — 더 크게/명확하게 */
+    .scan-result {
+      border-radius: 16px; padding: 1.8rem 1.2rem;
+      text-align: center; margin: 0.8rem 0;
+      display: none;
+    }
+    .scan-result.success { background: #052e16; border: 3px solid #16a34a; }
+    .scan-result.error   { background: #2c0a0a; border: 3px solid #dc2626; }
+    .scan-result.warning { background: #292010; border: 3px solid #d97706; }
+    .scan-result-icon { font-size: 3.6rem; margin-bottom: 0.4rem; line-height: 1; }
+    .scan-result-text { font-size: 1.6rem; font-weight: 800; color: #f1f5f9; }
+    .scan-result-sub { font-size: 1rem; color: #cbd5e1; margin-top: 0.5rem; }
 
     /* Wake lock 상태 */
     .wake-status {
@@ -77,15 +103,9 @@
 
 <div class="scan-page container">
 
-  <!-- 세션 정보 -->
-  <div class="session-info">
-    <div>
-      <div class="session-label">현재 출석 회차</div>
-      <div class="session-value" id="current-session-display">초기화 중...</div>
-    </div>
-    <div style="text-align:right;">
-      <div class="session-label" id="scan-time-label"></div>
-    </div>
+  <!-- 시계 -->
+  <div class="clock-bar">
+    <div class="clock-time" id="scan-time-label">--:--:--</div>
   </div>
 
   <!-- 카메라 전환 -->
@@ -107,6 +127,6 @@
 </div>
 
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-<script type="module" src="scan.js?v=3"></script>
+<script type="module" src="scan.js?v=4"></script>
 </body>
 </html>

@@ -31,20 +31,45 @@ function updateClock() {
 updateClock();
 setInterval(updateClock, 1000);
 
-// ── 현재 세션 표시 (정보성) ──────────────────────────────
-function updateSessionDisplay() {
-  const now = new Date();
-  const cur = now.getHours() * 60 + now.getMinutes();
-  let label;
-  if (cur < 13 * 60) {
-    label = '오전 세션';
-  } else {
-    label = '오후 세션';
-  }
-  document.getElementById('current-session-display').textContent = label;
+// ── 사운드 (스캔 결과 비프음) ──────────────────────────────
+let audioCtx = null;
+function ensureAudio() {
+  if (audioCtx) return audioCtx;
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return null;
+  audioCtx = new Ctx();
+  return audioCtx;
 }
-updateSessionDisplay();
-setInterval(updateSessionDisplay, 60000);
+// iOS는 사용자 제스처가 있어야 오디오 잠금 해제됨 — 첫 탭에서 unlock
+document.addEventListener('touchstart', unlockAudio, { passive: true });
+document.addEventListener('click', unlockAudio);
+function unlockAudio() {
+  const ctx = ensureAudio();
+  if (ctx?.state === 'suspended') ctx.resume();
+}
+
+function playTone(freq, duration = 0.18, type = 'sine', gainPeak = 0.25) {
+  const ctx = ensureAudio();
+  if (!ctx || ctx.state !== 'running') return;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain).connect(ctx.destination);
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, ctx.currentTime);
+  gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(gainPeak, ctx.currentTime + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
+  osc.start();
+  osc.stop(ctx.currentTime + duration + 0.02);
+}
+function playSuccess() {
+  // 상승하는 두 음 — 짧고 명확하게
+  playTone(880, 0.12);
+  setTimeout(() => playTone(1320, 0.18), 90);
+}
+function playError() {
+  playTone(220, 0.35, 'square', 0.18);
+}
 
 // ── Wake Lock ──────────────────────────────
 async function requestWakeLock() {
@@ -110,7 +135,14 @@ async function startScanner(facing) {
 
     await html5Qr.start(
       source,
-      { fps: 10, qrbox: { width: 260, height: 260 }, aspectRatio: 1.0 },
+      {
+        fps: 10,
+        qrbox: (vw, vh) => {
+          const m = Math.floor(Math.min(vw, vh) * 0.85);
+          return { width: m, height: m };
+        },
+        aspectRatio: 1.0
+      },
       onScanSuccess,
       () => {}
     );
@@ -244,10 +276,11 @@ function showResult(type, icon, text, sub) {
   document.getElementById('result-sub').textContent = sub;
   el.style.display = 'block';
 
-  // 성공 시 3초 후 자동 숨김
   if (type === 'success') {
+    playSuccess();
     setTimeout(() => { el.style.display = 'none'; }, 3000);
   } else {
+    playError();
     setTimeout(() => { el.style.display = 'none'; }, 4000);
   }
 }
