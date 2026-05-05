@@ -467,9 +467,21 @@ header h1 { font-size: 1.3rem; font-weight: 700; margin: 0; color: #fff; }
 .inst-action-btns {
   display: flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: 0.35rem;
   justify-content: center;
   flex-wrap: nowrap;
+}
+
+/* 액션 버튼들은 같은 폭으로 통일 */
+.inst-action-btns .inst-edit-btn,
+.inst-action-btns .delete-btn,
+.inst-action-btns .inst-save-btn,
+.inst-action-btns .inst-cancel-btn {
+  min-width: 52px;
+  padding: 0.32rem 0.7rem;
+  font-size: 0.8rem;
+  text-align: center;
+  box-sizing: border-box;
 }
 
 .inst-move-btn {
@@ -1016,4 +1028,131 @@ tr:hover td { background: #f8faff; }
   resize: none;
 }
 
- 
+/* ── 모바일 반응형 ── */
+@media (max-width: 600px) {
+  .container { padding: 1rem 0.6rem; }
+
+  /* 헤더 */
+  header {
+    padding: 1rem 1.1rem;
+    border-radius: 12px;
+    gap: 0.6rem;
+  }
+  .logo-area { gap: 0.6rem; }
+  .logo-icon { font-size: 2rem; }
+  .org-name { font-size: 0.7rem; margin-bottom: 0.1rem; }
+  header h1 { font-size: 1.05rem; }
+  .logout-btn { padding: 0.35rem 0.8rem; font-size: 0.78rem; }
+
+  /* 탭 */
+  .tabs { gap: 0.35rem; margin-bottom: 0.9rem; }
+  .tab-btn {
+    font-size: 0.72rem;
+    padding: 0.55rem 0.25rem;
+    line-height: 1.3;
+    border-radius: 8px;
+    border-width: 1.5px;
+  }
+
+  /* 섹션 카드 */
+  .section-card { padding: 1rem 0.9rem; border-radius: 10px; }
+  .section-title { font-size: 0.88rem; margin: 1.1rem 0 0.6rem; }
+
+  /* 교육과정 추가 */
+  .add-course-row { flex-wrap: wrap; gap: 0.4rem; }
+  .add-course-row input { padding: 0.6rem 0.8rem; font-size: 0.9rem; }
+  .add-btn { padding: 0.6rem 1rem; font-size: 0.88rem; }
+
+  /* 교육과정 선택 */
+  .course-select-row { flex-wrap: wrap; gap: 0.4rem; }
+  .course-select-row select { padding: 0.6rem 0.8rem; font-size: 0.88rem; }
+
+  /* 교육과정 목록 */
+  .course-manage-row { flex-wrap: wrap; gap: 0.4rem; }
+  .course-manage-name { font-size: 0.9rem; }
+  .course-manage-actions { gap: 0.3rem; flex-wrap: wrap; }
+  .instructor-btn { padding: 0.28rem 0.6rem; font-size: 0.75rem; }
+
+  /* 수강생 추가 */
+  .add-student-row { gap: 0.4rem; }
+  .add-student-row input { padding: 0.55rem 0.75rem; font-size: 0.85rem; }
+  .add-student-row input:first-child { flex: 1 1 100%; min-width: 0; }
+  .add-student-row input:nth-child(2) { flex: 1; min-width: 80px; }
+
+  /* 엑셀 업로드 */
+  .excel-upload-area { padding: 0.8rem 0.9rem; }
+  .excel-upload-label { font-size: 0.83rem; }
+  .excel-tip { display: block; margin-left: 0; margin-top: 0.2rem; font-size: 0.72rem; }
+  .excel-upload-row { gap: 0.4rem; }
+  .excel-file-btn { padding: 0.5rem 0.85rem; font-size: 0.8rem; }
+  .excel-file-name { font-size: 0.78rem; flex-basis: 100%; }
+
+  /* 수강생 통계 바 */
+  .stu-stat { font-size: 0.8rem; gap: 0.6rem; padding: 0.6rem 0.8rem; }
+
+  /* 일괄 액션 */
+  .bulk-delete-btn { padding: 0.35rem 0.8rem; font-size: 0.78rem; }
+
+  /* 수강생 테이블 */
+  .student-table { font-size: 0.8rem; }
+  .student-table th { padding: 0.5rem 0.4rem; font-size: 0.78rem; }
+  .student-table td { padding: 0.5rem 0.35rem; }
+  .status-done, .status-pending { font-size: 0.76rem; }
+  .completed-at { font-size: 0.66rem; }
+
+  /* 액션 버튼 모바일 — 통일된 작은 사이즈 */
+  .inst-action-btns { gap: 0.25rem; }
+  .inst-action-btns .inst-edit-btn,
+  .inst-action-btns .delete-btn,
+  .inst-action-btns .inst-save-btn,
+  .inst-action-btns .inst-cancel-btn {
+    min-width: 44px;
+    padding: 0.28rem 0.45rem;
+    font-size: 0.74rem;
+  }
+
+  /* 강사 패널 */
+  .instructor-panel { padding: 0.7rem 0.8rem; }
+  .inst-add-row { gap: 0.35rem; }
+  .inst-add-row input { padding: 0.45rem 0.65rem; font-size: 0.82rem; }
+  .inst-add-btn { padding: 0.45rem 0.75rem !important; font-size: 0.8rem !important; }
+  .inst-item { padding: 0.4rem 0.65rem; font-size: 0.83rem; flex-wrap: wrap; gap: 0.3rem; }
+
+  /* 통계 요약 카드 */
+  .summary-card { padding: 0.9rem 0.6rem; }
+  .card-label { font-size: 0.72rem; }
+  .card-value { font-size: 1.35rem; }
+  .card-sub { font-size: 0.7rem; }
+
+  /* 통계 영역 헤더 버튼 */
+  #stats-area > div:first-child { flex-wrap: wrap; gap: 0.4rem !important; }
+  .excel-export-btn { padding: 0.45rem 0.9rem; font-size: 0.8rem; }
+
+  /* 항목별 통계 */
+  .q-stat-card { padding: 1rem; }
+  .q-stat-label { font-size: 0.82rem; }
+  .q-stat-avg { font-size: 1rem; }
+  .q-stat-satisfy { font-size: 0.74rem; }
+
+  /* 인구통계 */
+  .demo-label { min-width: 70px; font-size: 0.78rem; }
+  .demo-count { min-width: 70px; font-size: 0.74rem; }
+
+  /* 익명 안내 */
+  .anon-notice { font-size: 0.75rem; padding: 0.5rem 0.8rem; }
+
+  /* 새로고침 */
+  .icon-refresh-btn { font-size: 0.78rem !important; padding: 0.4rem 0.85rem !important; }
+
+  /* 설문 미리보기 프레임 */
+  .preview-device-frame { padding: 1rem 0.7rem; border-radius: 12px; }
+}
+
+/* 아주 작은 화면 */
+@media (max-width: 380px) {
+  .tab-btn { font-size: 0.66rem; padding: 0.5rem 0.2rem; }
+  header h1 { font-size: 0.98rem; }
+  .org-name { font-size: 0.66rem; }
+  .logo-icon { font-size: 1.8rem; }
+}
+
