@@ -14,7 +14,7 @@
     body { background: #0f172a; color: #f1f5f9; }
     .scan-page { max-width: 720px; }
 
-    /* 큰 시계 (날짜 + 시간 한 줄) */
+    /* 큰 시계 (날짜 + 시간 한 줄, 같은 크기·굵기) */
     .clock-bar {
       background: #1e293b;
       border-radius: 14px;
@@ -23,21 +23,19 @@
       display: flex;
       align-items: baseline;
       justify-content: center;
-      gap: 1rem;
+      gap: 1.2rem;
       flex-wrap: wrap;
     }
-    .clock-date {
-      font-size: 1.05rem;
-      color: #94a3b8;
-      font-weight: 500;
+    .clock-date,
+    .clock-time {
+      font-size: 2.2rem;
+      font-weight: 700;
+      color: #f1f5f9;
+      letter-spacing: 0.02em;
+      line-height: 1;
     }
     .clock-time {
-      font-size: 3.2rem;
-      font-weight: 800;
-      color: #f1f5f9;
-      letter-spacing: 0.04em;
       font-variant-numeric: tabular-nums;
-      line-height: 1;
     }
 
     /* 결과 오버레이 — 더 크게/명확하게 */
@@ -121,6 +119,6 @@
 </div>
 
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-<script type="module" src="scan.js?v=5"></script>
+<script type="module" src="scan.js?v=6"></script>
 </body>
 </html>
