@@ -76,7 +76,7 @@ function initScanner() {
   const html5Qr = new Html5Qrcode('qr-reader');
 
   html5Qr.start(
-    { facingMode: 'environment' },
+    { facingMode: 'user' },
     { fps: 10, qrbox: { width: 260, height: 260 }, aspectRatio: 1.0 },
     onScanSuccess,
     () => {} // 에러 무시 (스캔 시도 중 계속 발생)
