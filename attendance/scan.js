@@ -95,20 +95,30 @@ function pickCameraId(facing) {
 }
 
 async function startScanner(facing) {
+  console.log('[scanner] startScanner 호출:', facing, 'isStarting=', isStarting);
   if (isStarting) return;
   isStarting = true;
   try {
     if (!html5Qr) html5Qr = new Html5Qrcode('qr-reader');
-    try { if (html5Qr.isScanning) await html5Qr.stop(); } catch (_) {}
+    try {
+      if (html5Qr.isScanning) {
+        console.log('[scanner] 기존 스캐너 stop');
+        await html5Qr.stop();
+      }
+    } catch (e) { console.warn('[scanner] stop 실패:', e); }
 
     if (!cameraList.length) {
-      try { cameraList = await Html5Qrcode.getCameras(); } catch (e) {
-        console.warn('카메라 목록 조회 실패:', e);
+      try {
+        cameraList = await Html5Qrcode.getCameras();
+        console.log('[scanner] getCameras 결과:', cameraList);
+      } catch (e) {
+        console.warn('[scanner] getCameras 실패:', e);
       }
     }
 
     const cameraId = pickCameraId(facing);
     const source = cameraId ? cameraId : { facingMode: facing };
+    console.log('[scanner] 사용할 source:', source);
 
     await html5Qr.start(
       source,
@@ -116,10 +126,11 @@ async function startScanner(facing) {
       onScanSuccess,
       () => {}
     );
+    console.log('[scanner] start 성공:', facing);
     localStorage.setItem(CAMERA_PREF_KEY, facing);
     updateCameraSwitchUI(facing);
   } catch (err) {
-    console.error('카메라 시작 오류:', err);
+    console.error('[scanner] 카메라 시작 오류:', err);
     showResult('error', '❌', '카메라를 시작할 수 없습니다', String(err?.message || err));
   } finally {
     isStarting = false;
@@ -133,8 +144,13 @@ function updateCameraSwitchUI(facing) {
 }
 
 function initCameraSwitch() {
-  document.querySelectorAll('.camera-switch button').forEach(btn => {
-    btn.addEventListener('click', () => startScanner(btn.dataset.facing));
+  const btns = document.querySelectorAll('.camera-switch button');
+  console.log('[scanner] initCameraSwitch, 버튼 개수:', btns.length);
+  btns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      console.log('[scanner] 버튼 클릭:', btn.dataset.facing);
+      startScanner(btn.dataset.facing);
+    });
   });
 }
 
