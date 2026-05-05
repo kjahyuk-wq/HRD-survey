@@ -261,21 +261,20 @@ function getCurrentSessionKey() {
 }
 
 // ── 결과 표시 ──────────────────────────────
+let resultHideTimer = null;
 function showResult(type, icon, text, sub) {
   const el = document.getElementById('scan-result');
-  el.className = `scan-result ${type}`;
+  el.className = `scan-result show ${type}`;
   document.getElementById('result-icon').textContent = icon;
   document.getElementById('result-text').textContent = text;
   document.getElementById('result-sub').textContent = sub;
-  el.style.display = 'block';
 
-  if (type === 'success') {
-    playSuccess();
-    setTimeout(() => { el.style.display = 'none'; }, 3000);
-  } else {
-    playError();
-    setTimeout(() => { el.style.display = 'none'; }, 4000);
-  }
+  clearTimeout(resultHideTimer);
+  const hideMs = type === 'success' ? 3000 : 4000;
+  if (type === 'success') playSuccess(); else playError();
+  resultHideTimer = setTimeout(() => {
+    el.classList.remove('show');
+  }, hideMs);
 }
 
 // ── 시작 ──────────────────────────────

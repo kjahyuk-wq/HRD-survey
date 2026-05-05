@@ -12,7 +12,8 @@
   <link rel="stylesheet" href="attendance.css">
   <style>
     body { background: #0f172a; color: #f1f5f9; }
-    .scan-page { max-width: 720px; }
+    /* 가로 화면(짧은 세로)에서도 카메라가 화면 밖으로 안 나가게 폭을 viewport 높이 기준으로도 제한 */
+    .scan-page { max-width: min(720px, 78vh); }
 
     /* 큰 시계 (날짜 + 시간 한 줄, 같은 크기·굵기) */
     .clock-bar {
@@ -38,18 +39,46 @@
       font-variant-numeric: tabular-nums;
     }
 
-    /* 결과 오버레이 — 더 크게/명확하게 */
+    /* 결과 — 화면 중앙 오버레이 (가로/세로 어떤 비율에서도 안 짤림) */
     .scan-result {
-      border-radius: 16px; padding: 1.8rem 1.2rem;
-      text-align: center; margin: 0.8rem 0;
       display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.78);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      animation: fadeIn 0.15s ease-out;
     }
-    .scan-result.success { background: #052e16; border: 3px solid #16a34a; }
-    .scan-result.error   { background: #2c0a0a; border: 3px solid #dc2626; }
-    .scan-result.warning { background: #292010; border: 3px solid #d97706; }
+    .scan-result.show { display: flex; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    .scan-result-card {
+      width: min(92vw, 480px);
+      max-height: 88vh;
+      overflow: auto;
+      border-radius: 18px;
+      padding: 1.8rem 1.4rem;
+      text-align: center;
+      background: #1e293b;
+      border: 3px solid #475569;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    }
+    .scan-result.success .scan-result-card { background: #052e16; border-color: #16a34a; }
+    .scan-result.error   .scan-result-card { background: #2c0a0a; border-color: #dc2626; }
+    .scan-result.warning .scan-result-card { background: #292010; border-color: #d97706; }
     .scan-result-icon { font-size: 3.6rem; margin-bottom: 0.4rem; line-height: 1; }
     .scan-result-text { font-size: 1.6rem; font-weight: 800; color: #f1f5f9; }
     .scan-result-sub { font-size: 1rem; color: #cbd5e1; margin-top: 0.5rem; }
+
+    @media (max-height: 500px) {
+      /* 가로 모드 + 화면 짧을 때는 카드도 살짝 컴팩트 */
+      .scan-result-card { padding: 1.2rem 1rem; }
+      .scan-result-icon { font-size: 2.6rem; }
+      .scan-result-text { font-size: 1.3rem; }
+      .scan-result-sub  { font-size: 0.9rem; }
+    }
 
     /* 카메라 전환 — 운영자만 보면 되므로 작고 은은하게 */
     .camera-switch {
@@ -102,11 +131,13 @@
   <!-- QR 스캐너 -->
   <div id="qr-reader"></div>
 
-  <!-- 스캔 결과 -->
+  <!-- 스캔 결과 (화면 중앙 오버레이) -->
   <div id="scan-result" class="scan-result">
-    <div class="scan-result-icon" id="result-icon"></div>
-    <div class="scan-result-text" id="result-text"></div>
-    <div class="scan-result-sub" id="result-sub"></div>
+    <div class="scan-result-card">
+      <div class="scan-result-icon" id="result-icon"></div>
+      <div class="scan-result-text" id="result-text"></div>
+      <div class="scan-result-sub" id="result-sub"></div>
+    </div>
   </div>
 
   <!-- 카메라 전환 (운영자용, 하단에 작게) -->
@@ -119,6 +150,6 @@
 </div>
 
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-<script type="module" src="scan.js?v=6"></script>
+<script type="module" src="scan.js?v=7"></script>
 </body>
 </html>
