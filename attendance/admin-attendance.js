@@ -4,8 +4,13 @@ import {
   doc, setDoc, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import {
-  signInWithEmailAndPassword, signOut, onAuthStateChanged
+  signInWithEmailAndPassword, signOut, onAuthStateChanged,
+  setPersistence, browserSessionPersistence
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
+
+// 관리자 세션은 탭이 닫히면 로그아웃되도록 SESSION persistence 사용
+// (기본 LOCAL은 LocalStorage 영속이라 공용 PC에서 자동 로그인 위험)
+setPersistence(auth, browserSessionPersistence).catch(() => {});
 import {
   escapeHtml, formatTime, formatFullDate, formatShortDate, getBuiltinHolidays
 } from './utils.js';
