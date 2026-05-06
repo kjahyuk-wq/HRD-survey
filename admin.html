@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>관리자 - 대전광역시 인재개발원</title>
-  <link href="style.css?v=4" rel="stylesheet">
-  <link href="admin.css?v=4" rel="stylesheet">
+  <link href="style.css?v=5" rel="stylesheet">
+  <link href="admin.css?v=5" rel="stylesheet">
 </head>
 <body>
 
@@ -92,7 +92,7 @@
               <div class="excel-upload-row">
                 <label class="excel-file-btn" for="excel-file-input">파일 선택</label>
                 <input type="file" id="excel-file-input" accept=".xlsx,.xls" style="display:none" onchange="handleExcelUpload(this)">
-                <span id="excel-file-name" class="excel-file-name">선택된 파일 없음</span>
+                <span id="excel-file-name" class="excel-file-name">선택된 파일 없음 · 또는 파일을 이 영역으로 끌어다 놓으세요</span>
                 <button class="add-btn" id="excel-upload-btn" onclick="uploadExcelStudents()" disabled>일괄 등록</button>
               </div>
               <div id="excel-preview" class="excel-preview" style="display:none;"></div>
@@ -411,6 +411,6 @@
     </div>
   </div>
 
-  <script type="module" src="admin.js"></script>
+  <script type="module" src="admin.js?v=5"></script>
 </body>
 </html>

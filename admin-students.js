@@ -223,29 +223,58 @@ export async function cancelEditStudent() {
 
 // ── 엑셀 일괄 등록 ──────────────────────────────
 let excelStudentData = [];
+let _docDragGuardInit = false;
+
+function initDocDragGuard() {
+  if (_docDragGuardInit) return;
+  _docDragGuardInit = true;
+  // 드롭 영역을 살짝 벗어나 떨어뜨려도 브라우저가 파일을 여는 동작 차단
+  ['dragover', 'drop'].forEach(ev => {
+    window.addEventListener(ev, e => {
+      if (e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files')) {
+        e.preventDefault();
+      }
+    }, false);
+  });
+}
 
 function initExcelDragDrop() {
+  initDocDragGuard();
   const area = document.querySelector('.excel-upload-area');
   if (!area || area.dataset.dragInit) return;
   area.dataset.dragInit = '1';
 
+  area.addEventListener('dragenter', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    area.classList.add('drag-over');
+  });
   area.addEventListener('dragover', e => {
     e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
     area.classList.add('drag-over');
   });
   area.addEventListener('dragleave', e => {
+    e.stopPropagation();
     if (!area.contains(e.relatedTarget)) area.classList.remove('drag-over');
   });
   area.addEventListener('drop', async e => {
     e.preventDefault();
+    e.stopPropagation();
     area.classList.remove('drag-over');
-    const file = e.dataTransfer.files[0];
+    const file = e.dataTransfer?.files?.[0];
     if (!file) return;
     if (!/\.(xlsx|xls)$/i.test(file.name)) {
       alert('엑셀 파일(.xlsx, .xls)만 업로드할 수 있습니다.');
       return;
     }
-    await loadXLSX();
+    try {
+      await loadXLSX();
+    } catch (err) {
+      alert('엑셀 라이브러리를 불러오지 못했습니다. 인터넷 연결을 확인해 주세요.');
+      return;
+    }
     document.getElementById('excel-file-name').textContent = file.name;
     parseExcelFile(file);
   });
