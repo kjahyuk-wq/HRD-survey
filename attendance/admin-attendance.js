@@ -1,11 +1,14 @@
 import { db, auth } from './firebase-config.js';
 import {
   collection, getDocs, getDoc,
-  doc, setDoc, serverTimestamp, Timestamp
+  doc, setDoc, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import {
   signInWithEmailAndPassword, signOut, onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
+import {
+  escapeHtml, formatTime, formatFullDate, formatShortDate, getBuiltinHolidays
+} from './utils.js';
 
 // ── 상태 ──────────────────────────────
 let currentCourseId = null;
@@ -184,7 +187,7 @@ function renderDateTags() {
   }
   const sorted = [...scheduleDates].sort();
   wrap.innerHTML = sorted.map(d =>
-    `<span class="date-tag date-tag-schedule">${formatDate(d)}<button onclick="removeScheduleDate('${d}')">✕</button></span>`
+    `<span class="date-tag date-tag-schedule">${formatShortDate(d)}<button onclick="removeScheduleDate('${d}')">✕</button></span>`
   ).join('');
 }
 
@@ -196,13 +199,8 @@ function renderHolidayTags() {
   }
   const sorted = [...customHolidays].sort();
   wrap.innerHTML = sorted.map(d =>
-    `<span class="date-tag date-tag-holiday">${formatDate(d)}<button onclick="removeHolidayDate('${d}')">✕</button></span>`
+    `<span class="date-tag date-tag-holiday">${formatShortDate(d)}<button onclick="removeHolidayDate('${d}')">✕</button></span>`
   ).join('');
-}
-
-function formatDate(s) {
-  const d = new Date(s + 'T00:00:00');
-  return `${d.getMonth()+1}/${d.getDate()}`;
 }
 
 window.addScheduleDate = function() {
@@ -276,7 +274,7 @@ function renderExcludedHolidayTags() {
   }
   const sorted = [...excludedHolidays].sort();
   wrap.innerHTML = sorted.map(d =>
-    `<span class="date-tag date-tag-schedule">${formatDate(d)}<button onclick="removeExcludedHolidayDate('${d}')">✕</button></span>`
+    `<span class="date-tag date-tag-schedule">${formatShortDate(d)}<button onclick="removeExcludedHolidayDate('${d}')">✕</button></span>`
   ).join('');
 }
 
@@ -338,6 +336,23 @@ window.saveConfig = async function() {
 
 // ── 출석 현황 로드 ──────────────────────────────
 let currentDateTab = null;
+// key = `${empNo}_${date}_${session}` → rec (manual 우선).
+// renderAttendanceTable / updateSummary / exportExcel 가 공유.
+let attendanceIndex = new Map();
+
+function rebuildAttendanceIndex() {
+  attendanceIndex = new Map();
+  for (const a of allAttendance) {
+    const key = `${a.empNo}_${a.date}_${a.session}`;
+    const existing = attendanceIndex.get(key);
+    if (!existing || a.manual) attendanceIndex.set(key, a);
+  }
+}
+
+function setAttendanceIndexEntry(rec) {
+  // manual 레코드는 항상 우선이므로 단순 set.
+  attendanceIndex.set(`${rec.empNo}_${rec.date}_${rec.session}`, rec);
+}
 
 async function loadAttendanceRecords() {
   if (!currentCourseId) return;
@@ -348,6 +363,7 @@ async function loadAttendanceRecords() {
   try {
     const snap = await getDocs(collection(db, 'courses', currentCourseId, 'attendance'));
     allAttendance = snap.docs.map(d => ({ ...d.data(), _id: d.id }));
+    rebuildAttendanceIndex();
     renderDateTabBar();
     updateSummary();
   } catch(e) {
@@ -378,7 +394,7 @@ function renderDateTabBar() {
   }
 
   bar.innerHTML = dates.map(d =>
-    `<button class="date-tab-btn${d === currentDateTab ? ' active' : ''}" data-date="${d}" onclick="switchDateTab('${d}')">${formatDate(d)}</button>`
+    `<button class="date-tab-btn${d === currentDateTab ? ' active' : ''}" data-date="${d}" onclick="switchDateTab('${d}')">${formatShortDate(d)}</button>`
   ).join('');
 
   if (!currentDateTab || !dates.includes(currentDateTab)) {
@@ -432,20 +448,13 @@ function renderAttendanceTable(date) {
     </tr>`;
   }
 
-  // 날짜별 출석 레코드 맵: key = `${empNo}_${session}`, manual 우선
-  const recMap = {};
-  allAttendance.filter(a => a.date === date).forEach(a => {
-    const key = `${a.empNo}_${a.session}`;
-    if (!recMap[key] || a.manual) recMap[key] = a;
-  });
-
   const statusOpts = [
     ['present', '출석'], ['late', '지각'], ['leave', '조퇴'], ['absent', '미출석']
   ];
 
   tbody.innerHTML = students.map(stu => {
     const cells = sessions.map(sess => {
-      const rec = recMap[`${stu.empNo}_${sess}`];
+      const rec = attendanceIndex.get(`${stu.empNo}_${date}_${sess}`);
       let timeVal = '', statusVal = 'absent';
 
       if (rec) {
@@ -520,6 +529,7 @@ window.saveStudentManual = async function(btnEl) {
       const idx = allAttendance.findIndex(a => a._id === docId);
       if (idx >= 0) allAttendance[idx] = newRec;
       else allAttendance.push(newRec);
+      setAttendanceIndexEntry(newRec);
     }
 
     row.classList.remove('row-changed');
@@ -558,8 +568,7 @@ function updateSummary() {
     for (const sess of sessions) {
       for (const stu of allStudents) {
         totalSlots++;
-        const recs = allAttendance.filter(a => a.empNo === stu.empNo && a.date === d && a.session === sess);
-        const rec = recs.find(r => r.manual) || recs[0];
+        const rec = attendanceIndex.get(`${stu.empNo}_${d}_${sess}`);
         if (rec) {
           const st = rec.status || (rec.manual ? 'absent' : 'present');
           if (st !== 'absent') presentCount++;
@@ -612,10 +621,7 @@ window.exportExcel = function() {
     const row = [String(stu.empNo), stu.name];
     for (const d of dates) {
       for (const sess of sessions) {
-        const recs = allAttendance.filter(a =>
-          a.empNo === stu.empNo && a.date === d && a.session === sess
-        );
-        const rec = recs.find(rv => rv.manual) || recs[0];
+        const rec = attendanceIndex.get(`${stu.empNo}_${d}_${sess}`);
         let statusKo = '미출석', timeStr = '';
         if (rec) {
           const st = rec.status || (rec.manual ? 'absent' : 'present');
@@ -919,36 +925,6 @@ window.resetDeviceLock = async function() {
     btn.disabled = false; btn.textContent = '초기화';
   }
 };
-
-// ── 유틸 ──────────────────────────────
-function formatFullDate(s) {
-  if (!s) return '-';
-  const d = new Date(s + 'T00:00:00');
-  return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;
-}
-
-function formatTime(ts) {
-  const d = ts instanceof Timestamp ? ts.toDate() : new Date(ts);
-  return d.toTimeString().slice(0, 5);
-}
-
-function escapeHtml(str) {
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
-function getBuiltinHolidays(year) {
-  const y = String(year);
-  const fixed = [
-    `${y}-01-01`, `${y}-03-01`, `${y}-05-05`,
-    `${y}-06-06`, `${y}-08-15`, `${y}-10-03`,
-    `${y}-10-09`, `${y}-12-25`,
-  ];
-  const lunar = {
-    2025: ['2025-01-28','2025-01-29','2025-01-30','2025-05-05','2025-10-05','2025-10-06','2025-10-07'],
-    2026: ['2026-02-16','2026-02-17','2026-02-18','2026-05-24','2026-10-05','2026-10-06','2026-10-07'],
-  };
-  return [...fixed, ...(lunar[year] || [])];
-}
 
 // ── 시작 ──────────────────────────────
 // 인증/UI 전환은 onAuthStateChanged 가 처리함

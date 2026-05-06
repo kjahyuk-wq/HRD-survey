@@ -1,9 +1,10 @@
 import { db, auth } from './firebase-config.js';
 import {
   collectionGroup, collection, query, where, getDocs,
-  doc, getDoc, setDoc, deleteDoc, updateDoc, serverTimestamp, Timestamp
+  doc, getDoc, setDoc, deleteDoc, serverTimestamp, Timestamp
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { signInAnonymously } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
+import { escapeHtml, toDateStr, formatDisplayDate, formatTime, getBuiltinHolidays } from './utils.js';
 
 // ── 상태 ──────────────────────────────
 let currentUser = null;   // { name, empNo, courseId, courseName, config }
@@ -13,19 +14,6 @@ const QR_TTL_SEC = 300;   // 5분
 // ── 초기화 ──────────────────────────────
 const today = toDateStr(new Date());
 document.getElementById('today-date').textContent = formatDisplayDate(today);
-
-
-function toDateStr(d) {
-  return d.toISOString().slice(0, 10);
-}
-function formatDisplayDate(s) {
-  const d = new Date(s + 'T00:00:00');
-  return `${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일`;
-}
-function formatTime(ts) {
-  const d = ts instanceof Timestamp ? ts.toDate() : new Date(ts);
-  return d.toTimeString().slice(0, 5);
-}
 
 // ── 화면 전환 ──────────────────────────────
 function showScreen(id) {
@@ -348,32 +336,6 @@ function showQrScreen(name, empNo, session, tokenId, expiresAtMs) {
 
 function clearTimer() {
   if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
-}
-
-// ── 법정 공휴일 (고정일 기준) ──────────────────────────────
-function getBuiltinHolidays(year) {
-  const y = String(year);
-  const fixed = [
-    `${y}-01-01`, // 신정
-    `${y}-03-01`, // 삼일절
-    `${y}-05-05`, // 어린이날
-    `${y}-06-06`, // 현충일
-    `${y}-08-15`, // 광복절
-    `${y}-10-03`, // 개천절
-    `${y}-10-09`, // 한글날
-    `${y}-12-25`, // 성탄절
-  ];
-  // 음력 공휴일: 관리자 직접 customHolidays에 추가 권장
-  // 아래는 2025~2026 추정치 (실제 달력으로 확인 필요)
-  const lunar = {
-    2025: ['2025-01-28','2025-01-29','2025-01-30','2025-05-05','2025-10-05','2025-10-06','2025-10-07'],
-    2026: ['2026-02-16','2026-02-17','2026-02-18','2026-05-24','2026-10-05','2026-10-06','2026-10-07'],
-  };
-  return [...fixed, ...(lunar[year] || [])];
-}
-
-function escapeHtml(str) {
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 // 엔터키 지원

@@ -4,6 +4,7 @@ import {
   collection, serverTimestamp, Timestamp
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { signInAnonymously } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
+import { toDateStr, formatDisplayDate } from './utils.js';
 
 // ── 상태 ──────────────────────────────
 let isProcessing = false;
@@ -11,17 +12,6 @@ let wakeLock = null;
 
 const today = toDateStr(new Date());
 document.getElementById('scan-date-label').textContent = formatDisplayDate(today);
-
-// ── 시간 유틸 ──────────────────────────────
-function toDateStr(d) { return d.toISOString().slice(0, 10); }
-function formatDisplayDate(s) {
-  const d = new Date(s + 'T00:00:00');
-  return `${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일`;
-}
-function formatTime(ts) {
-  const d = ts instanceof Timestamp ? ts.toDate() : (ts?.toDate ? ts.toDate() : new Date(ts));
-  return d.toTimeString().slice(0, 5);
-}
 
 // ── 현재 시각 표시 ──────────────────────────────
 function updateClock() {

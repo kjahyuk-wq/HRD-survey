@@ -1,7 +1,7 @@
 import { db } from './firebase-config.js';
 import {
   collection, getDocs,
-  addDoc, deleteDoc, doc, serverTimestamp, updateDoc
+  addDoc, deleteDoc, doc, serverTimestamp, updateDoc, writeBatch
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { state, escapeHtml, escapeAttr } from './admin-utils.js';
 import { loadXLSX } from './admin-excel.js';
@@ -205,17 +205,27 @@ export async function uploadExcelInstructors(courseName, panelIdx) {
     ? Math.max(...currentInsts.map(i => i.order ?? 0))
     : -10;
 
+  const instRef = collection(db, 'courses', courseId, 'instructors');
+  const total = data.length;
+  const CHUNK = 400; // Firestore batch 한도 500 미만으로 안전 마진
   let success = 0, fail = 0;
-  for (let i = 0; i < data.length; i++) {
-    const { edu, name } = data[i];
-    progress.textContent = `등록 중... (${i+1}/${data.length}) ${name}`;
-    try {
-      await addDoc(collection(db, 'courses', courseId, 'instructors'), {
-        name, education: edu, createdAt: serverTimestamp(), order: maxOrder + (i + 1) * 10
+
+  for (let start = 0; start < total; start += CHUNK) {
+    const slice = data.slice(start, start + CHUNK);
+    progress.textContent = `등록 중... (${start + slice.length}/${total})`;
+    const batch = writeBatch(db);
+    slice.forEach(({ edu, name }, j) => {
+      batch.set(doc(instRef), {
+        name, education: edu,
+        createdAt: serverTimestamp(),
+        order: maxOrder + (start + j + 1) * 10
       });
-      success++;
-    } catch(_) {
-      fail++;
+    });
+    try {
+      await batch.commit();
+      success += slice.length;
+    } catch (_) {
+      fail += slice.length;
     }
   }
 
