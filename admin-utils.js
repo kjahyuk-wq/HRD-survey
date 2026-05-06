@@ -42,8 +42,16 @@ export function escapeHtml(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+// HTML 속성 + onclick 안의 JS 문자열 양쪽 컨텍스트에서 안전하게 사용 가능.
+// HTML 디코딩 후 JS 문자열 리터럴(작은따옴표) 경계에서 이스케이프 모두 처리.
 export function escapeAttr(str) {
-  return String(str).replace(/'/g,"\\'").replace(/"/g,'&quot;');
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'");
 }
 
 export function formatDate(val) {
