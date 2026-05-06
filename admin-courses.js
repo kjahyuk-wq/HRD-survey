@@ -10,6 +10,16 @@ import { loadStudents } from './admin-students.js';
 // 종료된 과정 토글 펼침 상태 (탭 재진입 시 유지)
 let closedCoursesExpanded = false;
 
+// 카드 idx → 과정 원본 데이터 (수정 진입 시 폼에 채울 용도)
+const courseDataCache = {};
+
+// ISO 날짜 문자열 → "YYYY.MM.DD ~ YYYY.MM.DD" 표시 (둘 중 하나라도 없으면 null)
+function formatDateRange(start, end) {
+  if (!start || !end) return null;
+  const f = s => String(s).replaceAll('-', '.');
+  return `${f(start)} ~ ${f(end)}`;
+}
+
 // ── 교육과정 관리 ──────────────────────────────
 export async function loadCourseList() {
   document.getElementById('course-manage-loading').style.display = 'block';
@@ -26,10 +36,23 @@ export async function loadCourseList() {
       const isActive = data.active !== false;  // 필드 없으면 활성으로 간주 (마이그레이션)
       state.courseIdMap[data.name] = d.id;
       state.courseActive[data.name] = isActive;
-      return { id: d.id, name: data.name, active: isActive };
+      return {
+        id: d.id, name: data.name, active: isActive,
+        startDate: data.startDate || null,
+        endDate: data.endDate || null,
+      };
     });
-    // 진행중 우선, 입력 순서 유지
-    courses.sort((a, b) => (a.active === b.active) ? 0 : (a.active ? -1 : 1));
+    // 진행중 우선, 그 안에서는 시작일 내림차순(최근/임박한 과정이 위)
+    // startDate 없는 기존 데이터는 맨 뒤로
+    courses.sort((a, b) => {
+      if (a.active !== b.active) return a.active ? -1 : 1;
+      const sa = a.startDate || '';
+      const sb = b.startDate || '';
+      if (!sa && !sb) return 0;
+      if (!sa) return 1;
+      if (!sb) return -1;
+      return sb.localeCompare(sa);
+    });
 
     document.getElementById('course-count').textContent = courses.length + '개';
     document.getElementById('course-manage-loading').style.display = 'none';
@@ -40,7 +63,12 @@ export async function loadCourseList() {
     }
 
     // 각 과정마다 인덱스 부여 (active/closed 통합 인덱스 공간)
-    courses.forEach((c, idx) => { c.idx = idx; });
+    // 수정 진입 시 원본 데이터 복원 가능하도록 캐시도 갱신
+    for (const k of Object.keys(courseDataCache)) delete courseDataCache[k];
+    courses.forEach((c, idx) => {
+      c.idx = idx;
+      courseDataCache[idx] = { id: c.id, name: c.name, startDate: c.startDate, endDate: c.endDate };
+    });
 
     // 카드 골격 먼저 렌더 (요약 칩은 비동기로 채움)
     const activeCourses = courses.filter(c => c.active);
@@ -89,52 +117,57 @@ export async function loadCourseList() {
   }
 }
 
-function renderCourseItem({ name, active, idx }) {
-  const en = escapeAttr(name);
+function renderCourseItem({ id, name, active, idx, startDate, endDate }) {
+  const cid = escapeAttr(id);
   const statusBadge = active
     ? `<span class="course-status active">진행중</span>`
     : `<span class="course-status closed">종료</span>`;
   const toggleBtn = active
-    ? `<button class="course-close-btn" onclick="toggleCourseActive('${en}', true, this)">종료</button>`
-    : `<button class="course-reopen-btn" onclick="toggleCourseActive('${en}', false, this)">재활성</button>`;
+    ? `<button class="course-close-btn" onclick="toggleCourseActive('${cid}', true, this)">종료</button>`
+    : `<button class="course-reopen-btn" onclick="toggleCourseActive('${cid}', false, this)">재활성</button>`;
+  const dateLabel = formatDateRange(startDate, endDate);
+  const dateHtml = dateLabel
+    ? `<span class="course-date-range">${escapeHtml(dateLabel)}</span>`
+    : '';
   return `
     <div class="course-manage-item ${active ? '' : 'is-closed'}" id="course-item-${idx}">
       <div class="course-manage-row">
         <div class="course-manage-info">
-          <span class="course-manage-name">📚 ${escapeHtml(name)} ${statusBadge}</span>
+          <span class="course-manage-name">${escapeHtml(name)} ${statusBadge}</span>
+          ${dateHtml}
           <div class="course-meta" id="course-meta-${idx}">
             <span class="course-meta-skeleton">불러오는 중…</span>
           </div>
         </div>
         <div class="course-manage-actions">
-          <button class="panel-toggle-btn inst-toggle" id="inst-toggle-${idx}" onclick="togglePanel('${en}', ${idx}, 'inst')">👨‍🏫 강사</button>
-          <button class="panel-toggle-btn stu-toggle" id="stu-toggle-${idx}" onclick="togglePanel('${en}', ${idx}, 'stu')">👥 수강생</button>
-          <button class="goto-btn preview-btn" onclick="goToCourseTab('preview', '${en}')" title="이 과정 설문 미리보기">👁 미리보기</button>
-          <button class="goto-btn stats-btn" onclick="goToCourseTab('stats', '${en}')" title="이 과정 설문 통계">📊 통계</button>
+          <button class="course-edit-btn" onclick="startEditCourse(${idx})" title="과정명·교육기간 수정">교육과정 수정</button>
+          <button class="panel-toggle-btn inst-toggle" id="inst-toggle-${idx}" onclick="togglePanel('${cid}', ${idx}, 'inst')">강사관리</button>
+          <button class="panel-toggle-btn stu-toggle" id="stu-toggle-${idx}" onclick="togglePanel('${cid}', ${idx}, 'stu')">수강생관리</button>
+          <button class="goto-btn preview-btn" onclick="goToCourseTab('preview', '${cid}')" title="이 과정 설문 미리보기">설문 미리보기</button>
+          <button class="goto-btn stats-btn" onclick="goToCourseTab('stats', '${cid}')" title="이 과정 설문 결과">설문 결과</button>
           ${toggleBtn}
-          <button class="delete-btn" onclick="deleteCourse('${en}', this)">삭제</button>
         </div>
       </div>
       <div class="instructor-panel" id="inst-panel-${idx}" style="display:none;"></div>
-      <div class="student-panel" id="stu-panel-${idx}" style="display:none;">${renderStudentPanelHtml(en, idx)}</div>
+      <div class="student-panel" id="stu-panel-${idx}" style="display:none;">${renderStudentPanelHtml(cid, idx)}</div>
     </div>`;
 }
 
-function renderStudentPanelHtml(en, idx) {
+function renderStudentPanelHtml(cid, idx) {
   return `
     <div class="add-student-row">
       <input type="text" id="new-stu-name-${idx}" placeholder="이름" maxlength="20">
       <input type="number" id="new-stu-empno-${idx}" placeholder="교번 (예: 1)" min="1"
-        onkeydown="if(event.key==='Enter')addStudent('${en}', ${idx})">
-      <button class="add-btn" id="stu-add-btn-${idx}" onclick="addStudent('${en}', ${idx})">+ 등록</button>
+        onkeydown="if(event.key==='Enter')addStudent('${cid}', ${idx})">
+      <button class="add-btn" id="stu-add-btn-${idx}" onclick="addStudent('${cid}', ${idx})">+ 등록</button>
     </div>
     <div class="excel-upload-area stu-excel-area">
-      <div class="excel-upload-label">📂 엑셀 일괄 등록 <span class="excel-tip">A열: 교번 / B열: 이름 / 2행부터 데이터</span></div>
+      <div class="excel-upload-label">엑셀 일괄 등록 <span class="excel-tip">A열: 교번 / B열: 이름 / 2행부터 데이터</span></div>
       <div class="excel-upload-row">
         <label class="excel-file-btn" for="stu-excel-input-${idx}">파일 선택</label>
         <input type="file" id="stu-excel-input-${idx}" accept=".xlsx,.xls" style="display:none" onchange="handleExcelUpload(${idx}, this)">
         <span id="stu-excel-name-${idx}" class="excel-file-name">선택된 파일 없음 · 또는 파일을 이 영역으로 끌어다 놓으세요</span>
-        <button class="add-btn" id="stu-excel-btn-${idx}" onclick="uploadExcelStudents('${en}', ${idx})" disabled>일괄 등록</button>
+        <button class="add-btn" id="stu-excel-btn-${idx}" onclick="uploadExcelStudents('${cid}', ${idx})" disabled>일괄 등록</button>
       </div>
       <div id="stu-excel-preview-${idx}" class="excel-preview" style="display:none;"></div>
       <div id="stu-excel-progress-${idx}" class="excel-progress" style="display:none;"></div>
@@ -143,11 +176,11 @@ function renderStudentPanelHtml(en, idx) {
     <div id="stu-loading-${idx}" class="loading" style="display:none;">불러오는 중...</div>
     <div id="stu-list-${idx}"></div>
     <div id="stu-empty-${idx}" class="no-data" style="display:none;">등록된 수강생이 없습니다.</div>
-    <button class="icon-refresh-btn" onclick="loadStudents('${en}', ${idx})" title="새로고침">🔄 새로고침</button>`;
+    <button class="icon-refresh-btn" onclick="loadStudents('${cid}', ${idx})" title="새로고침">새로고침</button>`;
 }
 
 // 강사/수강생 패널 토글: 한 카드에서 둘 중 하나만 펼침 (탭 형태)
-export async function togglePanel(courseName, idx, mode) {
+export async function togglePanel(courseId, idx, mode) {
   const instPanel = document.getElementById(`inst-panel-${idx}`);
   const stuPanel  = document.getElementById(`stu-panel-${idx}`);
   const instBtn   = document.getElementById(`inst-toggle-${idx}`);
@@ -173,10 +206,77 @@ export async function togglePanel(courseName, idx, mode) {
   targetBtn?.classList.add('active');
 
   if (isInst) {
-    await loadInstructors(courseName, idx);
+    await loadInstructors(courseId, idx);
   } else {
-    await loadStudents(courseName, idx);
+    await loadStudents(courseId, idx);
   }
+}
+
+// ── 과정 인라인 수정 ──────────────────────────────
+export function startEditCourse(idx) {
+  const c = courseDataCache[idx];
+  if (!c) return;
+
+  // 편집 모드에선 강사·수강생 패널 닫기
+  const instPanel = document.getElementById(`inst-panel-${idx}`);
+  const stuPanel  = document.getElementById(`stu-panel-${idx}`);
+  if (instPanel) instPanel.style.display = 'none';
+  if (stuPanel)  stuPanel.style.display = 'none';
+  document.getElementById(`inst-toggle-${idx}`)?.classList.remove('active');
+  document.getElementById(`stu-toggle-${idx}`)?.classList.remove('active');
+
+  const item = document.getElementById(`course-item-${idx}`);
+  if (!item) return;
+  const row = item.querySelector('.course-manage-row');
+  if (!row) return;
+
+  row.innerHTML = `
+    <div class="course-edit-form">
+      <input type="text" id="edit-course-name-${idx}" value="${escapeAttr(c.name || '')}" maxlength="100" placeholder="교육과정명">
+      <div class="course-date-inputs">
+        <input type="date" id="edit-course-start-${idx}" value="${escapeAttr(c.startDate || '')}" aria-label="교육 시작일">
+        <span class="date-sep">~</span>
+        <input type="date" id="edit-course-end-${idx}" value="${escapeAttr(c.endDate || '')}" aria-label="교육 종료일">
+      </div>
+    </div>
+    <div class="course-manage-actions">
+      <button class="inst-save-btn" onclick="saveEditCourse(${idx})">저장</button>
+      <button class="inst-cancel-btn" onclick="cancelEditCourse()">취소</button>
+    </div>`;
+  document.getElementById(`edit-course-name-${idx}`)?.focus();
+}
+
+export async function saveEditCourse(idx) {
+  const c = courseDataCache[idx];
+  if (!c) return;
+  const nameEl  = document.getElementById(`edit-course-name-${idx}`);
+  const startEl = document.getElementById(`edit-course-start-${idx}`);
+  const endEl   = document.getElementById(`edit-course-end-${idx}`);
+  const name      = nameEl?.value.trim();
+  const startDate = startEl?.value;
+  const endDate   = endEl?.value;
+
+  if (!name)      { nameEl?.focus(); return; }
+  if (!startDate) { alert('교육 시작일을 선택해 주세요.'); startEl?.focus(); return; }
+  if (!endDate)   { alert('교육 종료일을 선택해 주세요.'); endEl?.focus(); return; }
+  if (endDate < startDate) {
+    alert('종료일이 시작일보다 빠를 수 없습니다.');
+    endEl?.focus(); return;
+  }
+
+  const saveBtn = document.querySelector(`#course-item-${idx} .inst-save-btn`);
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '저장 중...'; }
+  try {
+    await updateDoc(doc(db, 'courses', c.id), { name, startDate, endDate });
+    await loadCourseList();
+  } catch (e) {
+    alert('수정 중 오류가 발생했습니다.');
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '저장'; }
+  }
+}
+
+export async function cancelEditCourse() {
+  await loadCourseList();
 }
 
 // 종료된 과정 토글
@@ -198,34 +298,50 @@ export function toggleClosedCourses() {
 }
 
 export async function addCourse() {
-  const input = document.getElementById('new-course-input');
-  const name = input.value.trim();
-  if (!name) { input.focus(); return; }
+  const input    = document.getElementById('new-course-input');
+  const startEl  = document.getElementById('new-course-start');
+  const endEl    = document.getElementById('new-course-end');
+  const name      = input.value.trim();
+  const startDate = startEl.value;
+  const endDate   = endEl.value;
 
-  const btn = document.querySelector('.add-btn');
+  if (!name)      { input.focus();   return; }
+  if (!startDate) { alert('교육 시작일을 선택해 주세요.'); startEl.focus(); return; }
+  if (!endDate)   { alert('교육 종료일을 선택해 주세요.'); endEl.focus(); return; }
+  if (endDate < startDate) {
+    alert('종료일이 시작일보다 빠를 수 없습니다.');
+    endEl.focus(); return;
+  }
+
+  const btn = document.querySelector('.add-course-row .add-btn');
   btn.disabled = true; btn.textContent = '추가 중...';
 
   try {
-    await addDoc(collection(db, 'courses'), { name, active: true });
+    await addDoc(collection(db, 'courses'), { name, active: true, startDate, endDate });
     input.value = '';
+    startEl.value = '';
+    endEl.value = '';
     await loadCourseList();
   } catch (e) { alert('추가 중 오류가 발생했습니다.'); }
   finally { btn.disabled = false; btn.textContent = '+ 추가'; }
 }
 
 // 활성 ↔ 종료 토글
-export async function toggleCourseActive(name, currentActive, btnEl) {
+export async function toggleCourseActive(courseId, currentActive, btnEl) {
   const newActive = !currentActive;
+  // 카드 헤더에서 과정명 추출 (확인 안내문에 표시)
+  const item = btnEl.closest('.course-manage-item');
+  const nameEl = item?.querySelector('.course-manage-name');
+  const courseLabel = nameEl ? (nameEl.textContent.replace('진행중', '').replace('종료', '').trim()) : '이 과정';
   const msg = newActive
-    ? `"${name}" 과정을 다시 활성 상태로 전환하시겠습니까?\n수강생들이 다시 로그인할 수 있게 됩니다.`
-    : `"${name}" 과정을 종료 처리하시겠습니까?\n\n• 수강생 로그인 차단(이름·교번 중복 충돌 방지)\n• 통계·응답 데이터는 그대로 보관됨\n• 언제든 재활성 가능`;
+    ? `"${courseLabel}" 과정을 다시 활성 상태로 전환하시겠습니까?\n수강생들이 다시 로그인할 수 있게 됩니다.`
+    : `"${courseLabel}" 과정을 종료 처리하시겠습니까?\n\n• 수강생 로그인 차단(이름·교번 중복 충돌 방지)\n• 통계·응답 데이터는 그대로 보관됨\n• 언제든 재활성 가능`;
   if (!confirm(msg)) return;
 
   btnEl.disabled = true;
   const originalText = btnEl.textContent;
   btnEl.textContent = '처리 중...';
   try {
-    const courseId = state.courseIdMap[name];
     await updateDoc(doc(db, 'courses', courseId), { active: newActive });
     await loadCourseList();
   } catch (e) {
@@ -233,24 +349,6 @@ export async function toggleCourseActive(name, currentActive, btnEl) {
     btnEl.disabled = false;
     btnEl.textContent = originalText;
   }
-}
-
-export async function deleteCourse(name, btnEl) {
-  if (!confirm(`"${name}" 과정을 삭제하시겠습니까?\n(기존 설문 데이터는 유지됩니다)`)) return;
-  btnEl.disabled = true; btnEl.textContent = '삭제 중...';
-  try {
-    const courseId = state.courseIdMap[name];
-    await deleteSubcollection(courseId, 'instructors');
-    await deleteSubcollection(courseId, 'students');
-    await deleteSubcollection(courseId, 'responses');
-    await deleteDoc(doc(db, 'courses', courseId));
-    await loadCourseList();
-  } catch (e) { alert('삭제 중 오류가 발생했습니다.'); btnEl.disabled = false; btnEl.textContent = '삭제'; }
-}
-
-export async function deleteSubcollection(courseId, subcollectionName) {
-  const snap = await getDocs(collection(db, 'courses', courseId, subcollectionName));
-  await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
 }
 
 // ── 강사 엑셀 일괄 등록 ──────────────────────────────
@@ -296,7 +394,7 @@ async function parseInstExcelFile(panelIdx, file) {
 
       let html = `<strong>총 ${parsed.length}건 인식됨</strong>`;
       if (errors.length > 0) {
-        html += errors.map(err => `<div class="excel-preview-error">⚠️ ${escapeHtml(err)}</div>`).join('');
+        html += errors.map(err => `<div class="excel-preview-error">${escapeHtml(err)}</div>`).join('');
       }
       html += parsed.map((s, i) =>
         `<div class="excel-preview-row">${i+1}. [${escapeHtml(s.edu)}] ${escapeHtml(s.name)}</div>`
@@ -316,7 +414,7 @@ async function parseInstExcelFile(panelIdx, file) {
   reader.readAsArrayBuffer(file);
 }
 
-export async function uploadExcelInstructors(courseName, panelIdx) {
+export async function uploadExcelInstructors(courseId, panelIdx) {
   const data = instExcelData[panelIdx];
   if (!data || data.length === 0) return;
 
@@ -325,7 +423,6 @@ export async function uploadExcelInstructors(courseName, panelIdx) {
   const progress = document.getElementById(`inst-excel-progress-${panelIdx}`);
   progress.style.display = 'block';
 
-  const courseId = state.courseIdMap[courseName];
   const currentInsts = panelInstructors[panelIdx] || [];
   const maxOrder = currentInsts.length > 0
     ? Math.max(...currentInsts.map(i => i.order ?? 0))
@@ -355,13 +452,13 @@ export async function uploadExcelInstructors(courseName, panelIdx) {
     }
   }
 
-  progress.textContent = `✅ 완료: ${success}건 등록${fail > 0 ? `, ❌ ${fail}건 실패` : ''}`;
+  progress.textContent = `완료: ${success}건 등록${fail > 0 ? `, ${fail}건 실패` : ''}`;
   instExcelData[panelIdx] = [];
   document.getElementById(`inst-excel-input-${panelIdx}`).value = '';
   document.getElementById(`inst-excel-name-${panelIdx}`).textContent = '선택된 파일 없음';
   document.getElementById(`inst-excel-preview-${panelIdx}`).style.display = 'none';
 
-  await loadInstructors(courseName, panelIdx);
+  await loadInstructors(courseId, panelIdx);
 }
 
 // ── 강사 관리 ──────────────────────────────
@@ -369,11 +466,10 @@ export async function uploadExcelInstructors(courseName, panelIdx) {
 // 패널별 현재 강사 목록 저장 (순서 변경, 수정에 활용)
 const panelInstructors = {};
 
-async function loadInstructors(courseName, panelIdx) {
+async function loadInstructors(courseId, panelIdx) {
   const panel = document.getElementById(`inst-panel-${panelIdx}`);
   panel.innerHTML = '<div class="inst-loading">불러오는 중...</div>';
   try {
-    const courseId = state.courseIdMap[courseName];
     const snap = await getDocs(collection(db, 'courses', courseId, 'instructors'));
     let instructors = snap.docs.map(d => ({ ...d.data(), _id: d.id }));
 
@@ -393,21 +489,21 @@ async function loadInstructors(courseName, panelIdx) {
     });
 
     panelInstructors[panelIdx] = instructors;
-    renderInstructorPanel(courseName, panelIdx, instructors);
+    renderInstructorPanel(courseId, panelIdx, instructors);
   } catch (e) {
     panel.innerHTML = '<div class="inst-loading">불러오기 실패</div>';
   }
 }
 
-function renderInstructorPanel(courseName, panelIdx, instructors) {
+function renderInstructorPanel(courseId, panelIdx, instructors) {
   const panel = document.getElementById(`inst-panel-${panelIdx}`);
-  const ec = escapeAttr(courseName);
+  const cid = escapeAttr(courseId);
   const total = instructors.length;
 
   const listHtml = total === 0
     ? '<div class="inst-empty">등록된 강사가 없습니다. 강사를 추가해 주세요.</div>'
     : `<div class="student-bulk-actions">
-        <button class="bulk-delete-btn" id="inst-bulk-delete-btn-${panelIdx}" onclick="deleteSelectedInstructors('${ec}', ${panelIdx})" disabled>선택 삭제</button>
+        <button class="bulk-delete-btn" id="inst-bulk-delete-btn-${panelIdx}" onclick="deleteSelectedInstructors('${cid}', ${panelIdx})" disabled>선택 삭제</button>
       </div>
       <table class="student-table">
         <thead><tr>
@@ -425,10 +521,10 @@ function renderInstructorPanel(courseName, panelIdx, instructors) {
               <td style="text-align:left">${escapeHtml(name)}</td>
               <td>
                 <div class="inst-action-btns">
-                  <button class="inst-move-btn" onclick="moveInstructor('${ec}', ${panelIdx}, ${idx}, 'up')" ${idx === 0 ? 'disabled' : ''} title="위로">▲</button>
-                  <button class="inst-move-btn" onclick="moveInstructor('${ec}', ${panelIdx}, ${idx}, 'down')" ${idx === total - 1 ? 'disabled' : ''} title="아래로">▼</button>
-                  <button class="inst-edit-btn" onclick="startEditInstructor('${ec}', ${panelIdx}, ${idx})">수정</button>
-                  <button class="delete-btn" onclick="deleteInstructor('${ec}', ${panelIdx}, '${en}', '${ee}', '${eid}', this)">삭제</button>
+                  <button class="inst-move-btn" onclick="moveInstructor('${cid}', ${panelIdx}, ${idx}, 'up')" ${idx === 0 ? 'disabled' : ''} title="위로">▲</button>
+                  <button class="inst-move-btn" onclick="moveInstructor('${cid}', ${panelIdx}, ${idx}, 'down')" ${idx === total - 1 ? 'disabled' : ''} title="아래로">▼</button>
+                  <button class="inst-edit-btn" onclick="startEditInstructor('${cid}', ${panelIdx}, ${idx})">수정</button>
+                  <button class="delete-btn" onclick="deleteInstructor('${cid}', ${panelIdx}, '${en}', '${ee}', '${eid}', this)">삭제</button>
                 </div>
               </td>
             </tr>`;
@@ -440,15 +536,15 @@ function renderInstructorPanel(courseName, panelIdx, instructors) {
     <div class="inst-add-row">
       <input type="text" id="inst-edu-${panelIdx}" placeholder="교육명 (예: AI 기초과정)" maxlength="50">
       <input type="text" id="inst-name-${panelIdx}" placeholder="강사명 (예: 홍길동)" maxlength="20">
-      <button class="add-btn inst-add-btn" onclick="addInstructor('${ec}', ${panelIdx})">+ 추가</button>
+      <button class="add-btn inst-add-btn" onclick="addInstructor('${cid}', ${panelIdx})">+ 추가</button>
     </div>
     <div class="excel-upload-area" style="margin-top:.5rem;">
-      <div class="excel-upload-label">📂 엑셀 일괄 등록 <span class="excel-tip">A열: 강의명 / B열: 강사명 / 2행부터 데이터</span></div>
+      <div class="excel-upload-label">엑셀 일괄 등록 <span class="excel-tip">A열: 강의명 / B열: 강사명 / 2행부터 데이터</span></div>
       <div class="excel-upload-row">
         <label class="excel-file-btn" for="inst-excel-input-${panelIdx}">파일 선택</label>
         <input type="file" id="inst-excel-input-${panelIdx}" accept=".xlsx,.xls" style="display:none" onchange="handleInstExcelUpload(${panelIdx}, this)">
         <span id="inst-excel-name-${panelIdx}" class="excel-file-name">선택된 파일 없음</span>
-        <button class="add-btn" id="inst-excel-btn-${panelIdx}" onclick="uploadExcelInstructors('${ec}', ${panelIdx})" disabled>일괄 등록</button>
+        <button class="add-btn" id="inst-excel-btn-${panelIdx}" onclick="uploadExcelInstructors('${cid}', ${panelIdx})" disabled>일괄 등록</button>
       </div>
       <div id="inst-excel-preview-${panelIdx}" class="excel-preview" style="display:none;"></div>
       <div id="inst-excel-progress-${panelIdx}" class="excel-progress" style="display:none;"></div>
@@ -456,7 +552,7 @@ function renderInstructorPanel(courseName, panelIdx, instructors) {
     <div class="inst-list" id="inst-list-${panelIdx}">${listHtml}</div>`;
 }
 
-export async function addInstructor(courseName, panelIdx) {
+export async function addInstructor(courseId, panelIdx) {
   const edu  = document.getElementById(`inst-edu-${panelIdx}`).value.trim();
   const name = document.getElementById(`inst-name-${panelIdx}`).value.trim();
   if (!edu)  { document.getElementById(`inst-edu-${panelIdx}`).focus(); return; }
@@ -465,7 +561,6 @@ export async function addInstructor(courseName, panelIdx) {
   const btn = document.querySelector(`#inst-panel-${panelIdx} .inst-add-btn`);
   btn.disabled = true; btn.textContent = '추가 중...';
   try {
-    const courseId = state.courseIdMap[courseName];
     const currentInsts = panelInstructors[panelIdx] || [];
     const maxOrder = currentInsts.length > 0
       ? Math.max(...currentInsts.map(i => i.order ?? 0))
@@ -475,22 +570,21 @@ export async function addInstructor(courseName, panelIdx) {
     });
     document.getElementById(`inst-edu-${panelIdx}`).value = '';
     document.getElementById(`inst-name-${panelIdx}`).value = '';
-    await loadInstructors(courseName, panelIdx);
+    await loadInstructors(courseId, panelIdx);
   } catch (e) { alert('추가 중 오류가 발생했습니다.'); btn.disabled = false; btn.textContent = '+ 추가'; }
 }
 
-export async function deleteInstructor(courseName, panelIdx, name, education, instId, btnEl) {
+export async function deleteInstructor(courseId, panelIdx, name, education, instId, btnEl) {
   if (!confirm(`"${name}" 강사를 삭제하시겠습니까?`)) return;
   btnEl.disabled = true; btnEl.textContent = '삭제 중...';
   try {
-    const courseId = state.courseIdMap[courseName];
     await deleteDoc(doc(db, 'courses', courseId, 'instructors', instId));
-    await loadInstructors(courseName, panelIdx);
+    await loadInstructors(courseId, panelIdx);
   } catch (e) { alert('삭제 중 오류가 발생했습니다.'); btnEl.disabled = false; btnEl.textContent = '삭제'; }
 }
 
 // ── 순서 변경 ──────────────────────────────
-export async function moveInstructor(courseName, panelIdx, idx, direction) {
+export async function moveInstructor(courseId, panelIdx, idx, direction) {
   const instructors = panelInstructors[panelIdx];
   if (!instructors) return;
   const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
@@ -498,7 +592,6 @@ export async function moveInstructor(courseName, panelIdx, idx, direction) {
 
   const instA = instructors[idx];
   const instB = instructors[targetIdx];
-  const courseId = state.courseIdMap[courseName];
 
   // order 값 교환
   const tempOrder = instA.order;
@@ -510,7 +603,7 @@ export async function moveInstructor(courseName, panelIdx, idx, direction) {
       updateDoc(doc(db, 'courses', courseId, 'instructors', instA._id), { order: instA.order }),
       updateDoc(doc(db, 'courses', courseId, 'instructors', instB._id), { order: instB.order }),
     ]);
-    await loadInstructors(courseName, panelIdx);
+    await loadInstructors(courseId, panelIdx);
   } catch (e) {
     alert('순서 변경 중 오류가 발생했습니다.');
     // 롤백
@@ -519,26 +612,26 @@ export async function moveInstructor(courseName, panelIdx, idx, direction) {
 }
 
 // ── 강사 수정 ──────────────────────────────
-export function startEditInstructor(courseName, panelIdx, idx) {
+export function startEditInstructor(courseId, panelIdx, idx) {
   const inst = panelInstructors[panelIdx]?.[idx];
   if (!inst) return;
   const row = document.getElementById(`inst-row-${panelIdx}-${idx}`);
   if (!row) return;
-  const ec = escapeAttr(courseName);
+  const cid = escapeAttr(courseId);
   row.innerHTML = `
     <td><input type="checkbox" disabled></td>
     <td><input type="text" id="edit-edu-${panelIdx}-${idx}" value="${escapeAttr(inst.education || '')}" maxlength="50" style="width:100%;padding:.4rem .6rem;border:2px solid #0066cc;border-radius:7px;font-size:.88rem;"></td>
     <td><input type="text" id="edit-name-${panelIdx}-${idx}" value="${escapeAttr(inst.name || '')}" maxlength="20" style="width:100%;padding:.4rem .6rem;border:2px solid #0066cc;border-radius:7px;font-size:.88rem;"></td>
     <td>
       <div class="inst-action-btns">
-        <button class="inst-save-btn" onclick="saveEditInstructor('${ec}', ${panelIdx}, ${idx})">저장</button>
-        <button class="inst-cancel-btn" onclick="cancelEditInstructor('${ec}', ${panelIdx})">취소</button>
+        <button class="inst-save-btn" onclick="saveEditInstructor('${cid}', ${panelIdx}, ${idx})">저장</button>
+        <button class="inst-cancel-btn" onclick="cancelEditInstructor('${cid}', ${panelIdx})">취소</button>
       </div>
     </td>`;
   document.getElementById(`edit-edu-${panelIdx}-${idx}`)?.focus();
 }
 
-export async function saveEditInstructor(courseName, panelIdx, idx) {
+export async function saveEditInstructor(courseId, panelIdx, idx) {
   const inst = panelInstructors[panelIdx]?.[idx];
   if (!inst) return;
   const eduEl  = document.getElementById(`edit-edu-${panelIdx}-${idx}`);
@@ -551,17 +644,16 @@ export async function saveEditInstructor(courseName, panelIdx, idx) {
   const saveBtn = document.querySelector(`#inst-row-${panelIdx}-${idx} .inst-save-btn`);
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '저장 중...'; }
   try {
-    const courseId = state.courseIdMap[courseName];
     await updateDoc(doc(db, 'courses', courseId, 'instructors', inst._id), { name, education: edu });
-    await loadInstructors(courseName, panelIdx);
+    await loadInstructors(courseId, panelIdx);
   } catch (e) {
     alert('수정 중 오류가 발생했습니다.');
     if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '저장'; }
   }
 }
 
-export async function cancelEditInstructor(courseName, panelIdx) {
-  await loadInstructors(courseName, panelIdx);
+export async function cancelEditInstructor(courseId, panelIdx) {
+  await loadInstructors(courseId, panelIdx);
 }
 
 export function toggleInstSelectAll(panelIdx, checkbox) {
@@ -584,7 +676,7 @@ export function updateInstBulkDeleteBtn(panelIdx) {
   }
 }
 
-export async function deleteSelectedInstructors(courseName, panelIdx) {
+export async function deleteSelectedInstructors(courseId, panelIdx) {
   const checked = document.querySelectorAll(`.inst-checkbox-${panelIdx}:checked`);
   if (!checked.length) return;
   const count = checked.length;
@@ -592,9 +684,8 @@ export async function deleteSelectedInstructors(courseName, panelIdx) {
   const btn = document.getElementById(`inst-bulk-delete-btn-${panelIdx}`);
   btn.disabled = true; btn.textContent = '삭제 중...';
   try {
-    const courseId = state.courseIdMap[courseName];
     await Promise.all(Array.from(checked).map(cb => deleteDoc(doc(db, 'courses', courseId, 'instructors', cb.dataset.id))));
-    await loadInstructors(courseName, panelIdx);
+    await loadInstructors(courseId, panelIdx);
   } catch (e) {
     alert('삭제 중 오류가 발생했습니다.');
     btn.disabled = false; btn.textContent = `선택 삭제 (${count}명)`;

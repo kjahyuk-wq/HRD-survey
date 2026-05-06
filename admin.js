@@ -2,7 +2,7 @@ import { auth } from './firebase-config.js';
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
 
 import { checkLogin, logout } from './admin-auth.js';
-import { loadCourseList, addCourse, deleteCourse, toggleCourseActive, togglePanel, toggleClosedCourses, addInstructor, deleteInstructor, handleInstExcelUpload, uploadExcelInstructors, toggleInstSelectAll, updateInstBulkDeleteBtn, deleteSelectedInstructors, moveInstructor, startEditInstructor, saveEditInstructor, cancelEditInstructor } from './admin-courses.js';
+import { loadCourseList, addCourse, toggleCourseActive, togglePanel, toggleClosedCourses, startEditCourse, saveEditCourse, cancelEditCourse, addInstructor, deleteInstructor, handleInstExcelUpload, uploadExcelInstructors, toggleInstSelectAll, updateInstBulkDeleteBtn, deleteSelectedInstructors, moveInstructor, startEditInstructor, saveEditInstructor, cancelEditInstructor } from './admin-courses.js';
 import { loadStudents, addStudent, deleteStudent, toggleSelectAll, updateBulkDeleteBtn, deleteSelectedStudents, handleExcelUpload, uploadExcelStudents, startEditStudent, saveEditStudent, cancelEditStudent } from './admin-students.js';
 import { populateStatsSelect, loadStats } from './admin-stats.js';
 import { exportStatsExcel, exportResultsExcel } from './admin-excel.js';
@@ -19,18 +19,18 @@ function setActiveTab(tab) {
 
 // 과정 카드의 [미리보기]/[통계] 바로가기 — 탭 전환 + 과정 자동 선택 + 데이터 로드
 // + history.pushState로 브라우저 뒤로가기에서 교육과정 목록으로 복귀 가능
-async function goToCourseTab(tab, courseName) {
+async function goToCourseTab(tab, courseId) {
   setActiveTab(tab);
-  history.pushState({ tab, course: courseName }, '', `#${tab}`);
+  history.pushState({ tab, courseId }, '', `#${tab}`);
   if (tab === 'stats') {
     await populateStatsSelect();
     const sel = document.getElementById('stats-course-select');
-    if (sel) sel.value = courseName;
+    if (sel) sel.value = courseId;
     await loadStats();
   } else if (tab === 'preview') {
     await populatePreviewSelect();
     const sel = document.getElementById('preview-course-select');
-    if (sel) sel.value = courseName;
+    if (sel) sel.value = courseId;
     await loadPreviewInstructors();
   }
 }
@@ -39,15 +39,15 @@ async function goToCourseTab(tab, courseName) {
 window.addEventListener('popstate', async (e) => {
   const s = e.state || { tab: 'courses' };
   setActiveTab(s.tab);
-  if (s.tab === 'stats' && s.course) {
+  if (s.tab === 'stats' && s.courseId) {
     await populateStatsSelect();
     const sel = document.getElementById('stats-course-select');
-    if (sel) sel.value = s.course;
+    if (sel) sel.value = s.courseId;
     await loadStats();
-  } else if (s.tab === 'preview' && s.course) {
+  } else if (s.tab === 'preview' && s.courseId) {
     await populatePreviewSelect();
     const sel = document.getElementById('preview-course-select');
-    if (sel) sel.value = s.course;
+    if (sel) sel.value = s.courseId;
     await loadPreviewInstructors();
   }
 });
@@ -88,11 +88,13 @@ window.logout = logout;
 window.goToCourseTab = goToCourseTab;
 window.goBackToCourses = goBackToCourses;
 window.addCourse = addCourse;
-window.deleteCourse = deleteCourse;
 window.toggleCourseActive = toggleCourseActive;
 window.loadCourseList = loadCourseList;
 window.togglePanel = togglePanel;
 window.toggleClosedCourses = toggleClosedCourses;
+window.startEditCourse = startEditCourse;
+window.saveEditCourse = saveEditCourse;
+window.cancelEditCourse = cancelEditCourse;
 window.addInstructor = addInstructor;
 window.deleteInstructor = deleteInstructor;
 window.loadStudents = loadStudents;

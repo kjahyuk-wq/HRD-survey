@@ -4,43 +4,55 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { state, escapeHtml, escapeAttr } from './admin-utils.js';
 
+function buildCourseLabel(name, startDate, endDate, active) {
+  const dateLabel = (startDate && endDate)
+    ? ` (${String(startDate).replaceAll('-', '.')}~${String(endDate).replaceAll('-', '.')})`
+    : '';
+  return (active ? '' : '[종료] ') + name + dateLabel;
+}
+
 export async function populatePreviewSelect() {
   try {
     const snap = await getDocs(collection(db, 'courses'));
     const courses = snap.docs.map(d => {
       const data = d.data();
-      const isActive = data.active !== false;
-      state.courseIdMap[data.name] = d.id;
-      state.courseActive[data.name] = isActive;
-      return { name: data.name, active: isActive };
+      return {
+        id: d.id,
+        name: data.name,
+        active: data.active !== false,
+        startDate: data.startDate || null,
+        endDate: data.endDate || null,
+      };
     });
     courses.sort((a, b) => (a.active === b.active) ? 0 : (a.active ? -1 : 1));
     const sel = document.getElementById('preview-course-select');
     const current = sel.value;
     sel.innerHTML = '<option value="">-- 교육과정을 선택하세요 --</option>' +
-      courses.map(({ name, active }) => {
-        const label = active ? name : `[종료] ${name}`;
-        return `<option value="${escapeAttr(name)}"${name === current ? ' selected' : ''}>${escapeHtml(label)}</option>`;
+      courses.map(({ id, name, startDate, endDate, active }) => {
+        const label = buildCourseLabel(name, startDate, endDate, active);
+        return `<option value="${escapeAttr(id)}" data-name="${escapeAttr(name)}"${id === current ? ' selected' : ''}>${escapeHtml(label)}</option>`;
       }).join('');
     if (current) loadPreviewInstructors();
   } catch (e) {}
 }
 
 export async function loadPreviewInstructors() {
-  const course = document.getElementById('preview-course-select').value;
+  const sel = document.getElementById('preview-course-select');
+  const courseId = sel?.value;
+  const opt = sel?.options?.[sel.selectedIndex];
+  const courseLabel = opt?.textContent || '';
   const badge = document.getElementById('preview-course-badge');
   const container = document.getElementById('preview-instructor-questions');
 
-  badge.textContent = course || '교육과정을 선택하세요';
+  badge.textContent = courseLabel || '교육과정을 선택하세요';
 
-  if (!course) {
+  if (!courseId) {
     container.innerHTML = '';
     return;
   }
 
   container.innerHTML = '<div class="loading" style="text-align:center;padding:1rem;">강사 정보 불러오는 중...</div>';
   try {
-    const courseId = state.courseIdMap[course];
     const instSnap = await getDocs(query(collection(db, 'courses', courseId, 'instructors'), orderBy('createdAt')));
     const instructors = instSnap.docs.map(d => d.data());
 
@@ -59,7 +71,7 @@ export async function loadPreviewInstructors() {
       return `<div class="q-card">
         <div class="q-num">Q${qNum}</div>
         <div class="q-txt">
-          <div style="font-size:.8rem;color:#888;margin-bottom:.3rem;">👨‍🏫 강사 만족도 · ${nameLabel}</div>
+          <div style="font-size:.8rem;color:#888;margin-bottom:.3rem;">강사 만족도 · ${nameLabel}</div>
           강사의 전반적인 강의 만족도는?
         </div>
         <div class="rating-group">${ratingHtml}</div>

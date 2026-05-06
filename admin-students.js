@@ -12,12 +12,9 @@ const studentsCache = {};
 const excelStudentData = {};
 
 // ── 수강생 관리 ──────────────────────────────
-export async function loadStudents(courseName, panelIdx) {
-  if (!courseName || panelIdx === undefined) return;
+export async function loadStudents(courseId, panelIdx) {
+  if (!courseId || panelIdx === undefined) return;
   initExcelDragDrop(panelIdx);
-
-  const courseId = state.courseIdMap[courseName];
-  if (!courseId) return;
 
   const loadingEl = document.getElementById(`stu-loading-${panelIdx}`);
   const listEl    = document.getElementById(`stu-list-${panelIdx}`);
@@ -60,10 +57,10 @@ export async function loadStudents(courseName, panelIdx) {
       return;
     }
 
-    const ec = escapeAttr(courseName);
+    const cid = escapeAttr(courseId);
     listEl.innerHTML = `
       <div class="student-bulk-actions">
-        <button class="bulk-delete-btn" id="stu-bulk-delete-btn-${panelIdx}" onclick="deleteSelectedStudents('${ec}', ${panelIdx})" disabled>선택 삭제</button>
+        <button class="bulk-delete-btn" id="stu-bulk-delete-btn-${panelIdx}" onclick="deleteSelectedStudents('${cid}', ${panelIdx})" disabled>선택 삭제</button>
       </div>
       <div class="student-table-wrap">
         <table class="student-table">
@@ -78,13 +75,13 @@ export async function loadStudents(courseName, panelIdx) {
                 <td>${escapeHtml(s.name)}</td>
                 <td>${escapeHtml(s.empNo)}</td>
                 <td>${s.completed
-                  ? `<span class="status-done">✅ 완료</span>${s.completedAt ? `<br><small class="completed-at">${formatDateTime(s.completedAt)}</small>` : ''}`
-                  : `<span class="status-pending">⏳ 미완료</span>`}
+                  ? `<span class="status-done">완료</span>${s.completedAt ? `<br><small class="completed-at">${formatDateTime(s.completedAt)}</small>` : ''}`
+                  : `<span class="status-pending">미완료</span>`}
                 </td>
                 <td>
                   <div class="inst-action-btns">
-                    <button class="inst-edit-btn" onclick="startEditStudent('${ec}', ${panelIdx}, ${idx})">수정</button>
-                    <button class="delete-btn" onclick="deleteStudent('${ec}', ${panelIdx}, '${escapeAttr(s.name)}','${escapeAttr(s.empNo)}','${escapeAttr(s._id)}',this)">삭제</button>
+                    <button class="inst-edit-btn" onclick="startEditStudent('${cid}', ${panelIdx}, ${idx})">수정</button>
+                    <button class="delete-btn" onclick="deleteStudent('${cid}', ${panelIdx}, '${escapeAttr(s.name)}','${escapeAttr(s.empNo)}','${escapeAttr(s._id)}',this)">삭제</button>
                   </div>
                 </td>
               </tr>`).join('')}
@@ -96,7 +93,7 @@ export async function loadStudents(courseName, panelIdx) {
   }
 }
 
-export async function addStudent(courseName, panelIdx) {
+export async function addStudent(courseId, panelIdx) {
   const nameEl  = document.getElementById(`new-stu-name-${panelIdx}`);
   const empNoEl = document.getElementById(`new-stu-empno-${panelIdx}`);
   const name = nameEl?.value.trim() || '';
@@ -109,13 +106,12 @@ export async function addStudent(courseName, panelIdx) {
   if (btn) { btn.disabled = true; btn.textContent = '등록 중...'; }
 
   try {
-    const courseId = state.courseIdMap[courseName];
     await addDoc(collection(db, 'courses', courseId, 'students'), {
       name, empNo, completed: false, completedAt: null
     });
     if (nameEl) nameEl.value = '';
     if (empNoEl) empNoEl.value = '';
-    await loadStudents(courseName, panelIdx);
+    await loadStudents(courseId, panelIdx);
   } catch (e) { alert('등록 중 오류가 발생했습니다.'); }
   finally { if (btn) { btn.disabled = false; btn.textContent = '+ 등록'; } }
 }
@@ -140,7 +136,7 @@ export function updateBulkDeleteBtn(panelIdx) {
   }
 }
 
-export async function deleteSelectedStudents(courseName, panelIdx) {
+export async function deleteSelectedStudents(courseId, panelIdx) {
   const checked = document.querySelectorAll(`.stu-checkbox-${panelIdx}:checked`);
   if (!checked.length) return;
   const count = checked.length;
@@ -148,7 +144,6 @@ export async function deleteSelectedStudents(courseName, panelIdx) {
   const btn = document.getElementById(`stu-bulk-delete-btn-${panelIdx}`);
   if (btn) { btn.disabled = true; btn.textContent = '삭제 중...'; }
   try {
-    const courseId = state.courseIdMap[courseName];
     await Promise.all(Array.from(checked).map(async cb => {
       const studentId = cb.dataset.id;
       const name = cb.dataset.name;
@@ -158,33 +153,32 @@ export async function deleteSelectedStudents(courseName, panelIdx) {
       await Promise.all(matching.map(d => deleteDoc(d.ref)));
       await deleteDoc(doc(db, 'courses', courseId, 'students', studentId));
     }));
-    await loadStudents(courseName, panelIdx);
+    await loadStudents(courseId, panelIdx);
   } catch (e) {
     alert('삭제 중 오류가 발생했습니다.');
     if (btn) { btn.disabled = false; btn.textContent = `선택 삭제 (${count}명)`; }
   }
 }
 
-export async function deleteStudent(courseName, panelIdx, name, empNo, studentId, btnEl) {
+export async function deleteStudent(courseId, panelIdx, name, empNo, studentId, btnEl) {
   if (!confirm(`"${name}" 수강생을 삭제하시겠습니까?\n해당 수강생의 설문 응답도 함께 삭제됩니다.`)) return;
   btnEl.disabled = true; btnEl.textContent = '삭제 중...';
   try {
-    const courseId = state.courseIdMap[courseName];
     const respSnap = await getDocs(query(collection(db, 'courses', courseId, 'responses'), where('empNo', '==', empNo)));
     const matching = respSnap.docs.filter(d => d.data().name === name);
     await Promise.all(matching.map(d => deleteDoc(d.ref)));
     await deleteDoc(doc(db, 'courses', courseId, 'students', studentId));
-    await loadStudents(courseName, panelIdx);
+    await loadStudents(courseId, panelIdx);
   } catch (e) { alert('삭제 중 오류가 발생했습니다.'); btnEl.disabled = false; btnEl.textContent = '삭제'; }
 }
 
 // ── 수강생 수정 ──────────────────────────────
-export function startEditStudent(courseName, panelIdx, idx) {
+export function startEditStudent(courseId, panelIdx, idx) {
   const s = studentsCache[panelIdx]?.[idx];
   if (!s) return;
   const row = document.getElementById(`stu-row-${panelIdx}-${idx}`);
   if (!row) return;
-  const ec = escapeAttr(courseName);
+  const cid = escapeAttr(courseId);
   row.innerHTML = `
     <td><input type="checkbox" disabled></td>
     <td><input type="text" id="edit-stu-name-${panelIdx}-${idx}" value="${escapeAttr(s.name)}" maxlength="20" style="width:100%;padding:.4rem .6rem;border:2px solid #0066cc;border-radius:7px;font-size:.88rem;"></td>
@@ -192,14 +186,14 @@ export function startEditStudent(courseName, panelIdx, idx) {
     <td></td>
     <td>
       <div class="inst-action-btns">
-        <button class="inst-save-btn" onclick="saveEditStudent('${ec}', ${panelIdx}, ${idx})">저장</button>
-        <button class="inst-cancel-btn" onclick="cancelEditStudent('${ec}', ${panelIdx})">취소</button>
+        <button class="inst-save-btn" onclick="saveEditStudent('${cid}', ${panelIdx}, ${idx})">저장</button>
+        <button class="inst-cancel-btn" onclick="cancelEditStudent('${cid}', ${panelIdx})">취소</button>
       </div>
     </td>`;
   document.getElementById(`edit-stu-name-${panelIdx}-${idx}`)?.focus();
 }
 
-export async function saveEditStudent(courseName, panelIdx, idx) {
+export async function saveEditStudent(courseId, panelIdx, idx) {
   const s = studentsCache[panelIdx]?.[idx];
   if (!s) return;
   const nameEl  = document.getElementById(`edit-stu-name-${panelIdx}-${idx}`);
@@ -214,17 +208,16 @@ export async function saveEditStudent(courseName, panelIdx, idx) {
   const saveBtn = document.querySelector(`#stu-row-${panelIdx}-${idx} .inst-save-btn`);
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '저장 중...'; }
   try {
-    const courseId = state.courseIdMap[courseName];
     await updateDoc(doc(db, 'courses', courseId, 'students', s._id), { name, empNo });
-    await loadStudents(courseName, panelIdx);
+    await loadStudents(courseId, panelIdx);
   } catch (e) {
     alert('수정 중 오류가 발생했습니다.');
     if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '저장'; }
   }
 }
 
-export async function cancelEditStudent(courseName, panelIdx) {
-  await loadStudents(courseName, panelIdx);
+export async function cancelEditStudent(courseId, panelIdx) {
+  await loadStudents(courseId, panelIdx);
 }
 
 // ── 엑셀 일괄 등록 ──────────────────────────────
@@ -337,7 +330,7 @@ function parseExcelFile(panelIdx, file) {
 
       let html = `<strong>총 ${parsed.length}명 인식됨</strong>`;
       if (errors.length > 0) {
-        html += errors.map(err => `<div class="excel-preview-error">⚠️ ${escapeHtml(err)}</div>`).join('');
+        html += errors.map(err => `<div class="excel-preview-error">${escapeHtml(err)}</div>`).join('');
       }
       html += parsed.map((s, i) =>
         `<div class="excel-preview-row">${i+1}. 교번 ${escapeHtml(s.empNo)} · ${escapeHtml(s.name)}</div>`
@@ -358,7 +351,7 @@ function parseExcelFile(panelIdx, file) {
   reader.readAsArrayBuffer(file);
 }
 
-export async function uploadExcelStudents(courseName, panelIdx) {
+export async function uploadExcelStudents(courseId, panelIdx) {
   const data = excelStudentData[panelIdx];
   if (!data || data.length === 0) return;
 
@@ -367,7 +360,6 @@ export async function uploadExcelStudents(courseName, panelIdx) {
   const progress = document.getElementById(`stu-excel-progress-${panelIdx}`);
   if (progress) progress.style.display = 'block';
 
-  const courseId = state.courseIdMap[courseName];
   const studentsRef = collection(db, 'courses', courseId, 'students');
   const total = data.length;
   const CHUNK = 400; // Firestore batch 한도 500 미만으로 안전 마진
@@ -388,7 +380,7 @@ export async function uploadExcelStudents(courseName, panelIdx) {
     }
   }
 
-  if (progress) progress.textContent = `✅ 완료: ${success}명 등록${fail > 0 ? `, ❌ ${fail}명 실패` : ''}`;
+  if (progress) progress.textContent = `완료: ${success}명 등록${fail > 0 ? `, ${fail}명 실패` : ''}`;
   excelStudentData[panelIdx] = [];
   const inputEl = document.getElementById(`stu-excel-input-${panelIdx}`);
   const nameEl  = document.getElementById(`stu-excel-name-${panelIdx}`);
@@ -397,5 +389,5 @@ export async function uploadExcelStudents(courseName, panelIdx) {
   if (nameEl) nameEl.textContent = '선택된 파일 없음 · 또는 파일을 이 영역으로 끌어다 놓으세요';
   if (previewEl) previewEl.style.display = 'none';
 
-  await loadStudents(courseName, panelIdx);
+  await loadStudents(courseId, panelIdx);
 }

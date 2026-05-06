@@ -12,10 +12,10 @@ export const Q_LABELS = [
 ];
 
 export const QUESTION_CATEGORIES = [
-  { label: '📅 교육기간', indices: [0] },
-  { label: '📋 교육운영', indices: [1, 2, 3, 4, 5] },
-  { label: '🎯 교육효과', indices: [6] },
-  { label: '🏢 시설환경', indices: [7, 8] },
+  { label: '교육기간', indices: [0] },
+  { label: '교육운영', indices: [1, 2, 3, 4, 5] },
+  { label: '교육효과', indices: [6] },
+  { label: '시설환경', indices: [7, 8] },
 ];
 
 export const DEMO_QUESTIONS = [

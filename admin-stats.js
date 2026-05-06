@@ -55,33 +55,49 @@ export function computeStats(responses, orderedInstructorKeys) {
 }
 
 // ── 통계 탭 ──────────────────────────────
+// 같은 이름의 과정을 기간으로 구분하기 위해 option label에 날짜 포함
+function buildCourseLabel(name, startDate, endDate, active) {
+  const dateLabel = (startDate && endDate)
+    ? ` (${String(startDate).replaceAll('-', '.')}~${String(endDate).replaceAll('-', '.')})`
+    : '';
+  return (active ? '' : '[종료] ') + name + dateLabel;
+}
+
 export async function populateStatsSelect() {
   try {
     const snap = await getDocs(collection(db, 'courses'));
     const courses = snap.docs.map(d => {
       const data = d.data();
-      const isActive = data.active !== false;
-      state.courseIdMap[data.name] = d.id;
-      state.courseActive[data.name] = isActive;
-      return { name: data.name, active: isActive };
+      return {
+        id: d.id,
+        name: data.name,
+        active: data.active !== false,
+        startDate: data.startDate || null,
+        endDate: data.endDate || null,
+      };
     });
     courses.sort((a, b) => (a.active === b.active) ? 0 : (a.active ? -1 : 1));
     const sel = document.getElementById('stats-course-select');
     sel.innerHTML = '<option value="">-- 교육과정을 선택하세요 --</option>' +
-      courses.map(({ name, active }) => {
-        const label = active ? name : `[종료] ${name}`;
-        return `<option value="${escapeAttr(name)}">${escapeHtml(label)}</option>`;
+      courses.map(({ id, name, startDate, endDate, active }) => {
+        const label = buildCourseLabel(name, startDate, endDate, active);
+        return `<option value="${escapeAttr(id)}" data-name="${escapeAttr(name)}">${escapeHtml(label)}</option>`;
       }).join('');
   } catch (e) {}
 }
 
 export async function loadStats() {
-  const course = document.getElementById('stats-course-select').value;
-  if (!course) return;
-  state.lastCourseName = course;
+  const sel = document.getElementById('stats-course-select');
+  const courseId = sel?.value;
+  if (!courseId) return;
+  const opt = sel.options[sel.selectedIndex];
+  const courseName  = opt?.dataset.name || '';
+  const courseLabel = opt?.textContent || courseName;
+  state.lastCourseName  = courseName;
+  state.lastCourseLabel = courseLabel;
 
   const nameEl = document.getElementById('stats-course-name');
-  if (nameEl) nameEl.textContent = course;
+  if (nameEl) nameEl.textContent = courseLabel;
 
   document.getElementById('stats-placeholder').style.display = 'none';
   document.getElementById('stats-loading').style.display = 'block';
@@ -89,7 +105,6 @@ export async function loadStats() {
   document.getElementById('stats-no-data').style.display = 'none';
 
   try {
-    const courseId = state.courseIdMap[course];
     const [responsesSnap, studentsSnap, instructorsSnap] = await Promise.all([
       getDocs(collection(db, 'courses', courseId, 'responses')),
       getDocs(collection(db, 'courses', courseId, 'students')),
@@ -227,8 +242,8 @@ export function renderStats(stats, students, responses) {
       const instSatisfyPct = count > 0 ? ((dist[3] + dist[4]) / count * 100).toFixed(1) : '0.0';
       const parts = key.split('__');
       const label = parts.length === 2
-        ? `👨‍🏫 [${escapeHtml(parts[0])}] ${escapeHtml(parts[1])} 강사`
-        : `👨‍🏫 ${escapeHtml(key)} 강사`;
+        ? `[${escapeHtml(parts[0])}] ${escapeHtml(parts[1])} 강사`
+        : `${escapeHtml(key)} 강사`;
       return `
         <div class="q-stat-card">
           <div class="q-stat-header">
