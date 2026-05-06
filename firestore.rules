@@ -2,71 +2,153 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // 관리자: Firebase Email 인증 사용자
+    // ───────────── 헬퍼 ─────────────
+    // 관리자: Firebase Email 인증 사용자 (익명에는 email이 없음)
     function isAdmin() {
       return request.auth != null && request.auth.token.email != null;
     }
-
-    // 인증된 사용자: 관리자 + 익명(교육생)
+    // 인증된 사용자: 관리자 + 익명(교육생/키오스크)
     function isAuthenticated() {
       return request.auth != null;
     }
+    // 변경된 키가 허용 목록에만 속하는지 (부분 업데이트 검증)
+    function changedKeysOnly(allowed) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed);
+    }
 
+    // ───────────── courses ─────────────
     match /courses/{courseId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
 
-      // 강사 정보 (설문 문항 생성에 필요)
+      // 강사 정보 (설문 문항 생성에 사용)
       match /instructors/{instructorId} {
         allow read: if isAuthenticated();
         allow write: if isAdmin();
       }
 
-      // 수강생 정보 (익명 교육생은 읽기·완료처리만, 관리자는 전체)
+      // 수강생: 관리자만 등록/삭제, 본인이 설문 완료 처리만 가능
       match /students/{studentId} {
         allow read: if isAuthenticated();
-        allow create: if isAdmin();
-        allow update: if isAuthenticated(); // 교육생 설문 완료 처리
-        allow delete: if isAdmin();
+        allow create, delete: if isAdmin();
+        allow update: if isAdmin()
+          || (isAuthenticated()
+              && changedKeysOnly(['completed', 'completedAt'])
+              && request.resource.data.completed == true);
       }
 
-      // 설문 응답 (관리자만 읽기·삭제, 익명 교육생은 제출만)
+      // 설문 응답: 관리자만 read/delete, 익명 교육생은 검증된 형식으로만 create
       match /responses/{responseId} {
-        allow read: if isAdmin();
-        allow create: if isAuthenticated();
-        allow delete: if isAdmin();
+        allow read, update, delete: if isAdmin();
+        allow create: if isAdmin() || (
+          isAuthenticated()
+          && request.resource.data.keys().hasAll([
+              'name','empNo','course',
+              'q1','q2','q3','q4','q5','q6','q7','q8','q9',
+              'q11','q12','q13','q14','q15','q16',
+              'instructors','submittedAt'
+            ])
+          && request.resource.data.name is string
+          && request.resource.data.name.size() > 0
+          && request.resource.data.name.size() <= 50
+          && request.resource.data.empNo is string
+          && request.resource.data.empNo.size() <= 20
+          && request.resource.data.course is string
+          && request.resource.data.course.size() <= 200
+          && request.resource.data.q1 is int && request.resource.data.q1 >= 1 && request.resource.data.q1 <= 5
+          && request.resource.data.q2 is int && request.resource.data.q2 >= 1 && request.resource.data.q2 <= 5
+          && request.resource.data.q3 is int && request.resource.data.q3 >= 1 && request.resource.data.q3 <= 5
+          && request.resource.data.q4 is int && request.resource.data.q4 >= 1 && request.resource.data.q4 <= 5
+          && request.resource.data.q5 is int && request.resource.data.q5 >= 1 && request.resource.data.q5 <= 5
+          && request.resource.data.q6 is int && request.resource.data.q6 >= 1 && request.resource.data.q6 <= 5
+          && request.resource.data.q7 is int && request.resource.data.q7 >= 1 && request.resource.data.q7 <= 5
+          && request.resource.data.q8 is int && request.resource.data.q8 >= 1 && request.resource.data.q8 <= 5
+          && request.resource.data.q9 is int && request.resource.data.q9 >= 1 && request.resource.data.q9 <= 5
+          && request.resource.data.q11 is string && request.resource.data.q11.size() <= 50
+          && request.resource.data.q12 is string && request.resource.data.q12.size() <= 50
+          && request.resource.data.q13 is string && request.resource.data.q13.size() <= 50
+          && request.resource.data.q14 is string && request.resource.data.q14.size() <= 50
+          && request.resource.data.q15 is string && request.resource.data.q15.size() <= 50
+          && request.resource.data.q16 is string && request.resource.data.q16.size() <= 50
+          && request.resource.data.instructors is map
+          && (!('q10_comment' in request.resource.data)
+              || (request.resource.data.q10_comment is string
+                  && request.resource.data.q10_comment.size() <= 1000))
+          && (!('comment1' in request.resource.data)
+              || (request.resource.data.comment1 is string
+                  && request.resource.data.comment1.size() <= 2000))
+          && (!('comment2' in request.resource.data)
+              || (request.resource.data.comment2 is string
+                  && request.resource.data.comment2.size() <= 2000))
+          && (!('comment3' in request.resource.data)
+              || (request.resource.data.comment3 is string
+                  && request.resource.data.comment3.size() <= 2000))
+        );
       }
 
-      // 출석 설정
-      match /attendanceConfig/{doc} {
-        allow read, write: if isAuthenticated();
+      // 출석 설정: 관리자만 쓰기, 단 reset_* 마커 문서는 교육생이 소비 후 삭제 가능
+      match /attendanceConfig/{docId} {
+        allow read: if isAuthenticated();
+        allow create, update: if isAdmin();
+        allow delete: if isAdmin()
+          || (isAuthenticated() && docId.matches('reset_.*'));
       }
 
-      // 출석 기록
+      // 출석 기록:
+      //   - 관리자: 임의 쓰기/수정/삭제 (수기 출석 입력)
+      //   - 익명(키오스크): used 처리된 qr_token을 참조하는 create만 허용
       match /attendance/{attendanceId} {
-        allow read, write: if isAuthenticated();
+        allow read: if isAuthenticated();
+        allow update, delete: if isAdmin();
+        allow create: if isAdmin() || (
+          isAuthenticated()
+          && request.resource.data.tokenId is string
+          && exists(/databases/$(database)/documents/qr_tokens/$(request.resource.data.tokenId))
+          && get(/databases/$(database)/documents/qr_tokens/$(request.resource.data.tokenId)).data.used == true
+          && get(/databases/$(database)/documents/qr_tokens/$(request.resource.data.tokenId)).data.courseId == courseId
+          && get(/databases/$(database)/documents/qr_tokens/$(request.resource.data.tokenId)).data.empNo == request.resource.data.empNo
+          && get(/databases/$(database)/documents/qr_tokens/$(request.resource.data.tokenId)).data.date == request.resource.data.date
+          && get(/databases/$(database)/documents/qr_tokens/$(request.resource.data.tokenId)).data.session == request.resource.data.session
+        );
       }
-
     }
 
-    // QR 토큰 (출석 체크인용)
+    // ───────────── QR 토큰 (top-level) ─────────────
+    // - create: 필수 필드 + used==false + expiresAt이 (request.time, request.time+15m) 범위
+    // - update: 미사용→사용 1회 전이만 (used/usedAt 외 변경 금지)
+    // - delete: 관리자만
     match /qr_tokens/{tokenId} {
-      allow read, write: if isAuthenticated();
-    }
-
-    // 기기 잠금 초기화 (관리자가 생성, 교육생이 읽고 삭제)
-    match /attendanceResets/{docId} {
-      allow read, delete: if isAuthenticated();
-      allow create, update: if isAuthenticated();
-    }
-
-    // collectionGroup 쿼리용 (교육생 로그인 시 단일 쿼리 검색)
-    match /{path=**}/students/{studentId} {
       allow read: if isAuthenticated();
+      allow create: if isAdmin() || (
+        isAuthenticated()
+        && request.resource.data.keys().hasAll([
+            'empNo','name','courseId','date','session',
+            'used','issuedAt','expiresAt'
+          ])
+        && request.resource.data.used == false
+        && request.resource.data.empNo is string && request.resource.data.empNo.size() <= 20
+        && request.resource.data.name is string && request.resource.data.name.size() <= 50
+        && request.resource.data.courseId is string && request.resource.data.courseId.size() <= 100
+        && request.resource.data.date is string && request.resource.data.date.size() == 10
+        && request.resource.data.session is string && request.resource.data.session in ['single','morning','afternoon']
+        && request.resource.data.expiresAt is timestamp
+        && request.resource.data.expiresAt > request.time
+        && request.resource.data.expiresAt < request.time + duration.value(15, 'm')
+      );
+      allow update: if isAdmin() || (
+        isAuthenticated()
+        && resource.data.used == false
+        && request.resource.data.used == true
+        && changedKeysOnly(['used','usedAt'])
+      );
+      allow delete: if isAdmin();
     }
 
-    // collectionGroup 쿼리용 (출석 현황 조회)
-    match /{path=**}/attendance/{attendanceId} {
+    // ───────────── collectionGroup: 학생 검색 (로그인) ─────────────
+    // 익명 사용자가 empNo로 학생 문서를 검색하려면 collectionGroup read가 필요.
+    // 한계: 인증된 사용자라면 모든 과정의 학생을 열거할 수 있음.
+    // 더 강한 보호가 필요하면 학생 검색을 Cloud Function으로 이전할 것.
+    match /{path=**}/students/{studentId} {
       allow read: if isAuthenticated();
     }
 

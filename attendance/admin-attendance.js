@@ -1,9 +1,11 @@
 import { db, auth } from './firebase-config.js';
 import {
-  collection, collectionGroup, query, where, getDocs, getDoc,
-  doc, setDoc, addDoc, deleteDoc, serverTimestamp, Timestamp
+  collection, getDocs, getDoc,
+  doc, setDoc, serverTimestamp, Timestamp
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
-import { signInAnonymously } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
+import {
+  signInWithEmailAndPassword, signOut, onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
 
 // ── 상태 ──────────────────────────────
 let currentCourseId = null;
@@ -17,29 +19,53 @@ let dailySessions = 1;
 const todayStr = new Date().toISOString().slice(0, 10);
 
 // ── 관리자 인증 ──────────────────────────────
-const ADMIN_PW = 'hrd2024!';
+// 메인 admin과 동일 계정. Firebase Console > Authentication > Users 에 등록.
+const ADMIN_EMAIL = 'kjahyuk@korea.kr';
 
 window.adminLogin = async function() {
-  const pw = document.getElementById('admin-pw').value;
-  if (pw !== ADMIN_PW) {
-    document.getElementById('login-err').textContent = '암호가 올바르지 않습니다.';
-    document.getElementById('login-err').style.display = 'block';
-    return;
+  const pwEl = document.getElementById('admin-pw');
+  const errEl = document.getElementById('login-err');
+  const pw = pwEl.value;
+  if (!pw) return;
+
+  const btn = document.querySelector('.login-box .btn-primary');
+  btn.disabled = true;
+  const origText = btn.textContent;
+  btn.textContent = '확인 중...';
+  errEl.style.display = 'none';
+
+  try {
+    await signInWithEmailAndPassword(auth, ADMIN_EMAIL, pw);
+    // onAuthStateChanged가 UI 전환을 처리함
+  } catch (e) {
+    errEl.textContent = '비밀번호가 올바르지 않습니다.';
+    errEl.style.display = 'block';
+    pwEl.value = '';
+    btn.disabled = false;
+    btn.textContent = origText;
   }
-  if (!auth.currentUser) await signInAnonymously(auth);
-  document.getElementById('login-screen').style.display = 'none';
-  document.getElementById('dashboard').style.display = 'block';
-  loadCourses();
 };
 
-window.adminLogout = function() {
-  document.getElementById('dashboard').style.display = 'none';
-  document.getElementById('login-screen').style.display = 'block';
-  document.getElementById('admin-pw').value = '';
+window.adminLogout = async function() {
+  await signOut(auth);
 };
 
 document.getElementById('admin-pw').addEventListener('keydown', e => {
   if (e.key === 'Enter') window.adminLogin();
+});
+
+onAuthStateChanged(auth, user => {
+  const isAdmin = !!(user && user.email);
+  document.getElementById('login-screen').style.display = isAdmin ? 'none' : 'block';
+  document.getElementById('dashboard').style.display = isAdmin ? 'block' : 'none';
+  if (isAdmin) {
+    loadCourses();
+  } else {
+    const pwEl = document.getElementById('admin-pw');
+    if (pwEl) pwEl.value = '';
+    const btn = document.querySelector('.login-box .btn-primary');
+    if (btn) { btn.disabled = false; btn.textContent = '로그인'; }
+  }
 });
 
 // ── 탭 전환 ──────────────────────────────
@@ -925,5 +951,4 @@ function getBuiltinHolidays(year) {
 }
 
 // ── 시작 ──────────────────────────────
-// Firebase 익명 인증 (실제 Firebase 접근용)
-signInAnonymously(auth).catch(e => console.error('익명 인증 실패:', e));
+// 인증/UI 전환은 onAuthStateChanged 가 처리함
