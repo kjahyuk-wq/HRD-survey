@@ -240,19 +240,19 @@ header h1 { font-size: 1.3rem; font-weight: 700; margin: 0; color: #fff; }
 /* 새로고침 버튼 */
 .icon-refresh-btn {
   margin-top: 0.8rem;
-  padding: 0.4rem 1rem !important;
+  padding: 0.6rem 1.3rem !important;
   background: #f0f4f8 !important;
   border: 1px solid #dde3ea !important;
-  border-radius: 8px !important;
+  border-radius: 9px !important;
   color: #555 !important;
-  font-size: 0.82rem !important;
+  font-size: 0.95rem !important;
   font-weight: 600 !important;
   cursor: pointer;
   width: auto !important;
   box-shadow: none !important;
   display: inline-flex !important;
   align-items: center;
-  gap: 0.3rem;
+  gap: 0.4rem;
 }
 
 .icon-refresh-btn:hover {
@@ -721,6 +721,51 @@ header h1 { font-size: 1.3rem; font-weight: 700; margin: 0; color: #fff; }
 }
 
 .delete-btn:hover { background: #fff0f0; transform: none; box-shadow: none; }
+
+/* 통계 헤더 카드 — 과정명 + 새로고침 */
+.course-header-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.course-header-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  flex: 1;
+  min-width: 0;
+}
+.course-header-label {
+  font-size: 0.78rem;
+  color: #6b7280;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+.course-header-name {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #003d99;
+  word-break: break-word;
+}
+
+/* 미리보기 안내 카드 */
+.preview-notice-card {
+  background: #f0f4ff;
+  border: 2px dashed #6b8cff;
+  margin-bottom: 1rem;
+}
+.preview-notice-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  color: #4a6cf7;
+  font-weight: 600;
+  font-size: 0.95rem;
+  flex-wrap: wrap;
+}
+.preview-notice-row > span { flex: 1; min-width: 0; }
 
 /* 통계 과정 선택 */
 .course-select-row {
@@ -1291,7 +1336,7 @@ tr:hover td { background: #f8faff; }
   .anon-notice { font-size: 0.75rem; padding: 0.5rem 0.8rem; }
 
   /* 새로고침 */
-  .icon-refresh-btn { font-size: 0.78rem !important; padding: 0.4rem 0.85rem !important; }
+  .icon-refresh-btn { font-size: 0.88rem !important; padding: 0.55rem 1.1rem !important; }
 
   /* 설문 미리보기 프레임 */
   .preview-device-frame { padding: 1rem 0.7rem; border-radius: 12px; }

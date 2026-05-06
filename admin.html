@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>관리자 - 대전광역시 인재개발원</title>
-  <link href="style.css?v=7" rel="stylesheet">
-  <link href="admin.css?v=7" rel="stylesheet">
+  <link href="style.css?v=10" rel="stylesheet">
+  <link href="admin.css?v=10" rel="stylesheet">
 </head>
 <body>
 
@@ -39,13 +39,6 @@
         </div>
       </header>
 
-      <!-- 탭 -->
-      <div class="tabs">
-        <button class="tab-btn active" onclick="switchTab('courses')">📋 교육과정 관리</button>
-        <button class="tab-btn" onclick="switchTab('preview')">👁 설문 미리보기</button>
-        <button class="tab-btn" onclick="switchTab('stats')">📊 설문 통계</button>
-      </div>
-
       <!-- 교육과정 관리 탭 -->
       <div id="tab-courses">
 
@@ -71,17 +64,18 @@
 
       <!-- 설문 통계 탭 -->
       <div id="tab-stats" style="display:none;">
-        <div class="section-card">
-          <div class="section-title">교육과정 선택</div>
-          <div class="course-select-row">
-            <select id="stats-course-select" onchange="loadStats()">
-              <option value="">-- 교육과정을 선택하세요 --</option>
-            </select>
-            <button class="icon-refresh-btn" onclick="loadStats()">🔄 새로고침</button>
+        <div class="section-card course-header-card">
+          <div class="course-header-info">
+            <span class="course-header-label">📊 설문 통계</span>
+            <span class="course-header-name" id="stats-course-name">-</span>
           </div>
+          <button class="icon-refresh-btn" onclick="loadStats()" title="새로고침">🔄 새로고침</button>
+          <select id="stats-course-select" onchange="loadStats()" hidden>
+            <option value="">-- 교육과정을 선택하세요 --</option>
+          </select>
         </div>
 
-        <div id="stats-placeholder" class="no-data">위에서 교육과정을 선택하면 통계가 표시됩니다.</div>
+        <div id="stats-placeholder" class="no-data">교육과정 목록에서 “📊 통계” 버튼을 눌러 진입해 주세요.</div>
         <div id="stats-loading" class="loading" style="display:none;">통계를 불러오는 중...</div>
         <div id="stats-no-data" class="no-data" style="display:none;">해당 교육과정의 응답이 없습니다.</div>
 
@@ -125,17 +119,14 @@
 
       <!-- 설문 미리보기 탭 -->
       <div id="tab-preview" style="display:none;">
-        <div class="section-card" style="background:#f0f4ff;border:2px dashed #6b8cff;margin-bottom:1rem;">
-          <div style="display:flex;align-items:center;gap:.5rem;color:#4a6cf7;font-weight:600;font-size:.95rem;margin-bottom:.8rem;">
-            <span>👁</span>
-            <span>교육생이 실제로 보는 설문조사 화면입니다. 제출 기능은 동작하지 않습니다.</span>
-          </div>
-          <div class="course-select-row">
-            <select id="preview-course-select" onchange="loadPreviewInstructors()">
-              <option value="">-- 교육과정을 선택하세요 --</option>
-            </select>
+        <div class="section-card preview-notice-card">
+          <div class="preview-notice-row">
+            <span>👁 교육생이 실제로 보는 설문조사 화면입니다. 제출 기능은 동작하지 않습니다.</span>
             <button class="icon-refresh-btn" onclick="loadPreviewInstructors()" title="새로고침">🔄 새로고침</button>
           </div>
+          <select id="preview-course-select" onchange="loadPreviewInstructors()" hidden>
+            <option value="">-- 교육과정을 선택하세요 --</option>
+          </select>
         </div>
 
         <div class="preview-device-frame">
@@ -370,6 +361,6 @@
     </div>
   </div>
 
-  <script type="module" src="admin.js?v=7"></script>
+  <script type="module" src="admin.js?v=10"></script>
 </body>
 </html>

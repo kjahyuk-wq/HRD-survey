@@ -80,6 +80,9 @@ export async function loadStats() {
   if (!course) return;
   state.lastCourseName = course;
 
+  const nameEl = document.getElementById('stats-course-name');
+  if (nameEl) nameEl.textContent = course;
+
   document.getElementById('stats-placeholder').style.display = 'none';
   document.getElementById('stats-loading').style.display = 'block';
   document.getElementById('stats-area').style.display = 'none';

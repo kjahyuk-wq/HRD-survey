@@ -13,21 +13,15 @@ function setActiveTab(tab) {
   ['courses', 'stats', 'preview'].forEach(t => {
     document.getElementById(`tab-${t}`).style.display = t === tab ? 'block' : 'none';
   });
-  const tabNames = ['courses', 'preview', 'stats'];
-  document.querySelectorAll('.tab-btn').forEach((btn, i) => {
-    btn.classList.toggle('active', tabNames[i] === tab);
-  });
-}
-
-function switchTab(tab) {
-  setActiveTab(tab);
-  if (tab === 'stats') populateStatsSelect();
-  if (tab === 'preview') populatePreviewSelect();
+  // 탭 진입 시 페이지 상단으로
+  window.scrollTo({ top: 0, behavior: 'instant' });
 }
 
 // 과정 카드의 [미리보기]/[통계] 바로가기 — 탭 전환 + 과정 자동 선택 + 데이터 로드
+// + history.pushState로 브라우저 뒤로가기에서 교육과정 목록으로 복귀 가능
 async function goToCourseTab(tab, courseName) {
   setActiveTab(tab);
+  history.pushState({ tab, course: courseName }, '', `#${tab}`);
   if (tab === 'stats') {
     await populateStatsSelect();
     const sel = document.getElementById('stats-course-select');
@@ -39,6 +33,28 @@ async function goToCourseTab(tab, courseName) {
     if (sel) sel.value = courseName;
     await loadPreviewInstructors();
   }
+}
+
+// 브라우저 뒤로/앞으로 가기로 탭 복원
+window.addEventListener('popstate', async (e) => {
+  const s = e.state || { tab: 'courses' };
+  setActiveTab(s.tab);
+  if (s.tab === 'stats' && s.course) {
+    await populateStatsSelect();
+    const sel = document.getElementById('stats-course-select');
+    if (sel) sel.value = s.course;
+    await loadStats();
+  } else if (s.tab === 'preview' && s.course) {
+    await populatePreviewSelect();
+    const sel = document.getElementById('preview-course-select');
+    if (sel) sel.value = s.course;
+    await loadPreviewInstructors();
+  }
+});
+
+// 페이지 첫 로드 시 baseline state 등록 (이후 뒤로가기로 여기에 복귀)
+if (!history.state) {
+  history.replaceState({ tab: 'courses' }, '', location.pathname);
 }
 
 // ── Firebase Auth 상태 감지 ──────────────────────────────
@@ -60,7 +76,6 @@ onAuthStateChanged(auth, user => {
 // ── window 전역 노출 (HTML onclick 핸들러용) ──────────────────────────────
 window.checkLogin = checkLogin;
 window.logout = logout;
-window.switchTab = switchTab;
 window.goToCourseTab = goToCourseTab;
 window.addCourse = addCourse;
 window.deleteCourse = deleteCourse;
