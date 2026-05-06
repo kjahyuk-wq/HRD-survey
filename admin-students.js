@@ -6,64 +6,75 @@ import {
 import { state, escapeHtml, escapeAttr, formatDateTime } from './admin-utils.js';
 import { loadXLSX } from './admin-excel.js';
 
+// ── 패널 단위 상태 ──────────────────────────────
+// panelIdx → 학생 배열 / 엑셀 파싱 결과 캐시
+const studentsCache = {};
+const excelStudentData = {};
+
 // ── 수강생 관리 ──────────────────────────────
-let studentsCache = [];
+export async function loadStudents(courseName, panelIdx) {
+  if (!courseName || panelIdx === undefined) return;
+  initExcelDragDrop(panelIdx);
 
-export async function loadStudents() {
-  const course = document.getElementById('student-course-select').value;
-  document.getElementById('student-placeholder').style.display = course ? 'none' : 'block';
-  document.getElementById('student-section').style.display = course ? 'block' : 'none';
-  if (!course) return;
-  initExcelDragDrop();
+  const courseId = state.courseIdMap[courseName];
+  if (!courseId) return;
 
-  document.getElementById('student-loading').style.display = 'block';
-  document.getElementById('student-list').innerHTML = '';
-  document.getElementById('student-empty').style.display = 'none';
-  document.getElementById('student-stats-bar').innerHTML = '';
+  const loadingEl = document.getElementById(`stu-loading-${panelIdx}`);
+  const listEl    = document.getElementById(`stu-list-${panelIdx}`);
+  const emptyEl   = document.getElementById(`stu-empty-${panelIdx}`);
+  const statsEl   = document.getElementById(`stu-stats-bar-${panelIdx}`);
+  if (!listEl) return;
+
+  if (loadingEl) loadingEl.style.display = 'block';
+  listEl.innerHTML = '';
+  if (emptyEl)  emptyEl.style.display = 'none';
+  if (statsEl)  statsEl.innerHTML = '';
 
   try {
-    const courseId = state.courseIdMap[course];
     const snap = await getDocs(collection(db, 'courses', courseId, 'students'));
     const students = snap.docs.map(d => ({
       ...d.data(),
       _id: d.id,
       completedAt: d.data().completedAt?.toDate?.()?.toISOString() ?? null
     })).sort((a, b) => Number(a.empNo) - Number(b.empNo));
-    studentsCache = students;
-    document.getElementById('student-loading').style.display = 'none';
+    studentsCache[panelIdx] = students;
+    if (loadingEl) loadingEl.style.display = 'none';
 
     const total = students.length;
     const done = students.filter(s => s.completed).length;
 
-    document.getElementById('student-stats-bar').innerHTML = `
-      <div class="stu-stat">
-        <span>전체 <strong>${total}명</strong></span>
-        <span class="stu-done">완료 <strong>${done}명</strong></span>
-        <span class="stu-pending">미완료 <strong>${total - done}명</strong></span>
-        <div class="stu-progress-wrap">
-          <div class="stu-progress-bar" style="width:${total > 0 ? (done/total*100) : 0}%"></div>
-        </div>
-      </div>`;
+    if (statsEl) {
+      statsEl.innerHTML = `
+        <div class="stu-stat">
+          <span>전체 <strong>${total}명</strong></span>
+          <span class="stu-done">완료 <strong>${done}명</strong></span>
+          <span class="stu-pending">미완료 <strong>${total - done}명</strong></span>
+          <div class="stu-progress-wrap">
+            <div class="stu-progress-bar" style="width:${total > 0 ? (done/total*100) : 0}%"></div>
+          </div>
+        </div>`;
+    }
 
     if (!students.length) {
-      document.getElementById('student-empty').style.display = 'block';
+      if (emptyEl) emptyEl.style.display = 'block';
       return;
     }
 
-    document.getElementById('student-list').innerHTML = `
+    const ec = escapeAttr(courseName);
+    listEl.innerHTML = `
       <div class="student-bulk-actions">
-        <button class="bulk-delete-btn" id="bulk-delete-btn" onclick="deleteSelectedStudents()" disabled>선택 삭제</button>
+        <button class="bulk-delete-btn" id="stu-bulk-delete-btn-${panelIdx}" onclick="deleteSelectedStudents('${ec}', ${panelIdx})" disabled>선택 삭제</button>
       </div>
       <div class="student-table-wrap">
         <table class="student-table">
           <thead><tr>
-            <th style="width:36px"><input type="checkbox" id="select-all-checkbox" onclick="toggleSelectAll(this)"></th>
+            <th style="width:36px"><input type="checkbox" id="stu-select-all-${panelIdx}" onclick="toggleSelectAll(${panelIdx}, this)"></th>
             <th>이름</th><th>교번</th><th>상태</th><th></th>
           </tr></thead>
           <tbody>
             ${students.map((s, idx) => `
-              <tr id="student-row-${idx}">
-                <td><input type="checkbox" class="student-checkbox" data-id="${escapeAttr(s._id)}" data-name="${escapeAttr(s.name)}" data-empno="${escapeAttr(s.empNo)}" onchange="updateBulkDeleteBtn()"></td>
+              <tr id="stu-row-${panelIdx}-${idx}">
+                <td><input type="checkbox" class="stu-checkbox-${panelIdx}" data-id="${escapeAttr(s._id)}" data-name="${escapeAttr(s.name)}" data-empno="${escapeAttr(s.empNo)}" onchange="updateBulkDeleteBtn(${panelIdx})"></td>
                 <td>${escapeHtml(s.name)}</td>
                 <td>${escapeHtml(s.empNo)}</td>
                 <td>${s.completed
@@ -72,8 +83,8 @@ export async function loadStudents() {
                 </td>
                 <td>
                   <div class="inst-action-btns">
-                    <button class="inst-edit-btn" onclick="startEditStudent(${idx})">수정</button>
-                    <button class="delete-btn" onclick="deleteStudent('${escapeAttr(s.name)}','${escapeAttr(s.empNo)}','${escapeAttr(course)}','${escapeAttr(s._id)}',this)">삭제</button>
+                    <button class="inst-edit-btn" onclick="startEditStudent('${ec}', ${panelIdx}, ${idx})">수정</button>
+                    <button class="delete-btn" onclick="deleteStudent('${ec}', ${panelIdx}, '${escapeAttr(s.name)}','${escapeAttr(s.empNo)}','${escapeAttr(s._id)}',this)">삭제</button>
                   </div>
                 </td>
               </tr>`).join('')}
@@ -81,44 +92,44 @@ export async function loadStudents() {
         </table>
       </div>`;
   } catch (e) {
-    document.getElementById('student-loading').textContent = '불러오기 실패';
+    if (loadingEl) loadingEl.textContent = '불러오기 실패';
   }
 }
 
-export async function addStudent() {
-  const course = document.getElementById('student-course-select').value;
-  const name = document.getElementById('new-student-name').value.trim();
-  const empNo = document.getElementById('new-student-empno').value.trim();
+export async function addStudent(courseName, panelIdx) {
+  const nameEl  = document.getElementById(`new-stu-name-${panelIdx}`);
+  const empNoEl = document.getElementById(`new-stu-empno-${panelIdx}`);
+  const name = nameEl?.value.trim() || '';
+  const empNo = empNoEl?.value.trim() || '';
 
-  if (!course) { alert('교육과정을 먼저 선택해 주세요.'); return; }
-  if (!name) { document.getElementById('new-student-name').focus(); return; }
+  if (!name) { nameEl?.focus(); return; }
   if (!/^\d+$/.test(empNo) || parseInt(empNo) < 1) { alert('교번을 올바르게 입력해 주세요. (1 이상의 숫자)'); return; }
 
-  const addBtns = document.querySelectorAll('.add-btn');
-  addBtns.forEach(b => { b.disabled = true; b.textContent = '등록 중...'; });
+  const btn = document.getElementById(`stu-add-btn-${panelIdx}`);
+  if (btn) { btn.disabled = true; btn.textContent = '등록 중...'; }
 
   try {
-    const courseId = state.courseIdMap[course];
+    const courseId = state.courseIdMap[courseName];
     await addDoc(collection(db, 'courses', courseId, 'students'), {
       name, empNo, completed: false, completedAt: null
     });
-    document.getElementById('new-student-name').value = '';
-    document.getElementById('new-student-empno').value = '';
-    await loadStudents();
+    if (nameEl) nameEl.value = '';
+    if (empNoEl) empNoEl.value = '';
+    await loadStudents(courseName, panelIdx);
   } catch (e) { alert('등록 중 오류가 발생했습니다.'); }
-  finally { addBtns.forEach(b => { b.disabled = false; b.textContent = '+ 등록'; }); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = '+ 등록'; } }
 }
 
-export function toggleSelectAll(checkbox) {
-  document.querySelectorAll('.student-checkbox').forEach(cb => cb.checked = checkbox.checked);
-  updateBulkDeleteBtn();
+export function toggleSelectAll(panelIdx, checkbox) {
+  document.querySelectorAll(`.stu-checkbox-${panelIdx}`).forEach(cb => cb.checked = checkbox.checked);
+  updateBulkDeleteBtn(panelIdx);
 }
 
-export function updateBulkDeleteBtn() {
-  const all = document.querySelectorAll('.student-checkbox');
-  const checked = document.querySelectorAll('.student-checkbox:checked');
-  const btn = document.getElementById('bulk-delete-btn');
-  const selectAll = document.getElementById('select-all-checkbox');
+export function updateBulkDeleteBtn(panelIdx) {
+  const all = document.querySelectorAll(`.stu-checkbox-${panelIdx}`);
+  const checked = document.querySelectorAll(`.stu-checkbox-${panelIdx}:checked`);
+  const btn = document.getElementById(`stu-bulk-delete-btn-${panelIdx}`);
+  const selectAll = document.getElementById(`stu-select-all-${panelIdx}`);
   if (btn) {
     btn.disabled = checked.length === 0;
     btn.textContent = checked.length > 0 ? `선택 삭제 (${checked.length}명)` : '선택 삭제';
@@ -129,17 +140,15 @@ export function updateBulkDeleteBtn() {
   }
 }
 
-export async function deleteSelectedStudents() {
-  const course = document.getElementById('student-course-select').value;
-  const checked = document.querySelectorAll('.student-checkbox:checked');
+export async function deleteSelectedStudents(courseName, panelIdx) {
+  const checked = document.querySelectorAll(`.stu-checkbox-${panelIdx}:checked`);
   if (!checked.length) return;
   const count = checked.length;
   if (!confirm(`선택한 ${count}명의 수강생을 삭제하시겠습니까?\n해당 수강생들의 설문 응답도 함께 삭제됩니다.`)) return;
-  const btn = document.getElementById('bulk-delete-btn');
-  btn.disabled = true;
-  btn.textContent = '삭제 중...';
+  const btn = document.getElementById(`stu-bulk-delete-btn-${panelIdx}`);
+  if (btn) { btn.disabled = true; btn.textContent = '삭제 중...'; }
   try {
-    const courseId = state.courseIdMap[course];
+    const courseId = state.courseIdMap[courseName];
     await Promise.all(Array.from(checked).map(async cb => {
       const studentId = cb.dataset.id;
       const name = cb.dataset.name;
@@ -149,55 +158,52 @@ export async function deleteSelectedStudents() {
       await Promise.all(matching.map(d => deleteDoc(d.ref)));
       await deleteDoc(doc(db, 'courses', courseId, 'students', studentId));
     }));
-    await loadStudents();
+    await loadStudents(courseName, panelIdx);
   } catch (e) {
     alert('삭제 중 오류가 발생했습니다.');
-    btn.disabled = false;
-    btn.textContent = `선택 삭제 (${count}명)`;
+    if (btn) { btn.disabled = false; btn.textContent = `선택 삭제 (${count}명)`; }
   }
 }
 
-export async function deleteStudent(name, empNo, course, studentId, btnEl) {
+export async function deleteStudent(courseName, panelIdx, name, empNo, studentId, btnEl) {
   if (!confirm(`"${name}" 수강생을 삭제하시겠습니까?\n해당 수강생의 설문 응답도 함께 삭제됩니다.`)) return;
   btnEl.disabled = true; btnEl.textContent = '삭제 중...';
   try {
-    const courseId = state.courseIdMap[course];
+    const courseId = state.courseIdMap[courseName];
     const respSnap = await getDocs(query(collection(db, 'courses', courseId, 'responses'), where('empNo', '==', empNo)));
     const matching = respSnap.docs.filter(d => d.data().name === name);
     await Promise.all(matching.map(d => deleteDoc(d.ref)));
     await deleteDoc(doc(db, 'courses', courseId, 'students', studentId));
-    await loadStudents();
+    await loadStudents(courseName, panelIdx);
   } catch (e) { alert('삭제 중 오류가 발생했습니다.'); btnEl.disabled = false; btnEl.textContent = '삭제'; }
 }
 
 // ── 수강생 수정 ──────────────────────────────
-export function startEditStudent(idx) {
-  const s = studentsCache[idx];
+export function startEditStudent(courseName, panelIdx, idx) {
+  const s = studentsCache[panelIdx]?.[idx];
   if (!s) return;
-  const row = document.getElementById(`student-row-${idx}`);
+  const row = document.getElementById(`stu-row-${panelIdx}-${idx}`);
   if (!row) return;
-  const course = document.getElementById('student-course-select').value;
-  const ec = escapeAttr(course);
+  const ec = escapeAttr(courseName);
   row.innerHTML = `
     <td><input type="checkbox" disabled></td>
-    <td><input type="text" id="edit-stu-name-${idx}" value="${escapeAttr(s.name)}" maxlength="20" style="width:100%;padding:.4rem .6rem;border:2px solid #0066cc;border-radius:7px;font-size:.88rem;"></td>
-    <td><input type="number" id="edit-stu-empno-${idx}" value="${escapeAttr(s.empNo)}" min="1" style="width:100%;padding:.4rem .6rem;border:2px solid #0066cc;border-radius:7px;font-size:.88rem;"></td>
+    <td><input type="text" id="edit-stu-name-${panelIdx}-${idx}" value="${escapeAttr(s.name)}" maxlength="20" style="width:100%;padding:.4rem .6rem;border:2px solid #0066cc;border-radius:7px;font-size:.88rem;"></td>
+    <td><input type="number" id="edit-stu-empno-${panelIdx}-${idx}" value="${escapeAttr(s.empNo)}" min="1" style="width:100%;padding:.4rem .6rem;border:2px solid #0066cc;border-radius:7px;font-size:.88rem;"></td>
     <td></td>
     <td>
       <div class="inst-action-btns">
-        <button class="inst-save-btn" onclick="saveEditStudent(${idx})">저장</button>
-        <button class="inst-cancel-btn" onclick="cancelEditStudent()">취소</button>
+        <button class="inst-save-btn" onclick="saveEditStudent('${ec}', ${panelIdx}, ${idx})">저장</button>
+        <button class="inst-cancel-btn" onclick="cancelEditStudent('${ec}', ${panelIdx})">취소</button>
       </div>
     </td>`;
-  document.getElementById(`edit-stu-name-${idx}`)?.focus();
+  document.getElementById(`edit-stu-name-${panelIdx}-${idx}`)?.focus();
 }
 
-export async function saveEditStudent(idx) {
-  const s = studentsCache[idx];
+export async function saveEditStudent(courseName, panelIdx, idx) {
+  const s = studentsCache[panelIdx]?.[idx];
   if (!s) return;
-  const course = document.getElementById('student-course-select').value;
-  const nameEl  = document.getElementById(`edit-stu-name-${idx}`);
-  const empNoEl = document.getElementById(`edit-stu-empno-${idx}`);
+  const nameEl  = document.getElementById(`edit-stu-name-${panelIdx}-${idx}`);
+  const empNoEl = document.getElementById(`edit-stu-empno-${panelIdx}-${idx}`);
   const name  = nameEl?.value.trim();
   const empNo = empNoEl?.value.trim();
   if (!name)  { nameEl?.focus(); return; }
@@ -205,24 +211,23 @@ export async function saveEditStudent(idx) {
     alert('교번을 올바르게 입력해 주세요. (1 이상의 숫자)');
     empNoEl?.focus(); return;
   }
-  const saveBtn = document.querySelector(`#student-row-${idx} .inst-save-btn`);
+  const saveBtn = document.querySelector(`#stu-row-${panelIdx}-${idx} .inst-save-btn`);
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '저장 중...'; }
   try {
-    const courseId = state.courseIdMap[course];
+    const courseId = state.courseIdMap[courseName];
     await updateDoc(doc(db, 'courses', courseId, 'students', s._id), { name, empNo });
-    await loadStudents();
+    await loadStudents(courseName, panelIdx);
   } catch (e) {
     alert('수정 중 오류가 발생했습니다.');
     if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '저장'; }
   }
 }
 
-export async function cancelEditStudent() {
-  await loadStudents();
+export async function cancelEditStudent(courseName, panelIdx) {
+  await loadStudents(courseName, panelIdx);
 }
 
 // ── 엑셀 일괄 등록 ──────────────────────────────
-let excelStudentData = [];
 let _docDragGuardInit = false;
 
 function initDocDragGuard() {
@@ -238,9 +243,9 @@ function initDocDragGuard() {
   });
 }
 
-function initExcelDragDrop() {
+function initExcelDragDrop(panelIdx) {
   initDocDragGuard();
-  const area = document.querySelector('.excel-upload-area');
+  const area = document.getElementById(`stu-panel-${panelIdx}`)?.querySelector('.stu-excel-area');
   if (!area || area.dataset.dragInit) return;
   area.dataset.dragInit = '1';
 
@@ -275,24 +280,29 @@ function initExcelDragDrop() {
       alert('엑셀 라이브러리를 불러오지 못했습니다. 인터넷 연결을 확인해 주세요.');
       return;
     }
-    document.getElementById('excel-file-name').textContent = file.name;
-    parseExcelFile(file);
+    const nameEl = document.getElementById(`stu-excel-name-${panelIdx}`);
+    if (nameEl) nameEl.textContent = file.name;
+    parseExcelFile(panelIdx, file);
   });
 }
 
-export async function handleExcelUpload(input) {
+export async function handleExcelUpload(panelIdx, input) {
   const file = input.files[0];
   if (!file) return;
   await loadXLSX();
-  document.getElementById('excel-file-name').textContent = file.name;
-  parseExcelFile(file);
+  const nameEl = document.getElementById(`stu-excel-name-${panelIdx}`);
+  if (nameEl) nameEl.textContent = file.name;
+  parseExcelFile(panelIdx, file);
 }
 
-function parseExcelFile(file) {
-  document.getElementById('excel-preview').style.display = 'none';
-  document.getElementById('excel-progress').style.display = 'none';
-  document.getElementById('excel-upload-btn').disabled = true;
-  excelStudentData = [];
+function parseExcelFile(panelIdx, file) {
+  const previewEl  = document.getElementById(`stu-excel-preview-${panelIdx}`);
+  const progressEl = document.getElementById(`stu-excel-progress-${panelIdx}`);
+  const btn        = document.getElementById(`stu-excel-btn-${panelIdx}`);
+  if (previewEl)  previewEl.style.display = 'none';
+  if (progressEl) progressEl.style.display = 'none';
+  if (btn) btn.disabled = true;
+  excelStudentData[panelIdx] = [];
 
   const reader = new FileReader();
   reader.onload = function(e) {
@@ -317,11 +327,11 @@ function parseExcelFile(file) {
         parsed.push({ empNo, name });
       }
 
-      const preview = document.getElementById('excel-preview');
-      preview.style.display = 'block';
+      if (!previewEl) return;
+      previewEl.style.display = 'block';
 
       if (parsed.length === 0 && errors.length === 0) {
-        preview.innerHTML = '<div class="excel-preview-error">데이터가 없습니다. 파일을 확인해 주세요.</div>';
+        previewEl.innerHTML = '<div class="excel-preview-error">데이터가 없습니다. 파일을 확인해 주세요.</div>';
         return;
       }
 
@@ -332,40 +342,40 @@ function parseExcelFile(file) {
       html += parsed.map((s, i) =>
         `<div class="excel-preview-row">${i+1}. 교번 ${escapeHtml(s.empNo)} · ${escapeHtml(s.name)}</div>`
       ).join('');
-      preview.innerHTML = html;
+      previewEl.innerHTML = html;
 
       if (parsed.length > 0) {
-        excelStudentData = parsed;
-        document.getElementById('excel-upload-btn').disabled = false;
+        excelStudentData[panelIdx] = parsed;
+        if (btn) btn.disabled = false;
       }
     } catch(err) {
-      const preview = document.getElementById('excel-preview');
-      preview.style.display = 'block';
-      preview.innerHTML = '<div class="excel-preview-error">파일을 읽을 수 없습니다. 엑셀 형식(.xlsx/.xls)인지 확인해 주세요.</div>';
+      if (previewEl) {
+        previewEl.style.display = 'block';
+        previewEl.innerHTML = '<div class="excel-preview-error">파일을 읽을 수 없습니다. 엑셀 형식(.xlsx/.xls)인지 확인해 주세요.</div>';
+      }
     }
   };
   reader.readAsArrayBuffer(file);
 }
 
-export async function uploadExcelStudents() {
-  const course = document.getElementById('student-course-select').value;
-  if (!course) { alert('교육과정을 먼저 선택해 주세요.'); return; }
-  if (excelStudentData.length === 0) return;
+export async function uploadExcelStudents(courseName, panelIdx) {
+  const data = excelStudentData[panelIdx];
+  if (!data || data.length === 0) return;
 
-  const btn = document.getElementById('excel-upload-btn');
-  btn.disabled = true;
-  const progress = document.getElementById('excel-progress');
-  progress.style.display = 'block';
+  const btn = document.getElementById(`stu-excel-btn-${panelIdx}`);
+  if (btn) btn.disabled = true;
+  const progress = document.getElementById(`stu-excel-progress-${panelIdx}`);
+  if (progress) progress.style.display = 'block';
 
-  const courseId = state.courseIdMap[course];
+  const courseId = state.courseIdMap[courseName];
   const studentsRef = collection(db, 'courses', courseId, 'students');
-  const total = excelStudentData.length;
+  const total = data.length;
   const CHUNK = 400; // Firestore batch 한도 500 미만으로 안전 마진
   let success = 0, fail = 0;
 
   for (let start = 0; start < total; start += CHUNK) {
-    const slice = excelStudentData.slice(start, start + CHUNK);
-    progress.textContent = `등록 중... (${start + slice.length}/${total})`;
+    const slice = data.slice(start, start + CHUNK);
+    if (progress) progress.textContent = `등록 중... (${start + slice.length}/${total})`;
     const batch = writeBatch(db);
     for (const { empNo, name } of slice) {
       batch.set(doc(studentsRef), { name, empNo, completed: false, completedAt: null });
@@ -378,11 +388,14 @@ export async function uploadExcelStudents() {
     }
   }
 
-  progress.textContent = `✅ 완료: ${success}명 등록${fail > 0 ? `, ❌ ${fail}명 실패` : ''}`;
-  excelStudentData = [];
-  document.getElementById('excel-file-input').value = '';
-  document.getElementById('excel-file-name').textContent = '선택된 파일 없음';
-  document.getElementById('excel-preview').style.display = 'none';
+  if (progress) progress.textContent = `✅ 완료: ${success}명 등록${fail > 0 ? `, ❌ ${fail}명 실패` : ''}`;
+  excelStudentData[panelIdx] = [];
+  const inputEl = document.getElementById(`stu-excel-input-${panelIdx}`);
+  const nameEl  = document.getElementById(`stu-excel-name-${panelIdx}`);
+  const previewEl = document.getElementById(`stu-excel-preview-${panelIdx}`);
+  if (inputEl) inputEl.value = '';
+  if (nameEl) nameEl.textContent = '선택된 파일 없음 · 또는 파일을 이 영역으로 끌어다 놓으세요';
+  if (previewEl) previewEl.style.display = 'none';
 
-  await loadStudents();
+  await loadStudents(courseName, panelIdx);
 }

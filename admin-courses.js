@@ -1,10 +1,14 @@
 import { db } from './firebase-config.js';
 import {
-  collection, getDocs,
+  collection, getDocs, getCountFromServer, query, where,
   addDoc, deleteDoc, doc, serverTimestamp, updateDoc, writeBatch
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { state, escapeHtml, escapeAttr } from './admin-utils.js';
 import { loadXLSX } from './admin-excel.js';
+import { loadStudents } from './admin-students.js';
+
+// 종료된 과정 토글 펼침 상태 (탭 재진입 시 유지)
+let closedCoursesExpanded = false;
 
 // ── 교육과정 관리 ──────────────────────────────
 export async function loadCourseList() {
@@ -14,60 +18,180 @@ export async function loadCourseList() {
 
   try {
     const snap = await getDocs(collection(db, 'courses'));
-    document.getElementById('course-manage-loading').style.display = 'none';
 
     state.courseIdMap = {};
     state.courseActive = {};
-    // active 과정 먼저, 그 안에서는 입력 순서 유지
     const courses = snap.docs.map(d => {
       const data = d.data();
       const isActive = data.active !== false;  // 필드 없으면 활성으로 간주 (마이그레이션)
       state.courseIdMap[data.name] = d.id;
       state.courseActive[data.name] = isActive;
-      return { name: data.name, active: isActive };
+      return { id: d.id, name: data.name, active: isActive };
     });
+    // 진행중 우선, 입력 순서 유지
     courses.sort((a, b) => (a.active === b.active) ? 0 : (a.active ? -1 : 1));
 
     document.getElementById('course-count').textContent = courses.length + '개';
+    document.getElementById('course-manage-loading').style.display = 'none';
 
     if (!courses.length) {
       document.getElementById('course-manage-empty').style.display = 'block';
-    } else {
-      document.getElementById('course-manage-list').innerHTML = courses.map(({ name, active }, idx) => {
-        const en = escapeAttr(name);
-        const statusBadge = active
-          ? `<span class="course-status active">진행중</span>`
-          : `<span class="course-status closed">종료</span>`;
-        const toggleBtn = active
-          ? `<button class="course-close-btn" onclick="toggleCourseActive('${en}', true, this)">종료</button>`
-          : `<button class="course-reopen-btn" onclick="toggleCourseActive('${en}', false, this)">재활성</button>`;
-        return `
-        <div class="course-manage-item ${active ? '' : 'is-closed'}" id="course-item-${idx}">
-          <div class="course-manage-row">
-            <span class="course-manage-name">📚 ${escapeHtml(name)} ${statusBadge}</span>
-            <div class="course-manage-actions">
-              <button class="instructor-btn" onclick="toggleInstructors('${en}', ${idx})">👨‍🏫 강사 관리</button>
-              ${toggleBtn}
-              <button class="delete-btn" onclick="deleteCourse('${en}', this)">삭제</button>
-            </div>
-          </div>
-          <div class="instructor-panel" id="inst-panel-${idx}" style="display:none;"></div>
-        </div>`;
-      }).join('');
+      return;
     }
 
-    // 수강생 관리 드롭다운 — 종료된 과정엔 [종료] 표시
-    const sel = document.getElementById('student-course-select');
-    const prev = sel.value;
-    sel.innerHTML = '<option value="">-- 교육과정을 선택하세요 --</option>' +
-      courses.map(({ name, active }) => {
-        const label = active ? name : `[종료] ${name}`;
-        return `<option value="${escapeAttr(name)}">${escapeHtml(label)}</option>`;
-      }).join('');
-    if (prev) sel.value = prev;
+    // 각 과정마다 인덱스 부여 (active/closed 통합 인덱스 공간)
+    courses.forEach((c, idx) => { c.idx = idx; });
+
+    // 카드 골격 먼저 렌더 (요약 칩은 비동기로 채움)
+    const activeCourses = courses.filter(c => c.active);
+    const closedCourses = courses.filter(c => !c.active);
+
+    let html = activeCourses.map(renderCourseItem).join('');
+    if (closedCourses.length > 0) {
+      const arrow = closedCoursesExpanded ? '▲' : '▼';
+      const label = closedCoursesExpanded ? '숨기기' : '보기';
+      html += `
+        <div class="closed-courses-toggle" id="closed-courses-toggle" onclick="toggleClosedCourses()">
+          <span id="closed-toggle-arrow">${arrow}</span>
+          <span id="closed-toggle-label">종료된 과정 ${closedCourses.length}개 ${label}</span>
+        </div>
+        <div id="closed-courses-list" style="display:${closedCoursesExpanded ? 'block' : 'none'};">
+          ${closedCourses.map(renderCourseItem).join('')}
+        </div>`;
+    }
+    document.getElementById('course-manage-list').innerHTML = html;
+
+    // 요약 칩 비동기 채움 (count aggregation은 doc 읽기 1회로 청구되어 가벼움)
+    courses.forEach(async (c) => {
+      try {
+        const stuRef  = collection(db, 'courses', c.id, 'students');
+        const instRef = collection(db, 'courses', c.id, 'instructors');
+        const [totalSnap, doneSnap, instSnap] = await Promise.all([
+          getCountFromServer(stuRef),
+          getCountFromServer(query(stuRef, where('completed', '==', true))),
+          getCountFromServer(instRef),
+        ]);
+        const total = totalSnap.data().count;
+        const done  = doneSnap.data().count;
+        const inst  = instSnap.data().count;
+        const metaEl = document.getElementById(`course-meta-${c.idx}`);
+        if (metaEl) {
+          metaEl.innerHTML = `수강생 <strong>${total}명</strong>${total > 0 ? ` <span class="meta-done">(완료 ${done})</span>` : ''} · 강사 <strong>${inst}명</strong>`;
+        }
+      } catch (_) {
+        const metaEl = document.getElementById(`course-meta-${c.idx}`);
+        if (metaEl) metaEl.textContent = '요약 불러오기 실패';
+      }
+    });
 
   } catch (e) {
     document.getElementById('course-manage-loading').textContent = '불러오기 실패';
+  }
+}
+
+function renderCourseItem({ name, active, idx }) {
+  const en = escapeAttr(name);
+  const statusBadge = active
+    ? `<span class="course-status active">진행중</span>`
+    : `<span class="course-status closed">종료</span>`;
+  const toggleBtn = active
+    ? `<button class="course-close-btn" onclick="toggleCourseActive('${en}', true, this)">종료</button>`
+    : `<button class="course-reopen-btn" onclick="toggleCourseActive('${en}', false, this)">재활성</button>`;
+  return `
+    <div class="course-manage-item ${active ? '' : 'is-closed'}" id="course-item-${idx}">
+      <div class="course-manage-row">
+        <div class="course-manage-info">
+          <span class="course-manage-name">📚 ${escapeHtml(name)} ${statusBadge}</span>
+          <div class="course-meta" id="course-meta-${idx}">
+            <span class="course-meta-skeleton">불러오는 중…</span>
+          </div>
+        </div>
+        <div class="course-manage-actions">
+          <button class="panel-toggle-btn inst-toggle" id="inst-toggle-${idx}" onclick="togglePanel('${en}', ${idx}, 'inst')">👨‍🏫 강사</button>
+          <button class="panel-toggle-btn stu-toggle" id="stu-toggle-${idx}" onclick="togglePanel('${en}', ${idx}, 'stu')">👥 수강생</button>
+          ${toggleBtn}
+          <button class="delete-btn" onclick="deleteCourse('${en}', this)">삭제</button>
+        </div>
+      </div>
+      <div class="instructor-panel" id="inst-panel-${idx}" style="display:none;"></div>
+      <div class="student-panel" id="stu-panel-${idx}" style="display:none;">${renderStudentPanelHtml(en, idx)}</div>
+    </div>`;
+}
+
+function renderStudentPanelHtml(en, idx) {
+  return `
+    <div class="add-student-row">
+      <input type="text" id="new-stu-name-${idx}" placeholder="이름" maxlength="20">
+      <input type="number" id="new-stu-empno-${idx}" placeholder="교번 (예: 1)" min="1"
+        onkeydown="if(event.key==='Enter')addStudent('${en}', ${idx})">
+      <button class="add-btn" id="stu-add-btn-${idx}" onclick="addStudent('${en}', ${idx})">+ 등록</button>
+    </div>
+    <div class="excel-upload-area stu-excel-area">
+      <div class="excel-upload-label">📂 엑셀 일괄 등록 <span class="excel-tip">A열: 교번 / B열: 이름 / 2행부터 데이터</span></div>
+      <div class="excel-upload-row">
+        <label class="excel-file-btn" for="stu-excel-input-${idx}">파일 선택</label>
+        <input type="file" id="stu-excel-input-${idx}" accept=".xlsx,.xls" style="display:none" onchange="handleExcelUpload(${idx}, this)">
+        <span id="stu-excel-name-${idx}" class="excel-file-name">선택된 파일 없음 · 또는 파일을 이 영역으로 끌어다 놓으세요</span>
+        <button class="add-btn" id="stu-excel-btn-${idx}" onclick="uploadExcelStudents('${en}', ${idx})" disabled>일괄 등록</button>
+      </div>
+      <div id="stu-excel-preview-${idx}" class="excel-preview" style="display:none;"></div>
+      <div id="stu-excel-progress-${idx}" class="excel-progress" style="display:none;"></div>
+    </div>
+    <div class="student-stats-bar" id="stu-stats-bar-${idx}"></div>
+    <div id="stu-loading-${idx}" class="loading" style="display:none;">불러오는 중...</div>
+    <div id="stu-list-${idx}"></div>
+    <div id="stu-empty-${idx}" class="no-data" style="display:none;">등록된 수강생이 없습니다.</div>
+    <button class="icon-refresh-btn" onclick="loadStudents('${en}', ${idx})" title="새로고침">🔄 새로고침</button>`;
+}
+
+// 강사/수강생 패널 토글: 한 카드에서 둘 중 하나만 펼침 (탭 형태)
+export async function togglePanel(courseName, idx, mode) {
+  const instPanel = document.getElementById(`inst-panel-${idx}`);
+  const stuPanel  = document.getElementById(`stu-panel-${idx}`);
+  const instBtn   = document.getElementById(`inst-toggle-${idx}`);
+  const stuBtn    = document.getElementById(`stu-toggle-${idx}`);
+  if (!instPanel || !stuPanel) return;
+
+  const isInst = mode === 'inst';
+  const targetPanel = isInst ? instPanel : stuPanel;
+  const otherPanel  = isInst ? stuPanel  : instPanel;
+  const targetBtn   = isInst ? instBtn   : stuBtn;
+  const otherBtn    = isInst ? stuBtn    : instBtn;
+
+  // 이미 열려있으면 닫기
+  if (targetPanel.style.display !== 'none') {
+    targetPanel.style.display = 'none';
+    targetBtn?.classList.remove('active');
+    return;
+  }
+  // 다른 패널 닫고 타겟 열기
+  otherPanel.style.display = 'none';
+  otherBtn?.classList.remove('active');
+  targetPanel.style.display = 'block';
+  targetBtn?.classList.add('active');
+
+  if (isInst) {
+    await loadInstructors(courseName, idx);
+  } else {
+    await loadStudents(courseName, idx);
+  }
+}
+
+// 종료된 과정 토글
+export function toggleClosedCourses() {
+  const list  = document.getElementById('closed-courses-list');
+  const arrow = document.getElementById('closed-toggle-arrow');
+  const label = document.getElementById('closed-toggle-label');
+  if (!list) return;
+  closedCoursesExpanded = !closedCoursesExpanded;
+  list.style.display = closedCoursesExpanded ? 'block' : 'none';
+  if (arrow) arrow.textContent = closedCoursesExpanded ? '▲' : '▼';
+  if (label) {
+    // "종료된 과정 N개 보기/숨기기" 형태에서 마지막 단어만 교체
+    label.textContent = label.textContent.replace(
+      closedCoursesExpanded ? '보기' : '숨기기',
+      closedCoursesExpanded ? '숨기기' : '보기'
+    );
   }
 }
 
@@ -242,16 +366,6 @@ export async function uploadExcelInstructors(courseName, panelIdx) {
 
 // 패널별 현재 강사 목록 저장 (순서 변경, 수정에 활용)
 const panelInstructors = {};
-
-export async function toggleInstructors(courseName, idx) {
-  const panel = document.getElementById(`inst-panel-${idx}`);
-  if (panel.style.display === 'none') {
-    panel.style.display = 'block';
-    await loadInstructors(courseName, idx);
-  } else {
-    panel.style.display = 'none';
-  }
-}
 
 async function loadInstructors(courseName, panelIdx) {
   const panel = document.getElementById(`inst-panel-${panelIdx}`);

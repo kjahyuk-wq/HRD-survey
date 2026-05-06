@@ -2,7 +2,7 @@ import { auth } from './firebase-config.js';
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
 
 import { checkLogin, logout } from './admin-auth.js';
-import { loadCourseList, addCourse, deleteCourse, toggleCourseActive, toggleInstructors, addInstructor, deleteInstructor, handleInstExcelUpload, uploadExcelInstructors, toggleInstSelectAll, updateInstBulkDeleteBtn, deleteSelectedInstructors, moveInstructor, startEditInstructor, saveEditInstructor, cancelEditInstructor } from './admin-courses.js';
+import { loadCourseList, addCourse, deleteCourse, toggleCourseActive, togglePanel, toggleClosedCourses, addInstructor, deleteInstructor, handleInstExcelUpload, uploadExcelInstructors, toggleInstSelectAll, updateInstBulkDeleteBtn, deleteSelectedInstructors, moveInstructor, startEditInstructor, saveEditInstructor, cancelEditInstructor } from './admin-courses.js';
 import { loadStudents, addStudent, deleteStudent, toggleSelectAll, updateBulkDeleteBtn, deleteSelectedStudents, handleExcelUpload, uploadExcelStudents, startEditStudent, saveEditStudent, cancelEditStudent } from './admin-students.js';
 import { populateStatsSelect, loadStats } from './admin-stats.js';
 import { exportStatsExcel, exportResultsExcel } from './admin-excel.js';
@@ -45,7 +45,8 @@ window.addCourse = addCourse;
 window.deleteCourse = deleteCourse;
 window.toggleCourseActive = toggleCourseActive;
 window.loadCourseList = loadCourseList;
-window.toggleInstructors = toggleInstructors;
+window.togglePanel = togglePanel;
+window.toggleClosedCourses = toggleClosedCourses;
 window.addInstructor = addInstructor;
 window.deleteInstructor = deleteInstructor;
 window.loadStudents = loadStudents;

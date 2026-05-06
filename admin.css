@@ -408,6 +408,54 @@ header h1 { font-size: 1.3rem; font-weight: 700; margin: 0; color: #fff; }
 
 .course-manage-name { font-size: 0.95rem; font-weight: 600; color: #333; }
 
+/* 과정 카드 좌측 정보 블록 (이름 + 요약 칩) */
+.course-manage-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 1;
+  min-width: 0;
+}
+
+/* 카드 헤더 요약 칩 */
+.course-meta {
+  font-size: 0.78rem;
+  color: #6b7280;
+  letter-spacing: 0.1px;
+}
+.course-meta strong { color: #1e3a8a; font-weight: 700; }
+.course-meta .meta-done { color: #16a34a; font-weight: 600; }
+.course-meta-skeleton { color: #b0b8c4; font-style: italic; }
+.course-manage-item.is-closed .course-meta { color: #94a3b8; }
+.course-manage-item.is-closed .course-meta strong { color: #64748b; }
+
+/* 종료된 과정 토글 */
+.closed-courses-toggle {
+  margin-top: 0.5rem;
+  padding: 0.55rem 0.9rem;
+  background: #f3f4f6;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  font-size: 0.83rem;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: background 0.15s, border-color 0.15s;
+}
+.closed-courses-toggle:hover {
+  background: #e5e7eb;
+  border-color: #94a3b8;
+  color: #1e293b;
+}
+.closed-courses-toggle #closed-toggle-arrow {
+  font-size: 0.7rem;
+  color: #64748b;
+}
+
 /* 과정 상태 뱃지 */
 .course-status {
   display: inline-block;
@@ -448,8 +496,8 @@ header h1 { font-size: 1.3rem; font-weight: 700; margin: 0; color: #fff; }
 }
 .course-reopen-btn:hover:not(:disabled) { background: #d1fae5; transform: none; box-shadow: none; }
 
-/* 강사 관리 버튼 */
-.instructor-btn {
+/* 강사/수강생 패널 토글 버튼 (탭 형태) */
+.panel-toggle-btn {
   padding: 0.3rem 0.8rem;
   background: #f0f7ff;
   border: 1px solid #cce0ff;
@@ -460,16 +508,38 @@ header h1 { font-size: 1.3rem; font-weight: 700; margin: 0; color: #fff; }
   width: auto;
   box-shadow: none;
   font-weight: 600;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
-.instructor-btn:hover { background: #dceeff; transform: none; box-shadow: none; }
+.panel-toggle-btn:hover { background: #dceeff; }
+.panel-toggle-btn.active {
+  background: #0066cc;
+  border-color: #0066cc;
+  color: #fff;
+}
+.panel-toggle-btn.stu-toggle {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #15803d;
+}
+.panel-toggle-btn.stu-toggle:hover { background: #dcfce7; }
+.panel-toggle-btn.stu-toggle.active {
+  background: #15803d;
+  border-color: #15803d;
+  color: #fff;
+}
 
-/* 강사 패널 */
-.instructor-panel {
+/* 강사·수강생 패널 (공용 스타일) */
+.instructor-panel,
+.student-panel {
   margin-top: 0.7rem;
   background: #f8faff;
   border: 1px solid #dde8ff;
   border-radius: 10px;
   padding: 0.9rem 1rem;
+}
+.student-panel {
+  background: #f6fbf7;
+  border-color: #d4ebd9;
 }
 
 .inst-loading, .inst-empty {
@@ -1118,8 +1188,11 @@ tr:hover td { background: #f8faff; }
   /* 교육과정 목록 */
   .course-manage-row { flex-wrap: wrap; gap: 0.4rem; }
   .course-manage-name { font-size: 0.9rem; }
+  .course-manage-info { width: 100%; }
+  .course-meta { font-size: 0.74rem; }
   .course-manage-actions { gap: 0.3rem; flex-wrap: wrap; }
-  .instructor-btn { padding: 0.28rem 0.6rem; font-size: 0.75rem; }
+  .panel-toggle-btn { padding: 0.28rem 0.6rem; font-size: 0.75rem; }
+  .closed-courses-toggle { padding: 0.5rem 0.8rem; font-size: 0.78rem; }
 
   /* 수강생 추가 */
   .add-student-row { gap: 0.4rem; }
@@ -1159,8 +1232,9 @@ tr:hover td { background: #f8faff; }
     font-size: 0.74rem;
   }
 
-  /* 강사 패널 */
-  .instructor-panel { padding: 0.7rem 0.8rem; }
+  /* 강사·수강생 패널 */
+  .instructor-panel,
+  .student-panel { padding: 0.7rem 0.8rem; }
   .inst-add-row { gap: 0.35rem; }
   .inst-add-row input { padding: 0.45rem 0.65rem; font-size: 0.82rem; }
   .inst-add-btn { padding: 0.45rem 0.75rem !important; font-size: 0.8rem !important; }
