@@ -13,6 +13,9 @@ let closedCoursesExpanded = false;
 // 카드 idx → 과정 원본 데이터 (수정 진입 시 폼에 채울 용도)
 const courseDataCache = {};
 
+// 현재 편집 중인 과정 idx (한 번에 하나만 — 토글 동작 보장)
+let editingCourseIdx = null;
+
 // ISO 날짜 문자열 → "YYYY.MM.DD ~ YYYY.MM.DD" 표시 (둘 중 하나라도 없으면 null)
 function formatDateRange(start, end) {
   if (!start || !end) return null;
@@ -20,8 +23,79 @@ function formatDateRange(start, end) {
   return `${f(start)} ~ ${f(end)}`;
 }
 
+// ── 직접 입력 날짜 필드 (YYYY-MM-DD): 4→2→2 자릿수 자동 포커스 이동 ──
+// 네이티브 <input type="date">는 브라우저별로 연도가 6자리까지 입력되어 자동 이동이 안 되는 케이스가 있어
+// 세 칸으로 분리해 maxlength 기반으로 일관 동작.
+export function renderDateFields(prefix, isoValue) {
+  const [y = '', m = '', d = ''] = String(isoValue || '').split('-');
+  return `<span class="course-date-fields" data-date-prefix="${escapeAttr(prefix)}">
+    <input type="text" inputmode="numeric" pattern="\\d*" maxlength="4" placeholder="YYYY"
+      id="${prefix}-y" value="${escapeAttr(y)}" aria-label="연도" autocomplete="off">
+    <span class="date-fields-sep">-</span>
+    <input type="text" inputmode="numeric" pattern="\\d*" maxlength="2" placeholder="MM"
+      id="${prefix}-m" value="${escapeAttr(m)}" aria-label="월" autocomplete="off">
+    <span class="date-fields-sep">-</span>
+    <input type="text" inputmode="numeric" pattern="\\d*" maxlength="2" placeholder="DD"
+      id="${prefix}-d" value="${escapeAttr(d)}" aria-label="일" autocomplete="off">
+  </span>`;
+}
+
+export function readDateFields(prefix) {
+  const y = document.getElementById(`${prefix}-y`)?.value.trim() || '';
+  const m = document.getElementById(`${prefix}-m`)?.value.trim() || '';
+  const d = document.getElementById(`${prefix}-d`)?.value.trim() || '';
+  if (!/^\d{4}$/.test(y)) return '';
+  if (!/^\d{1,2}$/.test(m)) return '';
+  if (!/^\d{1,2}$/.test(d)) return '';
+  const mm = m.padStart(2, '0');
+  const dd = d.padStart(2, '0');
+  if (+mm < 1 || +mm > 12) return '';
+  if (+dd < 1 || +dd > 31) return '';
+  return `${y}-${mm}-${dd}`;
+}
+
+// 자릿수가 maxlength 도달 시 다음 칸으로 자동 포커스. 빈 칸에서 백스페이스 시 이전 칸으로.
+export function wireDateFields(root) {
+  if (!root) return;
+  root.querySelectorAll('.course-date-fields').forEach(group => {
+    const inputs = Array.from(group.querySelectorAll('input[type="text"]'));
+    inputs.forEach((input, i) => {
+      input.addEventListener('input', () => {
+        const cleaned = input.value.replace(/\D/g, '');
+        if (cleaned !== input.value) input.value = cleaned;
+        if (input.value.length >= input.maxLength) {
+          const next = inputs[i + 1];
+          if (next) { next.focus(); next.select?.(); }
+        }
+      });
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Backspace' && input.value === '' && i > 0) {
+          const prev = inputs[i - 1];
+          prev.focus();
+          requestAnimationFrame(() => prev.setSelectionRange(prev.value.length, prev.value.length));
+          e.preventDefault();
+        }
+      });
+    });
+  });
+}
+
 // ── 교육과정 관리 ──────────────────────────────
 export async function loadCourseList() {
+  // 새 과정 추가 폼의 날짜 입력 필드 최초 렌더 (값 유지: 비어있을 때만)
+  const newDateWrap = document.getElementById('new-course-date-wrap');
+  if (newDateWrap && !newDateWrap.querySelector('input')) {
+    newDateWrap.innerHTML = `
+      ${renderDateFields('new-course-start')}
+      <span class="date-sep">~</span>
+      ${renderDateFields('new-course-end')}`;
+    wireDateFields(newDateWrap);
+    // 종료일의 마지막 칸에서 Enter 누르면 등록
+    document.getElementById('new-course-end-d')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') addCourse();
+    });
+  }
+
   document.getElementById('course-manage-loading').style.display = 'block';
   document.getElementById('course-manage-list').innerHTML = '';
   document.getElementById('course-manage-empty').style.display = 'none';
@@ -223,7 +297,19 @@ export async function togglePanel(courseId, idx, mode) {
 }
 
 // ── 과정 인라인 수정 ──────────────────────────────
-export function startEditCourse(idx) {
+export async function startEditCourse(idx) {
+  // 같은 카드를 다시 누르면 토글로 닫기
+  if (editingCourseIdx === idx) {
+    editingCourseIdx = null;
+    await loadCourseList();
+    return;
+  }
+  // 다른 카드가 편집 중이면 먼저 정리 (목록 재렌더로 폼 제거)
+  if (editingCourseIdx !== null) {
+    editingCourseIdx = null;
+    await loadCourseList();
+  }
+
   const c = courseDataCache[idx];
   if (!c) return;
 
@@ -244,15 +330,17 @@ export function startEditCourse(idx) {
     <div class="course-edit-form">
       <input type="text" id="edit-course-name-${idx}" value="${escapeAttr(c.name || '')}" maxlength="100" placeholder="교육과정명">
       <div class="course-date-inputs">
-        <input type="date" id="edit-course-start-${idx}" value="${escapeAttr(c.startDate || '')}" aria-label="교육 시작일">
+        ${renderDateFields(`edit-course-start-${idx}`, c.startDate)}
         <span class="date-sep">~</span>
-        <input type="date" id="edit-course-end-${idx}" value="${escapeAttr(c.endDate || '')}" aria-label="교육 종료일">
+        ${renderDateFields(`edit-course-end-${idx}`, c.endDate)}
       </div>
     </div>
-    <div class="course-manage-actions">
+    <div class="course-edit-actions">
       <button class="inst-save-btn" onclick="saveEditCourse(${idx})">저장</button>
       <button class="inst-cancel-btn" onclick="cancelEditCourse()">취소</button>
     </div>`;
+  wireDateFields(row);
+  editingCourseIdx = idx;
   document.getElementById(`edit-course-name-${idx}`)?.focus();
 }
 
@@ -260,24 +348,32 @@ export async function saveEditCourse(idx) {
   const c = courseDataCache[idx];
   if (!c) return;
   const nameEl  = document.getElementById(`edit-course-name-${idx}`);
-  const startEl = document.getElementById(`edit-course-start-${idx}`);
-  const endEl   = document.getElementById(`edit-course-end-${idx}`);
   const name      = nameEl?.value.trim();
-  const startDate = startEl?.value;
-  const endDate   = endEl?.value;
+  const startDate = readDateFields(`edit-course-start-${idx}`);
+  const endDate   = readDateFields(`edit-course-end-${idx}`);
 
-  if (!name)      { nameEl?.focus(); return; }
-  if (!startDate) { alert('교육 시작일을 선택해 주세요.'); startEl?.focus(); return; }
-  if (!endDate)   { alert('교육 종료일을 선택해 주세요.'); endEl?.focus(); return; }
+  if (!name) { nameEl?.focus(); return; }
+  if (!startDate) {
+    alert('교육 시작일을 입력해 주세요. (YYYY-MM-DD)');
+    document.getElementById(`edit-course-start-${idx}-y`)?.focus();
+    return;
+  }
+  if (!endDate) {
+    alert('교육 종료일을 입력해 주세요. (YYYY-MM-DD)');
+    document.getElementById(`edit-course-end-${idx}-y`)?.focus();
+    return;
+  }
   if (endDate < startDate) {
     alert('종료일이 시작일보다 빠를 수 없습니다.');
-    endEl?.focus(); return;
+    document.getElementById(`edit-course-end-${idx}-y`)?.focus();
+    return;
   }
 
   const saveBtn = document.querySelector(`#course-item-${idx} .inst-save-btn`);
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '저장 중...'; }
   try {
     await updateDoc(doc(db, 'courses', c.id), { name, startDate, endDate });
+    editingCourseIdx = null;
     await loadCourseList();
   } catch (e) {
     alert('수정 중 오류가 발생했습니다.');
@@ -286,6 +382,7 @@ export async function saveEditCourse(idx) {
 }
 
 export async function cancelEditCourse() {
+  editingCourseIdx = null;
   await loadCourseList();
 }
 
@@ -309,18 +406,25 @@ export function toggleClosedCourses() {
 
 export async function addCourse() {
   const input    = document.getElementById('new-course-input');
-  const startEl  = document.getElementById('new-course-start');
-  const endEl    = document.getElementById('new-course-end');
   const name      = input.value.trim();
-  const startDate = startEl.value;
-  const endDate   = endEl.value;
+  const startDate = readDateFields('new-course-start');
+  const endDate   = readDateFields('new-course-end');
 
-  if (!name)      { input.focus();   return; }
-  if (!startDate) { alert('교육 시작일을 선택해 주세요.'); startEl.focus(); return; }
-  if (!endDate)   { alert('교육 종료일을 선택해 주세요.'); endEl.focus(); return; }
+  if (!name) { input.focus(); return; }
+  if (!startDate) {
+    alert('교육 시작일을 입력해 주세요. (YYYY-MM-DD)');
+    document.getElementById('new-course-start-y')?.focus();
+    return;
+  }
+  if (!endDate) {
+    alert('교육 종료일을 입력해 주세요. (YYYY-MM-DD)');
+    document.getElementById('new-course-end-y')?.focus();
+    return;
+  }
   if (endDate < startDate) {
     alert('종료일이 시작일보다 빠를 수 없습니다.');
-    endEl.focus(); return;
+    document.getElementById('new-course-end-y')?.focus();
+    return;
   }
 
   const btn = document.querySelector('.add-course-row .add-btn');
@@ -329,8 +433,9 @@ export async function addCourse() {
   try {
     await addDoc(collection(db, 'courses'), { name, active: true, startDate, endDate });
     input.value = '';
-    startEl.value = '';
-    endEl.value = '';
+    ['new-course-start-y','new-course-start-m','new-course-start-d',
+     'new-course-end-y','new-course-end-m','new-course-end-d']
+      .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
     await loadCourseList();
   } catch (e) { alert('추가 중 오류가 발생했습니다.'); }
   finally { btn.disabled = false; btn.textContent = '+ 추가'; }

@@ -390,6 +390,71 @@ header h1 { font-size: 1.3rem; font-weight: 700; margin: 0; color: #fff; }
 .course-date-inputs input[type="date"]:focus { border-color: #0066cc; }
 .date-sep { color: #94a3b8; font-weight: 700; }
 
+/* 직접 입력 날짜 필드 (YYYY-MM-DD 분리형) */
+.course-date-fields {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.5rem 0.6rem;
+  border: 2px solid #dde3ea;
+  border-radius: 10px;
+  background: #fff;
+  transition: border-color 0.2s;
+}
+.course-date-fields:focus-within { border-color: #0066cc; }
+.course-date-fields input[type="text"] {
+  border: none;
+  outline: none;
+  padding: 0;
+  font-size: 0.92rem;
+  font-family: inherit;
+  color: #1f2937;
+  text-align: center;
+  background: transparent;
+  -moz-appearance: textfield;
+}
+.course-date-fields input[type="text"]::-webkit-outer-spin-button,
+.course-date-fields input[type="text"]::-webkit-inner-spin-button {
+  -webkit-appearance: none; margin: 0;
+}
+.course-date-fields input[id$="-y"] { width: 3.6rem; }
+.course-date-fields input[id$="-m"],
+.course-date-fields input[id$="-d"] { width: 1.9rem; }
+.course-date-fields .date-fields-sep { color: #94a3b8; font-weight: 600; }
+.course-edit-form .course-date-fields { border-color: #0066cc; }
+
+/* 과정 수정 폼 — 저장/취소 버튼 동일 크기 */
+.course-edit-actions {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  flex: 0 0 auto;
+}
+.course-edit-actions .inst-save-btn,
+.course-edit-actions .inst-cancel-btn {
+  width: auto;
+  flex: 0 0 auto;
+  min-width: 64px;
+  padding: 0.5rem 0.85rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  box-sizing: border-box;
+  line-height: 1.2;
+  height: auto;
+  box-shadow: none;
+}
+.course-edit-actions .inst-save-btn {
+  background: #0066cc; color: #fff; border-color: #0066cc;
+}
+.course-edit-actions .inst-save-btn:hover:not(:disabled) { background: #0052a3; border-color: #0052a3; }
+.course-edit-actions .inst-save-btn:disabled { background: #7aaddd; border-color: #7aaddd; cursor: not-allowed; }
+.course-edit-actions .inst-cancel-btn {
+  background: #f0f0f0; color: #555; border-color: #ccc;
+}
+.course-edit-actions .inst-cancel-btn:hover { background: #e0e0e0; border-color: #b8b8b8; }
+
 /* 카드 헤더 교육기간 표시 */
 .course-date-range {
   font-size: 0.78rem;
@@ -1339,8 +1404,18 @@ tr:hover td { background: #f8faff; }
   /* 교육과정 추가 */
   .add-course-row { flex-wrap: wrap; gap: 0.4rem; }
   .add-course-row > input[type="text"] { padding: 0.6rem 0.8rem; font-size: 0.9rem; flex-basis: 100%; }
-  .course-date-inputs { flex: 1 1 100%; }
+  .course-date-inputs { flex: 1 1 100%; flex-wrap: wrap; }
   .course-date-inputs input[type="date"] { flex: 1; padding: 0.55rem 0.6rem; font-size: 0.85rem; min-width: 0; }
+  .course-date-fields { padding: 0.42rem 0.5rem; }
+  .course-date-fields input[type="text"] { font-size: 0.85rem; }
+  .course-date-fields input[id$="-y"] { width: 3.2rem; }
+  .course-date-fields input[id$="-m"],
+  .course-date-fields input[id$="-d"] { width: 1.7rem; }
+  .course-edit-actions { gap: 0.3rem; flex-wrap: wrap; }
+  .course-edit-actions .inst-save-btn,
+  .course-edit-actions .inst-cancel-btn {
+    min-width: 56px; padding: 0.42rem 0.7rem; font-size: 0.78rem;
+  }
   .add-btn { padding: 0.6rem 1rem; font-size: 0.88rem; }
 
   /* 교육과정 선택 */
