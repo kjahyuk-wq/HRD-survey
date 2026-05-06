@@ -9,7 +9,7 @@ import { exportStatsExcel, exportResultsExcel } from './admin-excel.js';
 import { populatePreviewSelect, loadPreviewInstructors } from './admin-preview.js';
 
 // ── 탭 전환 ──────────────────────────────
-function switchTab(tab) {
+function setActiveTab(tab) {
   ['courses', 'stats', 'preview'].forEach(t => {
     document.getElementById(`tab-${t}`).style.display = t === tab ? 'block' : 'none';
   });
@@ -17,8 +17,28 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach((btn, i) => {
     btn.classList.toggle('active', tabNames[i] === tab);
   });
+}
+
+function switchTab(tab) {
+  setActiveTab(tab);
   if (tab === 'stats') populateStatsSelect();
   if (tab === 'preview') populatePreviewSelect();
+}
+
+// 과정 카드의 [미리보기]/[통계] 바로가기 — 탭 전환 + 과정 자동 선택 + 데이터 로드
+async function goToCourseTab(tab, courseName) {
+  setActiveTab(tab);
+  if (tab === 'stats') {
+    await populateStatsSelect();
+    const sel = document.getElementById('stats-course-select');
+    if (sel) sel.value = courseName;
+    await loadStats();
+  } else if (tab === 'preview') {
+    await populatePreviewSelect();
+    const sel = document.getElementById('preview-course-select');
+    if (sel) sel.value = courseName;
+    await loadPreviewInstructors();
+  }
 }
 
 // ── Firebase Auth 상태 감지 ──────────────────────────────
@@ -41,6 +61,7 @@ onAuthStateChanged(auth, user => {
 window.checkLogin = checkLogin;
 window.logout = logout;
 window.switchTab = switchTab;
+window.goToCourseTab = goToCourseTab;
 window.addCourse = addCourse;
 window.deleteCourse = deleteCourse;
 window.toggleCourseActive = toggleCourseActive;

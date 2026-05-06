@@ -528,6 +528,32 @@ header h1 { font-size: 1.3rem; font-weight: 700; margin: 0; color: #fff; }
   color: #fff;
 }
 
+/* 과정 카드 바로가기 버튼 (미리보기/통계) */
+.goto-btn {
+  padding: 0.3rem 0.7rem;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  color: #475569;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  width: auto;
+  box-shadow: none;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.goto-btn:hover { background: #e2e8f0; border-color: #94a3b8; color: #1e293b; }
+.goto-btn.preview-btn:hover {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+.goto-btn.stats-btn:hover {
+  background: #f5f3ff;
+  border-color: #c4b5fd;
+  color: #6d28d9;
+}
+
 /* 강사·수강생 패널 (공용 스타일) */
 .instructor-panel,
 .student-panel {
@@ -1192,6 +1218,7 @@ tr:hover td { background: #f8faff; }
   .course-meta { font-size: 0.74rem; }
   .course-manage-actions { gap: 0.3rem; flex-wrap: wrap; }
   .panel-toggle-btn { padding: 0.28rem 0.6rem; font-size: 0.75rem; }
+  .goto-btn { padding: 0.28rem 0.55rem; font-size: 0.73rem; }
   .closed-courses-toggle { padding: 0.5rem 0.8rem; font-size: 0.78rem; }
 
   /* 수강생 추가 */

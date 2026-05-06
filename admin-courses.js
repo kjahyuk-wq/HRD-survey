@@ -109,6 +109,8 @@ function renderCourseItem({ name, active, idx }) {
         <div class="course-manage-actions">
           <button class="panel-toggle-btn inst-toggle" id="inst-toggle-${idx}" onclick="togglePanel('${en}', ${idx}, 'inst')">👨‍🏫 강사</button>
           <button class="panel-toggle-btn stu-toggle" id="stu-toggle-${idx}" onclick="togglePanel('${en}', ${idx}, 'stu')">👥 수강생</button>
+          <button class="goto-btn preview-btn" onclick="goToCourseTab('preview', '${en}')" title="이 과정 설문 미리보기">👁 미리보기</button>
+          <button class="goto-btn stats-btn" onclick="goToCourseTab('stats', '${en}')" title="이 과정 설문 통계">📊 통계</button>
           ${toggleBtn}
           <button class="delete-btn" onclick="deleteCourse('${en}', this)">삭제</button>
         </div>
