@@ -13,9 +13,6 @@ let closedCoursesExpanded = false;
 // 카드 idx → 과정 원본 데이터 (수정 진입 시 폼에 채울 용도)
 const courseDataCache = {};
 
-// 현재 편집 중인 과정 idx (한 번에 하나만 — 토글 동작 보장)
-let editingCourseIdx = null;
-
 // ISO 날짜 문자열 → "YYYY.MM.DD ~ YYYY.MM.DD" 표시 (둘 중 하나라도 없으면 null)
 function formatDateRange(start, end) {
   if (!start || !end) return null;
@@ -161,7 +158,10 @@ export async function loadCourseList() {
           ${closedCourses.map(renderCourseItem).join('')}
         </div>`;
     }
-    document.getElementById('course-manage-list').innerHTML = html;
+    const listEl = document.getElementById('course-manage-list');
+    listEl.innerHTML = html;
+    // 모든 과정의 수정 폼 날짜 입력에 자동 포커스 이동 wiring (한 번에)
+    wireDateFields(listEl);
 
     // 요약 칩 비동기 채움 (count aggregation은 doc 읽기 1회로 청구되어 가벼움)
     courses.forEach(async (c) => {
@@ -203,7 +203,7 @@ function renderCourseItem({ id, name, active, idx, startDate, endDate }) {
 
   // 진행중: 운영 액션 + 종료. 종료: 결과 조회 + 재활성/삭제만 (운영 데이터 변경 X)
   const actionBtns = active
-    ? `<button class="course-edit-btn" onclick="startEditCourse(${idx})" title="과정명·교육기간 수정">교육과정 수정</button>
+    ? `<button class="panel-toggle-btn edit-toggle" id="edit-toggle-${idx}" onclick="togglePanel('${cid}', ${idx}, 'edit')" title="과정명·교육기간 수정">교육과정 수정</button>
        <button class="panel-toggle-btn inst-toggle" id="inst-toggle-${idx}" onclick="togglePanel('${cid}', ${idx}, 'inst')">강사관리</button>
        <button class="panel-toggle-btn stu-toggle" id="stu-toggle-${idx}" onclick="togglePanel('${cid}', ${idx}, 'stu')">수강생관리</button>
        <button class="goto-btn preview-btn" onclick="goToCourseTab('preview', '${cid}')" title="이 과정 설문 미리보기">설문 미리보기</button>
@@ -213,9 +213,10 @@ function renderCourseItem({ id, name, active, idx, startDate, endDate }) {
        <button class="course-reopen-btn" onclick="toggleCourseActive('${cid}', false, this)">재활성</button>
        <button class="delete-btn" onclick="deleteCourse('${cid}', this)" title="과정과 수강생·강사·응답 데이터를 모두 삭제">삭제</button>`;
 
-  // 진행중일 때만 강사·수강생 패널 영역 렌더
+  // 진행중일 때만 수정/강사/수강생 패널 영역 렌더 (모두 강사·수강생과 동일한 아코디언 패턴)
   const panelsHtml = active
-    ? `<div class="instructor-panel" id="inst-panel-${idx}" style="display:none;"></div>
+    ? `<div class="course-edit-panel" id="edit-panel-${idx}" style="display:none;">${renderEditPanelHtml(idx, name, startDate, endDate)}</div>
+       <div class="instructor-panel" id="inst-panel-${idx}" style="display:none;"></div>
        <div class="student-panel" id="stu-panel-${idx}" style="display:none;">${renderStudentPanelHtml(cid, idx)}</div>`
     : '';
 
@@ -234,6 +235,28 @@ function renderCourseItem({ id, name, active, idx, startDate, endDate }) {
         </div>
       </div>
       ${panelsHtml}
+    </div>`;
+}
+
+function renderEditPanelHtml(idx, name, startDate, endDate) {
+  return `
+    <div class="course-edit-form">
+      <label class="course-edit-field">
+        <span class="edit-field-label">과정명</span>
+        <input type="text" id="edit-course-name-${idx}" value="${escapeAttr(name || '')}" maxlength="100" placeholder="교육과정명">
+      </label>
+      <label class="course-edit-field">
+        <span class="edit-field-label">교육기간</span>
+        <div class="course-date-inputs">
+          ${renderDateFields(`edit-course-start-${idx}`, startDate)}
+          <span class="date-sep">~</span>
+          ${renderDateFields(`edit-course-end-${idx}`, endDate)}
+        </div>
+      </label>
+    </div>
+    <div class="course-edit-actions">
+      <button class="inst-save-btn" onclick="saveEditCourse(${idx})">저장</button>
+      <button class="inst-cancel-btn" onclick="cancelEditCourse(${idx})">취소</button>
     </div>`;
 }
 
@@ -263,85 +286,58 @@ function renderStudentPanelHtml(cid, idx) {
     <button class="icon-refresh-btn" onclick="loadStudents('${cid}', ${idx})" title="새로고침">새로고침</button>`;
 }
 
-// 강사/수강생 패널 토글: 한 카드에서 둘 중 하나만 펼침 (탭 형태)
+// 한 카드의 수정·강사·수강생 패널 토글 — 한 번에 하나만 열림 (아코디언)
 export async function togglePanel(courseId, idx, mode) {
-  const instPanel = document.getElementById(`inst-panel-${idx}`);
-  const stuPanel  = document.getElementById(`stu-panel-${idx}`);
-  const instBtn   = document.getElementById(`inst-toggle-${idx}`);
-  const stuBtn    = document.getElementById(`stu-toggle-${idx}`);
-  if (!instPanel || !stuPanel) return;
-
-  const isInst = mode === 'inst';
-  const targetPanel = isInst ? instPanel : stuPanel;
-  const otherPanel  = isInst ? stuPanel  : instPanel;
-  const targetBtn   = isInst ? instBtn   : stuBtn;
-  const otherBtn    = isInst ? stuBtn    : instBtn;
+  const panels = {
+    edit: document.getElementById(`edit-panel-${idx}`),
+    inst: document.getElementById(`inst-panel-${idx}`),
+    stu:  document.getElementById(`stu-panel-${idx}`),
+  };
+  const buttons = {
+    edit: document.getElementById(`edit-toggle-${idx}`),
+    inst: document.getElementById(`inst-toggle-${idx}`),
+    stu:  document.getElementById(`stu-toggle-${idx}`),
+  };
+  const target = panels[mode];
+  if (!target) return;
 
   // 이미 열려있으면 닫기
-  if (targetPanel.style.display !== 'none') {
-    targetPanel.style.display = 'none';
-    targetBtn?.classList.remove('active');
+  if (target.style.display !== 'none') {
+    target.style.display = 'none';
+    buttons[mode]?.classList.remove('active');
+    if (mode === 'edit') restoreEditFields(idx);
     return;
   }
-  // 다른 패널 닫고 타겟 열기
-  otherPanel.style.display = 'none';
-  otherBtn?.classList.remove('active');
-  targetPanel.style.display = 'block';
-  targetBtn?.classList.add('active');
 
-  if (isInst) {
-    await loadInstructors(courseId, idx);
-  } else {
-    await loadStudents(courseId, idx);
+  // 다른 패널 닫기
+  for (const m of Object.keys(panels)) {
+    if (m !== mode && panels[m] && panels[m].style.display !== 'none') {
+      panels[m].style.display = 'none';
+      buttons[m]?.classList.remove('active');
+      if (m === 'edit') restoreEditFields(idx);
+    }
   }
+  target.style.display = 'block';
+  buttons[mode]?.classList.add('active');
+
+  if (mode === 'inst')      await loadInstructors(courseId, idx);
+  else if (mode === 'stu')  await loadStudents(courseId, idx);
+  else if (mode === 'edit') document.getElementById(`edit-course-name-${idx}`)?.focus();
 }
 
 // ── 과정 인라인 수정 ──────────────────────────────
-export async function startEditCourse(idx) {
-  // 같은 카드를 다시 누르면 토글로 닫기
-  if (editingCourseIdx === idx) {
-    editingCourseIdx = null;
-    await loadCourseList();
-    return;
-  }
-  // 다른 카드가 편집 중이면 먼저 정리 (목록 재렌더로 폼 제거)
-  if (editingCourseIdx !== null) {
-    editingCourseIdx = null;
-    await loadCourseList();
-  }
-
+function restoreEditFields(idx) {
   const c = courseDataCache[idx];
   if (!c) return;
-
-  // 편집 모드에선 강사·수강생 패널 닫기
-  const instPanel = document.getElementById(`inst-panel-${idx}`);
-  const stuPanel  = document.getElementById(`stu-panel-${idx}`);
-  if (instPanel) instPanel.style.display = 'none';
-  if (stuPanel)  stuPanel.style.display = 'none';
-  document.getElementById(`inst-toggle-${idx}`)?.classList.remove('active');
-  document.getElementById(`stu-toggle-${idx}`)?.classList.remove('active');
-
-  const item = document.getElementById(`course-item-${idx}`);
-  if (!item) return;
-  const row = item.querySelector('.course-manage-row');
-  if (!row) return;
-
-  row.innerHTML = `
-    <div class="course-edit-form">
-      <input type="text" id="edit-course-name-${idx}" value="${escapeAttr(c.name || '')}" maxlength="100" placeholder="교육과정명">
-      <div class="course-date-inputs">
-        ${renderDateFields(`edit-course-start-${idx}`, c.startDate)}
-        <span class="date-sep">~</span>
-        ${renderDateFields(`edit-course-end-${idx}`, c.endDate)}
-      </div>
-    </div>
-    <div class="course-edit-actions">
-      <button class="inst-save-btn" onclick="saveEditCourse(${idx})">저장</button>
-      <button class="inst-cancel-btn" onclick="cancelEditCourse()">취소</button>
-    </div>`;
-  wireDateFields(row);
-  editingCourseIdx = idx;
-  document.getElementById(`edit-course-name-${idx}`)?.focus();
+  const nameEl = document.getElementById(`edit-course-name-${idx}`);
+  if (nameEl) nameEl.value = c.name || '';
+  const setIso = (prefix, iso) => {
+    const [y = '', m = '', d = ''] = String(iso || '').split('-');
+    const set = (suf, v) => { const el = document.getElementById(`${prefix}-${suf}`); if (el) el.value = v; };
+    set('y', y); set('m', m); set('d', d);
+  };
+  setIso(`edit-course-start-${idx}`, c.startDate);
+  setIso(`edit-course-end-${idx}`, c.endDate);
 }
 
 export async function saveEditCourse(idx) {
@@ -369,11 +365,10 @@ export async function saveEditCourse(idx) {
     return;
   }
 
-  const saveBtn = document.querySelector(`#course-item-${idx} .inst-save-btn`);
+  const saveBtn = document.querySelector(`#edit-panel-${idx} .inst-save-btn`);
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '저장 중...'; }
   try {
     await updateDoc(doc(db, 'courses', c.id), { name, startDate, endDate });
-    editingCourseIdx = null;
     await loadCourseList();
   } catch (e) {
     alert('수정 중 오류가 발생했습니다.');
@@ -381,9 +376,11 @@ export async function saveEditCourse(idx) {
   }
 }
 
-export async function cancelEditCourse() {
-  editingCourseIdx = null;
-  await loadCourseList();
+export function cancelEditCourse(idx) {
+  const panel = document.getElementById(`edit-panel-${idx}`);
+  if (panel) panel.style.display = 'none';
+  document.getElementById(`edit-toggle-${idx}`)?.classList.remove('active');
+  restoreEditFields(idx);
 }
 
 // 종료된 과정 토글
