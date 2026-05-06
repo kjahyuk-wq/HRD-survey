@@ -722,7 +722,27 @@ header h1 { font-size: 1.3rem; font-weight: 700; margin: 0; color: #fff; }
 
 .delete-btn:hover { background: #fff0f0; transform: none; box-shadow: none; }
 
-/* 통계 헤더 카드 — 과정명 + 새로고침 */
+/* "← 교육과정" 돌아가기 버튼 */
+.back-btn {
+  padding: 0.55rem 1rem;
+  background: #fff;
+  border: 1.5px solid #0066cc;
+  border-radius: 9px;
+  color: #0066cc;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  width: auto;
+  box-shadow: none;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+.back-btn:hover {
+  background: #0066cc;
+  color: #fff;
+}
+
+/* 통계 헤더 카드 — 돌아가기 + 과정명 + 새로고침 */
 .course-header-card {
   display: flex;
   align-items: center;
@@ -1337,6 +1357,7 @@ tr:hover td { background: #f8faff; }
 
   /* 새로고침 */
   .icon-refresh-btn { font-size: 0.88rem !important; padding: 0.55rem 1.1rem !important; }
+  .back-btn { font-size: 0.82rem; padding: 0.5rem 0.9rem; }
 
   /* 설문 미리보기 프레임 */
   .preview-device-frame { padding: 1rem 0.7rem; border-radius: 12px; }

@@ -57,6 +57,15 @@ if (!history.state) {
   history.replaceState({ tab: 'courses' }, '', location.pathname);
 }
 
+// 통계/미리보기 화면의 "← 교육과정" 버튼 — 직전 화면으로 복귀
+function goBackToCourses() {
+  if (history.state && history.state.tab !== 'courses') {
+    history.back();
+  } else {
+    setActiveTab('courses');
+  }
+}
+
 // ── Firebase Auth 상태 감지 ──────────────────────────────
 onAuthStateChanged(auth, user => {
   if (user) {
@@ -77,6 +86,7 @@ onAuthStateChanged(auth, user => {
 window.checkLogin = checkLogin;
 window.logout = logout;
 window.goToCourseTab = goToCourseTab;
+window.goBackToCourses = goBackToCourses;
 window.addCourse = addCourse;
 window.deleteCourse = deleteCourse;
 window.toggleCourseActive = toggleCourseActive;
