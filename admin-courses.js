@@ -122,13 +122,29 @@ function renderCourseItem({ id, name, active, idx, startDate, endDate }) {
   const statusBadge = active
     ? `<span class="course-status active">진행중</span>`
     : `<span class="course-status closed">종료</span>`;
-  const toggleBtn = active
-    ? `<button class="course-close-btn" onclick="toggleCourseActive('${cid}', true, this)">종료</button>`
-    : `<button class="course-reopen-btn" onclick="toggleCourseActive('${cid}', false, this)">재활성</button>`;
   const dateLabel = formatDateRange(startDate, endDate);
   const dateHtml = dateLabel
     ? `<span class="course-date-range">${escapeHtml(dateLabel)}</span>`
     : '';
+
+  // 진행중: 운영 액션 + 종료. 종료: 결과 조회 + 재활성/삭제만 (운영 데이터 변경 X)
+  const actionBtns = active
+    ? `<button class="course-edit-btn" onclick="startEditCourse(${idx})" title="과정명·교육기간 수정">교육과정 수정</button>
+       <button class="panel-toggle-btn inst-toggle" id="inst-toggle-${idx}" onclick="togglePanel('${cid}', ${idx}, 'inst')">강사관리</button>
+       <button class="panel-toggle-btn stu-toggle" id="stu-toggle-${idx}" onclick="togglePanel('${cid}', ${idx}, 'stu')">수강생관리</button>
+       <button class="goto-btn preview-btn" onclick="goToCourseTab('preview', '${cid}')" title="이 과정 설문 미리보기">설문 미리보기</button>
+       <button class="goto-btn stats-btn" onclick="goToCourseTab('stats', '${cid}')" title="이 과정 설문 결과">설문 결과</button>
+       <button class="course-close-btn" onclick="toggleCourseActive('${cid}', true, this)">종료</button>`
+    : `<button class="goto-btn stats-btn" onclick="goToCourseTab('stats', '${cid}')" title="이 과정 설문 결과">설문 결과</button>
+       <button class="course-reopen-btn" onclick="toggleCourseActive('${cid}', false, this)">재활성</button>
+       <button class="delete-btn" onclick="deleteCourse('${cid}', this)" title="과정과 수강생·강사·응답 데이터를 모두 삭제">삭제</button>`;
+
+  // 진행중일 때만 강사·수강생 패널 영역 렌더
+  const panelsHtml = active
+    ? `<div class="instructor-panel" id="inst-panel-${idx}" style="display:none;"></div>
+       <div class="student-panel" id="stu-panel-${idx}" style="display:none;">${renderStudentPanelHtml(cid, idx)}</div>`
+    : '';
+
   return `
     <div class="course-manage-item ${active ? '' : 'is-closed'}" id="course-item-${idx}">
       <div class="course-manage-row">
@@ -140,16 +156,10 @@ function renderCourseItem({ id, name, active, idx, startDate, endDate }) {
           </div>
         </div>
         <div class="course-manage-actions">
-          <button class="course-edit-btn" onclick="startEditCourse(${idx})" title="과정명·교육기간 수정">교육과정 수정</button>
-          <button class="panel-toggle-btn inst-toggle" id="inst-toggle-${idx}" onclick="togglePanel('${cid}', ${idx}, 'inst')">강사관리</button>
-          <button class="panel-toggle-btn stu-toggle" id="stu-toggle-${idx}" onclick="togglePanel('${cid}', ${idx}, 'stu')">수강생관리</button>
-          <button class="goto-btn preview-btn" onclick="goToCourseTab('preview', '${cid}')" title="이 과정 설문 미리보기">설문 미리보기</button>
-          <button class="goto-btn stats-btn" onclick="goToCourseTab('stats', '${cid}')" title="이 과정 설문 결과">설문 결과</button>
-          ${toggleBtn}
+          ${actionBtns}
         </div>
       </div>
-      <div class="instructor-panel" id="inst-panel-${idx}" style="display:none;"></div>
-      <div class="student-panel" id="stu-panel-${idx}" style="display:none;">${renderStudentPanelHtml(cid, idx)}</div>
+      ${panelsHtml}
     </div>`;
 }
 
@@ -349,6 +359,36 @@ export async function toggleCourseActive(courseId, currentActive, btnEl) {
     btnEl.disabled = false;
     btnEl.textContent = originalText;
   }
+}
+
+// ── 과정 삭제 (종료 상태에서만 호출됨) ──────────────────────────────
+export async function deleteCourse(courseId, btnEl) {
+  const item = btnEl.closest('.course-manage-item');
+  const nameEl = item?.querySelector('.course-manage-name');
+  const courseLabel = nameEl ? nameEl.textContent.replace('종료', '').trim() : '이 과정';
+  const msg = `"${courseLabel}" 과정을 영구 삭제하시겠습니까?\n\n` +
+    `• 수강생·강사·설문 응답 데이터가 모두 삭제됩니다.\n` +
+    `• 이 작업은 되돌릴 수 없습니다.`;
+  if (!confirm(msg)) return;
+
+  btnEl.disabled = true; btnEl.textContent = '삭제 중...';
+  try {
+    await deleteSubcollection(courseId, 'instructors');
+    await deleteSubcollection(courseId, 'students');
+    await deleteSubcollection(courseId, 'responses');
+    await deleteSubcollection(courseId, 'attendance');
+    await deleteSubcollection(courseId, 'attendanceConfig');
+    await deleteDoc(doc(db, 'courses', courseId));
+    await loadCourseList();
+  } catch (e) {
+    alert('삭제 중 오류가 발생했습니다.');
+    btnEl.disabled = false; btnEl.textContent = '삭제';
+  }
+}
+
+async function deleteSubcollection(courseId, subcollectionName) {
+  const snap = await getDocs(collection(db, 'courses', courseId, subcollectionName));
+  await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
 }
 
 // ── 강사 엑셀 일괄 등록 ──────────────────────────────
