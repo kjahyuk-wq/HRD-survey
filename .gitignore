@@ -67,3 +67,11 @@ node_modules/
 
 # dataconnect generated files
 .dataconnect
+
+# TLS 인증서/개인키 (mkcert 등 로컬 HTTPS 개발용)
+*.pem
+*-key.pem
+
+# Firestore 에뮬레이터 디버그 로그
+firestore-debug.log*
+
