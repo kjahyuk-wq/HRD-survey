@@ -6,11 +6,13 @@ import {
 import { signInAnonymously } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
 
 // type === 'leadership' 일 때 roundId/roundNumber/roundName이 채워지고 instructors는 회차별 강사로 교체됨.
+// group은 중견리더 분반 운영 시 사용 (학생.group). 분반 미운영이면 빈 문자열.
 let currentUser = {
   name: '', empNo: '', course: '', courseId: '', studentRef: null,
   type: 'standard', instructors: [],
   roundId: '', roundNumber: 0, roundName: '',
-  completedRounds: []
+  completedRounds: [],
+  group: ''
 };
 
 async function doLogin() {
@@ -85,7 +87,8 @@ async function doLogin() {
         type: 'leadership',
         instructors: [],
         roundId: '', roundNumber: 0, roundName: '',
-        completedRounds: Array.isArray(studentData.completedRounds) ? studentData.completedRounds : []
+        completedRounds: Array.isArray(studentData.completedRounds) ? studentData.completedRounds : [],
+        group: typeof studentData.group === 'string' ? studentData.group.trim() : ''
       };
       await showRoundSelect();
     } else {
@@ -99,7 +102,8 @@ async function doLogin() {
         type: 'standard',
         instructors,
         roundId: '', roundNumber: 0, roundName: '',
-        completedRounds: []
+        completedRounds: [],
+        group: ''
       };
       document.getElementById('confirm-greeting').textContent = `${name}님, 안녕하세요!`;
       document.getElementById('confirm-course-name').textContent = matchCourseName;
@@ -175,11 +179,13 @@ async function showRoundSelect() {
   }
 }
 
-// 회차 선택 시: 회차 강사를 fetch하고 confirm 화면으로 진입.
+// 회차 선택 시: 회차 강사를 fetch + 분반 검증 + 강사 필터링 후 confirm 화면으로 진입.
 async function selectRound(roundId) {
   const list = document.getElementById('round-select-list');
   const buttons = list.querySelectorAll('button');
   buttons.forEach(b => b.disabled = true);
+
+  const reenable = () => buttons.forEach(b => { if (!b.classList.contains('is-done')) b.disabled = false; });
 
   try {
     // 회차 문서 + 회차 강사 동시 fetch
@@ -189,11 +195,34 @@ async function selectRound(roundId) {
     ]);
     if (!roundDocSnap.exists()) {
       alert('선택하신 회차를 찾을 수 없습니다. 다시 시도해 주세요.');
-      buttons.forEach(b => { if (!b.classList.contains('is-done')) b.disabled = false; });
+      reenable();
       return;
     }
     const roundData = roundDocSnap.data();
-    const instructors = instSnap.docs.map(d => d.data());
+    const allInstructors = instSnap.docs.map(d => d.data());
+
+    // 분반 검증 + 강사 필터링
+    const definedGroups = Array.isArray(roundData.groups) ? roundData.groups : [];
+    let instructors = allInstructors;
+    if (definedGroups.length > 0) {
+      // 분반 정의된 회차 — 학생.group이 비거나 회차에 정의 안 된 분반이면 차단
+      if (!currentUser.group) {
+        alert('이 회차는 분반 운영 중입니다. 분반이 배정되지 않아 응답할 수 없습니다.\n담당자에게 문의해 주세요.');
+        reenable();
+        return;
+      }
+      if (!definedGroups.includes(currentUser.group)) {
+        alert(`이 회차에는 "${currentUser.group}" 분반이 정의되지 않았습니다.\n담당자에게 문의해 주세요.`);
+        reenable();
+        return;
+      }
+      // 강사 필터: groups에 학생 분반 포함 OR 'common'(구 데이터 호환) OR groups 미정의(구 데이터 호환)
+      instructors = allInstructors.filter(inst => {
+        const igs = Array.isArray(inst.groups) ? inst.groups : [];
+        if (igs.length === 0) return true;
+        return igs.includes(currentUser.group) || igs.includes('common');
+      });
+    }
 
     currentUser.roundId = roundId;
     currentUser.roundNumber = roundData.number;
@@ -204,9 +233,10 @@ async function selectRound(roundId) {
     document.getElementById('confirm-greeting').textContent = `${currentUser.name}님, 안녕하세요!`;
     document.getElementById('confirm-course-name').textContent = currentUser.course;
     const roundLine = document.getElementById('confirm-round-line');
-    roundLine.textContent = currentUser.roundName
+    const baseLabel = currentUser.roundName
       ? `${currentUser.roundNumber}회차 · ${currentUser.roundName}`
       : `${currentUser.roundNumber}회차`;
+    roundLine.textContent = currentUser.group ? `${baseLabel} · ${currentUser.group}` : baseLabel;
     roundLine.style.display = 'block';
     updateSurveyMeta(instructors.length);
     document.getElementById('screen-confirm').style.display = 'block';
@@ -214,7 +244,7 @@ async function selectRound(roundId) {
   } catch (e) {
     console.error(e);
     alert('회차 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.');
-    buttons.forEach(b => { if (!b.classList.contains('is-done')) b.disabled = false; });
+    reenable();
   }
 }
 
@@ -338,10 +368,16 @@ async function submitSurvey() {
     };
 
     if (currentUser.type === 'leadership') {
-      // 회차 응답: rounds/{rid}/responses 에 저장 + 회차 정보 박제
+      // 회차 응답: rounds/{rid}/responses 에 저장 + 회차/분반 정보 박제
+      const leadershipResp = {
+        ...respBase,
+        roundNumber: currentUser.roundNumber,
+        roundName: currentUser.roundName
+      };
+      if (currentUser.group) leadershipResp.groupName = currentUser.group;
       await addDoc(
         collection(db, 'courses', currentUser.courseId, 'rounds', currentUser.roundId, 'responses'),
-        { ...respBase, roundNumber: currentUser.roundNumber, roundName: currentUser.roundName }
+        leadershipResp
       );
       await updateDoc(currentUser.studentRef, {
         completedRounds: arrayUnion(currentUser.roundId),

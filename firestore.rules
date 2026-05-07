@@ -163,6 +163,9 @@ service cloud.firestore {
             && (!('comment3' in request.resource.data)
                 || (request.resource.data.comment3 is string
                     && request.resource.data.comment3.size() <= 2000))
+            && (!('groupName' in request.resource.data)
+                || (request.resource.data.groupName is string
+                    && request.resource.data.groupName.size() <= 50))
           );
         }
       }
