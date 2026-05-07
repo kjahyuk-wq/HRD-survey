@@ -7,7 +7,7 @@ import { loadStudents, addStudent, deleteStudent, toggleSelectAll, updateBulkDel
 import { populateStatsSelect, loadStats } from './admin-stats.js';
 import { exportStatsExcel, exportResultsExcel } from './admin-excel.js';
 import { populatePreviewSelect, loadPreviewInstructors } from './admin-preview.js';
-import { addRound, startEditRound, saveEditRound, cancelEditRound, toggleRoundActive, deleteRound, toggleRoundInstructors, addRoundInstructor, deleteRoundInstructor, moveRoundInstructor, startEditRoundInstructor, saveEditRoundInstructor, cancelEditRoundInstructor, handleRoundInstExcelUpload, uploadRoundExcelInstructors, toggleRoundInstSelectAll, updateRoundInstBulkDeleteBtn, deleteSelectedRoundInstructors } from './admin-rounds.js';
+import { addRound, startEditRound, saveEditRound, cancelEditRound, toggleRoundActive, deleteRound, toggleRoundInstructors, addRoundInstructor, deleteRoundInstructor, moveRoundInstructor, startEditRoundInstructor, saveEditRoundInstructor, cancelEditRoundInstructor, handleRoundInstExcelUpload, uploadRoundExcelInstructors, toggleRoundInstSelectAll, updateRoundInstBulkDeleteBtn, deleteSelectedRoundInstructors, addRoundGroup, renameRoundGroup, deleteRoundGroup } from './admin-rounds.js';
 
 // ── 탭 전환 ──────────────────────────────
 function setActiveTab(tab) {
@@ -140,3 +140,6 @@ window.uploadRoundExcelInstructors = uploadRoundExcelInstructors;
 window.toggleRoundInstSelectAll = toggleRoundInstSelectAll;
 window.updateRoundInstBulkDeleteBtn = updateRoundInstBulkDeleteBtn;
 window.deleteSelectedRoundInstructors = deleteSelectedRoundInstructors;
+window.addRoundGroup = addRoundGroup;
+window.renameRoundGroup = renameRoundGroup;
+window.deleteRoundGroup = deleteRoundGroup;

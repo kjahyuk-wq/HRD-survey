@@ -7,9 +7,25 @@ import { state, escapeHtml, escapeAttr, formatDateTime } from './admin-utils.js'
 import { loadXLSX } from './admin-excel.js';
 
 // ── 패널 단위 상태 ──────────────────────────────
-// panelIdx → 학생 배열 / 엑셀 파싱 결과 캐시
+// panelIdx → 학생 배열 / 엑셀 파싱 결과 / 분반 union 캐시
 const studentsCache = {};
 const excelStudentData = {};
+const panelGroupsUnion = {};  // panelIdx → ['1조','2조',...] (회차들에 정의된 분반 union)
+
+// 그 과정의 모든 회차에 정의된 분반 이름의 union을 계산
+async function fetchRoundGroupsUnion(courseId) {
+  try {
+    const snap = await getDocs(collection(db, 'courses', courseId, 'rounds'));
+    const set = new Set();
+    snap.docs.forEach(d => {
+      const groups = Array.isArray(d.data().groups) ? d.data().groups : [];
+      groups.forEach(g => set.add(g));
+    });
+    return Array.from(set).sort();
+  } catch (_) {
+    return [];
+  }
+}
 
 // ── 수강생 관리 ──────────────────────────────
 export async function loadStudents(courseId, panelIdx) {
@@ -28,13 +44,19 @@ export async function loadStudents(courseId, panelIdx) {
   if (statsEl)  statsEl.innerHTML = '';
 
   try {
-    const snap = await getDocs(collection(db, 'courses', courseId, 'students'));
+    // 학생 + 회차 분반 union 동시 fetch
+    const [snap, groupsUnion] = await Promise.all([
+      getDocs(collection(db, 'courses', courseId, 'students')),
+      fetchRoundGroupsUnion(courseId)
+    ]);
     const students = snap.docs.map(d => ({
       ...d.data(),
       _id: d.id,
       completedAt: d.data().completedAt?.toDate?.()?.toISOString() ?? null
     })).sort((a, b) => Number(a.empNo) - Number(b.empNo));
     studentsCache[panelIdx] = students;
+    panelGroupsUnion[panelIdx] = groupsUnion;
+    syncStudentGroupSelect(panelIdx, groupsUnion);
     if (loadingEl) loadingEl.style.display = 'none';
 
     const total = students.length;
@@ -57,6 +79,16 @@ export async function loadStudents(courseId, panelIdx) {
       return;
     }
 
+    const hasGroups = groupsUnion.length > 0;
+    const groupCol = hasGroups ? '<th>분반</th>' : '';
+    const groupCellFn = s => {
+      if (!hasGroups) return '';
+      const g = (s.group || '').trim();
+      return g
+        ? `<td><span class="rg-tag">${escapeHtml(g)}</span></td>`
+        : '<td><span class="rg-empty">미배정</span></td>';
+    };
+
     const cid = escapeAttr(courseId);
     listEl.innerHTML = `
       <div class="student-bulk-actions">
@@ -66,7 +98,7 @@ export async function loadStudents(courseId, panelIdx) {
         <table class="student-table">
           <thead><tr>
             <th style="width:36px"><input type="checkbox" id="stu-select-all-${panelIdx}" onclick="toggleSelectAll(${panelIdx}, this)"></th>
-            <th>이름</th><th>교번</th><th>상태</th><th></th>
+            <th>이름</th><th>교번</th>${groupCol}<th>상태</th><th></th>
           </tr></thead>
           <tbody>
             ${students.map((s, idx) => `
@@ -74,6 +106,7 @@ export async function loadStudents(courseId, panelIdx) {
                 <td><input type="checkbox" class="stu-checkbox-${panelIdx}" data-id="${escapeAttr(s._id)}" data-name="${escapeAttr(s.name)}" data-empno="${escapeAttr(s.empNo)}" onchange="updateBulkDeleteBtn(${panelIdx})"></td>
                 <td>${escapeHtml(s.name)}</td>
                 <td>${escapeHtml(s.empNo)}</td>
+                ${groupCellFn(s)}
                 <td>${s.completed
                   ? `<span class="status-done">완료</span>${s.completedAt ? `<br><small class="completed-at">${formatDateTime(s.completedAt)}</small>` : ''}`
                   : `<span class="status-pending">미완료</span>`}
@@ -93,11 +126,32 @@ export async function loadStudents(courseId, panelIdx) {
   }
 }
 
+// 분반 union이 있으면 추가 폼의 분반 셀렉트와 엑셀 안내문 C열을 노출, 없으면 숨김
+function syncStudentGroupSelect(panelIdx, groupsUnion) {
+  const sel = document.getElementById(`new-stu-group-${panelIdx}`);
+  const cHint = document.getElementById(`stu-excel-c-hint-${panelIdx}`);
+  if (!sel) return;
+  if (groupsUnion.length === 0) {
+    sel.style.display = 'none';
+    sel.innerHTML = '<option value="">-- 분반 --</option>';
+    if (cHint) cHint.style.display = 'none';
+    return;
+  }
+  sel.style.display = '';
+  sel.innerHTML = '<option value="">-- 분반 --</option>' +
+    groupsUnion.map(g => `<option value="${escapeAttr(g)}">${escapeHtml(g)}</option>`).join('');
+  if (cHint) cHint.style.display = '';
+}
+
 export async function addStudent(courseId, panelIdx) {
   const nameEl  = document.getElementById(`new-stu-name-${panelIdx}`);
   const empNoEl = document.getElementById(`new-stu-empno-${panelIdx}`);
+  const groupEl = document.getElementById(`new-stu-group-${panelIdx}`);
   const name = nameEl?.value.trim() || '';
   const empNo = empNoEl?.value.trim() || '';
+  // 분반 union 있으면 셀렉트 값 사용, 없으면 group 미저장
+  const hasGroups = (panelGroupsUnion[panelIdx] || []).length > 0;
+  const group = (hasGroups && groupEl) ? (groupEl.value || '').trim() : '';
 
   if (!name) { nameEl?.focus(); return; }
   if (!/^\d+$/.test(empNo) || parseInt(empNo) < 1) { alert('교번을 올바르게 입력해 주세요. (1 이상의 숫자)'); return; }
@@ -106,11 +160,12 @@ export async function addStudent(courseId, panelIdx) {
   if (btn) { btn.disabled = true; btn.textContent = '등록 중...'; }
 
   try {
-    await addDoc(collection(db, 'courses', courseId, 'students'), {
-      name, empNo, completed: false, completedAt: null
-    });
+    const data = { name, empNo, completed: false, completedAt: null };
+    if (group) data.group = group;
+    await addDoc(collection(db, 'courses', courseId, 'students'), data);
     if (nameEl) nameEl.value = '';
     if (empNoEl) empNoEl.value = '';
+    if (groupEl) groupEl.value = '';
     await loadStudents(courseId, panelIdx);
   } catch (e) { alert('등록 중 오류가 발생했습니다.'); }
   finally { if (btn) { btn.disabled = false; btn.textContent = '+ 등록'; } }
@@ -179,10 +234,24 @@ export function startEditStudent(courseId, panelIdx, idx) {
   const row = document.getElementById(`stu-row-${panelIdx}-${idx}`);
   if (!row) return;
   const cid = escapeAttr(courseId);
+  const groupsUnion = panelGroupsUnion[panelIdx] || [];
+  const hasGroups = groupsUnion.length > 0;
+
+  // 분반 정의된 과정에서만 분반 td 노출 (테이블 컬럼 정렬 유지)
+  const groupTd = hasGroups
+    ? `<td>
+        <select id="edit-stu-group-${panelIdx}-${idx}" class="stu-group-select-edit">
+          <option value="">미배정</option>
+          ${groupsUnion.map(g => `<option value="${escapeAttr(g)}"${(s.group || '') === g ? ' selected' : ''}>${escapeHtml(g)}</option>`).join('')}
+        </select>
+      </td>`
+    : '';
+
   row.innerHTML = `
     <td><input type="checkbox" disabled></td>
     <td><input type="text" id="edit-stu-name-${panelIdx}-${idx}" value="${escapeAttr(s.name)}" maxlength="20" style="width:100%;padding:.4rem .6rem;border:2px solid #0066cc;border-radius:7px;font-size:.88rem;"></td>
     <td><input type="number" id="edit-stu-empno-${panelIdx}-${idx}" value="${escapeAttr(s.empNo)}" min="1" style="width:100%;padding:.4rem .6rem;border:2px solid #0066cc;border-radius:7px;font-size:.88rem;"></td>
+    ${groupTd}
     <td></td>
     <td>
       <div class="inst-action-btns">
@@ -198,6 +267,7 @@ export async function saveEditStudent(courseId, panelIdx, idx) {
   if (!s) return;
   const nameEl  = document.getElementById(`edit-stu-name-${panelIdx}-${idx}`);
   const empNoEl = document.getElementById(`edit-stu-empno-${panelIdx}-${idx}`);
+  const groupEl = document.getElementById(`edit-stu-group-${panelIdx}-${idx}`);
   const name  = nameEl?.value.trim();
   const empNo = empNoEl?.value.trim();
   if (!name)  { nameEl?.focus(); return; }
@@ -205,10 +275,16 @@ export async function saveEditStudent(courseId, panelIdx, idx) {
     alert('교번을 올바르게 입력해 주세요. (1 이상의 숫자)');
     empNoEl?.focus(); return;
   }
+  const hasGroups = (panelGroupsUnion[panelIdx] || []).length > 0;
+
   const saveBtn = document.querySelector(`#stu-row-${panelIdx}-${idx} .inst-save-btn`);
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '저장 중...'; }
   try {
-    await updateDoc(doc(db, 'courses', courseId, 'students', s._id), { name, empNo });
+    const updateData = { name, empNo };
+    if (hasGroups && groupEl) {
+      updateData.group = (groupEl.value || '').trim();  // 빈 문자열이면 '미배정'
+    }
+    await updateDoc(doc(db, 'courses', courseId, 'students', s._id), updateData);
     await loadStudents(courseId, panelIdx);
   } catch (e) {
     alert('수정 중 오류가 발생했습니다.');
@@ -304,11 +380,15 @@ function parseExcelFile(panelIdx, file) {
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
 
+      const groupsUnion = panelGroupsUnion[panelIdx] || [];
+      const groupsSet = new Set(groupsUnion);  // 빠른 검증
+
       const parsed = [], errors = [];
       for (let i = 1; i < rows.length; i++) {
         const empNo = String(rows[i][0] || '').trim();
         const name  = String(rows[i][1] || '').trim();
-        if (!empNo && !name) continue;
+        const group = String(rows[i][2] || '').trim();  // C열 분반 (선택)
+        if (!empNo && !name && !group) continue;
         if (!empNo || !/^\d+$/.test(empNo) || parseInt(empNo) < 1) {
           errors.push(`${i+1}행: 교번이 올바르지 않습니다. (값: "${empNo}")`);
           continue;
@@ -317,7 +397,11 @@ function parseExcelFile(panelIdx, file) {
           errors.push(`${i+1}행: 이름이 없습니다.`);
           continue;
         }
-        parsed.push({ empNo, name });
+        // 분반이 입력됐는데 회차에 정의되지 않은 이름이면 경고 (저장은 진행)
+        if (group && groupsUnion.length > 0 && !groupsSet.has(group)) {
+          errors.push(`${i+1}행: 분반 "${group}"이(가) 어느 회차에도 정의되지 않았습니다. (그대로 저장됨)`);
+        }
+        parsed.push({ empNo, name, group });
       }
 
       if (!previewEl) return;
@@ -332,9 +416,10 @@ function parseExcelFile(panelIdx, file) {
       if (errors.length > 0) {
         html += errors.map(err => `<div class="excel-preview-error">${escapeHtml(err)}</div>`).join('');
       }
-      html += parsed.map((s, i) =>
-        `<div class="excel-preview-row">${i+1}. 교번 ${escapeHtml(s.empNo)} · ${escapeHtml(s.name)}</div>`
-      ).join('');
+      html += parsed.map((s, i) => {
+        const groupTag = s.group ? ` · <span class="rg-tag">${escapeHtml(s.group)}</span>` : '';
+        return `<div class="excel-preview-row">${i+1}. 교번 ${escapeHtml(s.empNo)} · ${escapeHtml(s.name)}${groupTag}</div>`;
+      }).join('');
       previewEl.innerHTML = html;
 
       if (parsed.length > 0) {
@@ -369,8 +454,10 @@ export async function uploadExcelStudents(courseId, panelIdx) {
     const slice = data.slice(start, start + CHUNK);
     if (progress) progress.textContent = `등록 중... (${start + slice.length}/${total})`;
     const batch = writeBatch(db);
-    for (const { empNo, name } of slice) {
-      batch.set(doc(studentsRef), { name, empNo, completed: false, completedAt: null });
+    for (const { empNo, name, group } of slice) {
+      const docData = { name, empNo, completed: false, completedAt: null };
+      if (group) docData.group = group;
+      batch.set(doc(studentsRef), docData);
     }
     try {
       await batch.commit();

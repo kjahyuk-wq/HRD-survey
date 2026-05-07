@@ -280,10 +280,13 @@ function renderStudentPanelHtml(cid, idx) {
       <input type="text" id="new-stu-name-${idx}" placeholder="이름" maxlength="20">
       <input type="number" id="new-stu-empno-${idx}" placeholder="교번 (예: 1)" min="1"
         onkeydown="if(event.key==='Enter')addStudent('${cid}', ${idx})">
+      <select id="new-stu-group-${idx}" class="stu-group-select" style="display:none;" title="분반 (중견리더 양성과정)">
+        <option value="">-- 분반 --</option>
+      </select>
       <button class="add-btn" id="stu-add-btn-${idx}" onclick="addStudent('${cid}', ${idx})">+ 등록</button>
     </div>
     <div class="excel-upload-area stu-excel-area">
-      <div class="excel-upload-label">엑셀 일괄 등록 <span class="excel-tip">A열: 교번 / B열: 이름 / 2행부터 데이터</span></div>
+      <div class="excel-upload-label">엑셀 일괄 등록 <span class="excel-tip">A열: 교번 / B열: 이름 / <span id="stu-excel-c-hint-${idx}" style="display:none;">C열: 분반 (선택) / </span>2행부터 데이터</span></div>
       <div class="excel-upload-row">
         <label class="excel-file-btn" for="stu-excel-input-${idx}">파일 선택</label>
         <input type="file" id="stu-excel-input-${idx}" accept=".xlsx,.xls" style="display:none" onchange="handleExcelUpload(${idx}, this)">
