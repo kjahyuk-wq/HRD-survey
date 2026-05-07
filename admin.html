@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>관리자 - 대전광역시 인재개발원</title>
-  <link href="style.css?v=24" rel="stylesheet">
-  <link href="admin.css?v=24" rel="stylesheet">
+  <link href="style.css?v=25" rel="stylesheet">
+  <link href="admin.css?v=25" rel="stylesheet">
 </head>
 <body>
 
@@ -140,6 +140,9 @@
           <div class="preview-notice-row">
             <button class="back-btn" onclick="goBackToCourses()" title="교육과정 목록으로">← 교육과정</button>
             <span>교육생이 실제로 보는 설문조사 화면입니다. 제출 기능은 동작하지 않습니다.</span>
+            <select id="preview-round-select" class="round-select-inline" style="display:none;" onchange="loadPreviewInstructors()" title="회차 선택 (중견리더 양성과정)">
+              <option value="">-- 회차 선택 --</option>
+            </select>
             <button class="icon-refresh-btn" onclick="loadPreviewInstructors()" title="새로고침">새로고침</button>
           </div>
           <select id="preview-course-select" onchange="loadPreviewInstructors()" hidden>
@@ -378,6 +381,6 @@
     </div>
   </div>
 
-  <script type="module" src="admin.js?v=24"></script>
+  <script type="module" src="admin.js?v=25"></script>
 </body>
 </html>

@@ -22,18 +22,45 @@ export async function populatePreviewSelect() {
         active: data.active !== false,
         startDate: data.startDate || null,
         endDate: data.endDate || null,
+        type: data.type === 'leadership' ? 'leadership' : 'standard',
       };
     });
     courses.sort((a, b) => (a.active === b.active) ? 0 : (a.active ? -1 : 1));
     const sel = document.getElementById('preview-course-select');
     const current = sel.value;
     sel.innerHTML = '<option value="">-- 교육과정을 선택하세요 --</option>' +
-      courses.map(({ id, name, startDate, endDate, active }) => {
+      courses.map(({ id, name, startDate, endDate, active, type }) => {
         const label = buildCourseLabel(name, startDate, endDate, active);
-        return `<option value="${escapeAttr(id)}" data-name="${escapeAttr(name)}"${id === current ? ' selected' : ''}>${escapeHtml(label)}</option>`;
+        return `<option value="${escapeAttr(id)}" data-name="${escapeAttr(name)}" data-type="${type}"${id === current ? ' selected' : ''}>${escapeHtml(label)}</option>`;
       }).join('');
     if (current) loadPreviewInstructors();
   } catch (e) {}
+}
+
+// 미리보기용 회차 셀렉트 — stats 모듈과 동일 패턴 (캐시 키로 같은 과정 재선택 시 재요청 회피)
+let lastPopulatedPreviewRoundCourseId = null;
+async function populatePreviewRoundSelect(courseId) {
+  const sel = document.getElementById('preview-round-select');
+  sel.disabled = false;
+  sel.innerHTML = '<option value="">-- 회차 선택 --</option>';
+  try {
+    const snap = await getDocs(collection(db, 'courses', courseId, 'rounds'));
+    const rounds = snap.docs.map(d => ({ ...d.data(), _id: d.id }));
+    rounds.sort((a, b) => (a.number ?? 0) - (b.number ?? 0));
+    if (rounds.length === 0) {
+      sel.innerHTML = '<option value="">등록된 회차 없음</option>';
+      sel.disabled = true;
+      return;
+    }
+    sel.innerHTML += rounds.map(r => {
+      const closed = r.active === false ? ' [종료]' : '';
+      const label = (r.name ? `${r.number}회차 · ${r.name}` : `${r.number}회차`) + closed;
+      return `<option value="${escapeAttr(r._id)}">${escapeHtml(label)}</option>`;
+    }).join('');
+  } catch (_) {
+    sel.innerHTML = '<option value="">회차 불러오기 실패</option>';
+    sel.disabled = true;
+  }
 }
 
 export async function loadPreviewInstructors() {
@@ -41,19 +68,52 @@ export async function loadPreviewInstructors() {
   const courseId = sel?.value;
   const opt = sel?.options?.[sel.selectedIndex];
   const courseLabel = opt?.textContent || '';
+  const courseType = opt?.dataset.type === 'leadership' ? 'leadership' : 'standard';
   const badge = document.getElementById('preview-course-badge');
   const container = document.getElementById('preview-instructor-questions');
-
-  badge.textContent = courseLabel || '교육과정을 선택하세요';
+  const roundSel = document.getElementById('preview-round-select');
 
   if (!courseId) {
+    badge.textContent = '교육과정을 선택하세요';
     container.innerHTML = '';
+    roundSel.style.display = 'none';
     return;
   }
 
+  // 회차 셀렉트 표시/숨김 분기 (중견리더만 노출)
+  if (courseType === 'leadership') {
+    if (lastPopulatedPreviewRoundCourseId !== courseId) {
+      await populatePreviewRoundSelect(courseId);
+      lastPopulatedPreviewRoundCourseId = courseId;
+    }
+    roundSel.style.display = 'inline-block';
+  } else {
+    roundSel.style.display = 'none';
+  }
+
+  const roundId = courseType === 'leadership' ? roundSel.value : '';
+
+  // 중견리더인데 회차 미선택 — 안내만 보이고 강사 문항 비움
+  if (courseType === 'leadership' && !roundId) {
+    badge.textContent = courseLabel;
+    container.innerHTML = '<div class="no-data" style="margin:0.5rem 0;">회차를 선택해 주세요.</div>';
+    return;
+  }
+
+  // 라벨 갱신 (중견리더는 회차 라벨도 함께)
+  let displayLabel = courseLabel;
+  if (courseType === 'leadership') {
+    const rOpt = roundSel.options[roundSel.selectedIndex];
+    displayLabel = `${courseLabel} · ${rOpt?.textContent || ''}`;
+  }
+  badge.textContent = displayLabel;
+
   container.innerHTML = '<div class="loading" style="text-align:center;padding:1rem;">강사 정보 불러오는 중...</div>';
   try {
-    const instSnap = await getDocs(query(collection(db, 'courses', courseId, 'instructors'), orderBy('createdAt')));
+    const instructorsRef = courseType === 'leadership'
+      ? collection(db, 'courses', courseId, 'rounds', roundId, 'instructors')
+      : collection(db, 'courses', courseId, 'instructors');
+    const instSnap = await getDocs(query(instructorsRef, orderBy('createdAt')));
     const instructors = instSnap.docs.map(d => d.data());
 
     if (instructors.length === 0) {
