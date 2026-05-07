@@ -1,9 +1,10 @@
 import { db } from './firebase-config.js';
 import {
-  collection, getDocs, addDoc, deleteDoc, doc, serverTimestamp, updateDoc
+  collection, getDocs, addDoc, deleteDoc, doc, serverTimestamp, updateDoc, writeBatch
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { escapeHtml, escapeAttr } from './admin-utils.js';
 import { renderDateFields, readDateFields, wireDateFields } from './admin-courses.js';
+import { loadXLSX } from './admin-excel.js';
 
 // 패널별 회차 캐시 — 편집 시 원본 복원·중복 번호 검증·삭제 라벨 표시에 활용
 const panelRounds = {};
@@ -314,18 +315,24 @@ function renderRoundInstructorsPanel(courseId, roundId, panelIdx, roundIdx, inst
   const cid = escapeAttr(courseId);
   const rid = escapeAttr(roundId);
   const total = instructors.length;
+  const k = `${panelIdx}-${roundIdx}`;  // ID 결합 키
 
   const listHtml = total === 0
     ? '<div class="inst-empty">등록된 강사가 없습니다. 강사를 추가해 주세요.</div>'
-    : `<table class="student-table">
+    : `<div class="student-bulk-actions">
+        <button class="bulk-delete-btn" id="round-inst-bulk-delete-btn-${k}" onclick="deleteSelectedRoundInstructors('${cid}', '${rid}', ${panelIdx}, ${roundIdx})" disabled>선택 삭제</button>
+       </div>
+       <table class="student-table">
         <thead><tr>
+          <th style="width:36px"><input type="checkbox" id="round-inst-select-all-${k}" onclick="toggleRoundInstSelectAll(${panelIdx}, ${roundIdx}, this)"></th>
           <th>강의명</th><th>강사명</th><th style="width:160px">순서 / 관리</th>
         </tr></thead>
         <tbody>
           ${instructors.map((inst, i) => {
             const eid = escapeAttr(inst._id || '');
             const en = escapeAttr(inst.name || '');
-            return `<tr id="round-inst-row-${panelIdx}-${roundIdx}-${i}">
+            return `<tr id="round-inst-row-${k}-${i}">
+              <td><input type="checkbox" class="round-inst-checkbox-${k}" data-id="${eid}" data-name="${en}" onchange="updateRoundInstBulkDeleteBtn(${panelIdx}, ${roundIdx})"></td>
               <td style="text-align:left">${escapeHtml(inst.education || '')}</td>
               <td style="text-align:left">${escapeHtml(inst.name || '')}</td>
               <td>
@@ -343,9 +350,20 @@ function renderRoundInstructorsPanel(courseId, roundId, panelIdx, roundIdx, inst
 
   panel.innerHTML = `
     <div class="inst-add-row">
-      <input type="text" id="round-inst-edu-${panelIdx}-${roundIdx}" placeholder="강의명 (예: 리더십 1교시)" maxlength="50">
-      <input type="text" id="round-inst-name-${panelIdx}-${roundIdx}" placeholder="강사명 (예: 홍길동)" maxlength="20">
+      <input type="text" id="round-inst-edu-${k}" placeholder="강의명 (예: 리더십 1교시)" maxlength="50">
+      <input type="text" id="round-inst-name-${k}" placeholder="강사명 (예: 홍길동)" maxlength="20">
       <button class="add-btn round-inst-add-btn" onclick="addRoundInstructor('${cid}', '${rid}', ${panelIdx}, ${roundIdx})">+ 추가</button>
+    </div>
+    <div class="excel-upload-area" style="margin-top:.5rem;">
+      <div class="excel-upload-label">엑셀 일괄 등록 <span class="excel-tip">A열: 강의명 / B열: 강사명 / 2행부터 데이터</span></div>
+      <div class="excel-upload-row">
+        <label class="excel-file-btn" for="round-inst-excel-input-${k}">파일 선택</label>
+        <input type="file" id="round-inst-excel-input-${k}" accept=".xlsx,.xls" style="display:none" onchange="handleRoundInstExcelUpload(${panelIdx}, ${roundIdx}, this)">
+        <span id="round-inst-excel-name-${k}" class="excel-file-name">선택된 파일 없음</span>
+        <button class="add-btn" id="round-inst-excel-btn-${k}" onclick="uploadRoundExcelInstructors('${cid}', '${rid}', ${panelIdx}, ${roundIdx})" disabled>일괄 등록</button>
+      </div>
+      <div id="round-inst-excel-preview-${k}" class="excel-preview" style="display:none;"></div>
+      <div id="round-inst-excel-progress-${k}" class="excel-progress" style="display:none;"></div>
     </div>
     <div class="inst-list">${listHtml}</div>
   `;
@@ -420,6 +438,7 @@ export function startEditRoundInstructor(courseId, roundId, panelIdx, roundIdx, 
   const cid = escapeAttr(courseId);
   const rid = escapeAttr(roundId);
   row.innerHTML = `
+    <td><input type="checkbox" disabled></td>
     <td><input type="text" id="edit-rinst-edu-${panelIdx}-${roundIdx}-${idx}" value="${escapeAttr(inst.education || '')}" maxlength="50" style="width:100%;padding:.4rem .6rem;border:2px solid #0066cc;border-radius:7px;font-size:.88rem;"></td>
     <td><input type="text" id="edit-rinst-name-${panelIdx}-${roundIdx}-${idx}" value="${escapeAttr(inst.name || '')}" maxlength="20" style="width:100%;padding:.4rem .6rem;border:2px solid #0066cc;border-radius:7px;font-size:.88rem;"></td>
     <td>
@@ -455,4 +474,159 @@ export async function saveEditRoundInstructor(courseId, roundId, panelIdx, round
 
 export async function cancelEditRoundInstructor(courseId, roundId, panelIdx, roundIdx) {
   await loadRoundInstructors(courseId, roundId, panelIdx, roundIdx);
+}
+
+// ── 회차 강사 일괄선택 삭제 + 엑셀 일괄등록 (Phase 3 보완) ──────────────────────────────
+// 단기과정 강사관리(admin-courses.js)의 패턴을 회차별로 복제.
+// 엑셀 파싱 결과는 패널-회차 키별로 보관해 다른 회차의 미리보기와 충돌하지 않게 한다.
+
+const roundInstExcelData = {};
+
+export function handleRoundInstExcelUpload(panelIdx, roundIdx, input) {
+  const k = `${panelIdx}-${roundIdx}`;
+  const fileName = input.files[0]?.name || '선택된 파일 없음';
+  document.getElementById(`round-inst-excel-name-${k}`).textContent = fileName;
+  if (input.files[0]) parseRoundInstExcelFile(panelIdx, roundIdx, input.files[0]);
+}
+
+async function parseRoundInstExcelFile(panelIdx, roundIdx, file) {
+  const k = `${panelIdx}-${roundIdx}`;
+  document.getElementById(`round-inst-excel-preview-${k}`).style.display = 'none';
+  document.getElementById(`round-inst-excel-progress-${k}`).style.display = 'none';
+  document.getElementById(`round-inst-excel-btn-${k}`).disabled = true;
+  roundInstExcelData[k] = [];
+
+  await loadXLSX();
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+      const parsed = [], errors = [];
+      for (let i = 1; i < rows.length; i++) {
+        const edu  = String(rows[i][0] || '').trim();
+        const name = String(rows[i][1] || '').trim();
+        if (!edu && !name) continue;
+        if (!edu)  { errors.push(`${i+1}행: 강의명이 없습니다.`); continue; }
+        if (!name) { errors.push(`${i+1}행: 강사명이 없습니다.`); continue; }
+        parsed.push({ edu, name });
+      }
+
+      const preview = document.getElementById(`round-inst-excel-preview-${k}`);
+      preview.style.display = 'block';
+
+      if (parsed.length === 0 && errors.length === 0) {
+        preview.innerHTML = '<div class="excel-preview-error">데이터가 없습니다. 파일을 확인해 주세요.</div>';
+        return;
+      }
+
+      let html = `<strong>총 ${parsed.length}건 인식됨</strong>`;
+      if (errors.length > 0) {
+        html += errors.map(err => `<div class="excel-preview-error">${escapeHtml(err)}</div>`).join('');
+      }
+      html += parsed.map((s, i) =>
+        `<div class="excel-preview-row">${i+1}. [${escapeHtml(s.edu)}] ${escapeHtml(s.name)}</div>`
+      ).join('');
+      preview.innerHTML = html;
+
+      if (parsed.length > 0) {
+        roundInstExcelData[k] = parsed;
+        document.getElementById(`round-inst-excel-btn-${k}`).disabled = false;
+      }
+    } catch (_) {
+      const preview = document.getElementById(`round-inst-excel-preview-${k}`);
+      preview.style.display = 'block';
+      preview.innerHTML = '<div class="excel-preview-error">파일을 읽을 수 없습니다. 엑셀 형식(.xlsx/.xls)인지 확인해 주세요.</div>';
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+export async function uploadRoundExcelInstructors(courseId, roundId, panelIdx, roundIdx) {
+  const k = `${panelIdx}-${roundIdx}`;
+  const data = roundInstExcelData[k];
+  if (!data || data.length === 0) return;
+
+  const btn = document.getElementById(`round-inst-excel-btn-${k}`);
+  btn.disabled = true;
+  const progress = document.getElementById(`round-inst-excel-progress-${k}`);
+  progress.style.display = 'block';
+
+  const cur = roundInstructorsCache[k] || [];
+  const maxOrder = cur.length > 0 ? Math.max(...cur.map(i => i.order ?? 0)) : -10;
+
+  const instRef = collection(db, 'courses', courseId, 'rounds', roundId, 'instructors');
+  const total = data.length;
+  const CHUNK = 400; // Firestore batch 한도 500 미만 안전 마진
+  let success = 0, fail = 0;
+
+  for (let start = 0; start < total; start += CHUNK) {
+    const slice = data.slice(start, start + CHUNK);
+    progress.textContent = `등록 중... (${start + slice.length}/${total})`;
+    const batch = writeBatch(db);
+    slice.forEach(({ edu, name }, j) => {
+      batch.set(doc(instRef), {
+        name, education: edu,
+        createdAt: serverTimestamp(),
+        order: maxOrder + (start + j + 1) * 10
+      });
+    });
+    try {
+      await batch.commit();
+      success += slice.length;
+    } catch (_) {
+      fail += slice.length;
+    }
+  }
+
+  progress.textContent = `완료: ${success}건 등록${fail > 0 ? `, ${fail}건 실패` : ''}`;
+  roundInstExcelData[k] = [];
+  document.getElementById(`round-inst-excel-input-${k}`).value = '';
+  document.getElementById(`round-inst-excel-name-${k}`).textContent = '선택된 파일 없음';
+  document.getElementById(`round-inst-excel-preview-${k}`).style.display = 'none';
+
+  await loadRoundInstructors(courseId, roundId, panelIdx, roundIdx);
+}
+
+export function toggleRoundInstSelectAll(panelIdx, roundIdx, checkbox) {
+  const k = `${panelIdx}-${roundIdx}`;
+  document.querySelectorAll(`.round-inst-checkbox-${k}`).forEach(cb => cb.checked = checkbox.checked);
+  updateRoundInstBulkDeleteBtn(panelIdx, roundIdx);
+}
+
+export function updateRoundInstBulkDeleteBtn(panelIdx, roundIdx) {
+  const k = `${panelIdx}-${roundIdx}`;
+  const all     = document.querySelectorAll(`.round-inst-checkbox-${k}`);
+  const checked = document.querySelectorAll(`.round-inst-checkbox-${k}:checked`);
+  const btn     = document.getElementById(`round-inst-bulk-delete-btn-${k}`);
+  const selectAll = document.getElementById(`round-inst-select-all-${k}`);
+  if (btn) {
+    btn.disabled = checked.length === 0;
+    btn.textContent = checked.length > 0 ? `선택 삭제 (${checked.length}명)` : '선택 삭제';
+  }
+  if (selectAll && all.length > 0) {
+    selectAll.indeterminate = checked.length > 0 && checked.length < all.length;
+    selectAll.checked = checked.length === all.length;
+  }
+}
+
+export async function deleteSelectedRoundInstructors(courseId, roundId, panelIdx, roundIdx) {
+  const k = `${panelIdx}-${roundIdx}`;
+  const checked = document.querySelectorAll(`.round-inst-checkbox-${k}:checked`);
+  if (!checked.length) return;
+  const count = checked.length;
+  if (!confirm(`선택한 ${count}명의 강사를 삭제하시겠습니까?`)) return;
+  const btn = document.getElementById(`round-inst-bulk-delete-btn-${k}`);
+  btn.disabled = true; btn.textContent = '삭제 중...';
+  try {
+    await Promise.all(Array.from(checked).map(cb =>
+      deleteDoc(doc(db, 'courses', courseId, 'rounds', roundId, 'instructors', cb.dataset.id))
+    ));
+    await loadRoundInstructors(courseId, roundId, panelIdx, roundIdx);
+  } catch (e) {
+    alert('삭제 중 오류가 발생했습니다.');
+    btn.disabled = false; btn.textContent = `선택 삭제 (${count}명)`;
+  }
 }
