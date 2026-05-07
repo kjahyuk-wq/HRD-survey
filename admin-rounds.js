@@ -71,18 +71,22 @@ function renderRoundRow(cid, panelIdx, round, idx) {
   const nameLabel = round.name ? `<span class="round-name">${escapeHtml(round.name)}</span>` : '';
 
   return `
-    <div class="round-row ${active ? '' : 'is-closed'}" id="round-row-${panelIdx}-${idx}">
-      <div class="round-row-info">
-        <span class="round-num">${round.number}회차</span>
-        ${nameLabel}
-        ${status}
-        ${dateLabel ? `<span class="round-date">${escapeHtml(dateLabel)}</span>` : ''}
+    <div class="round-item" id="round-item-${panelIdx}-${idx}">
+      <div class="round-row ${active ? '' : 'is-closed'}" id="round-row-${panelIdx}-${idx}">
+        <div class="round-row-info">
+          <span class="round-num">${round.number}회차</span>
+          ${nameLabel}
+          ${status}
+          ${dateLabel ? `<span class="round-date">${escapeHtml(dateLabel)}</span>` : ''}
+        </div>
+        <div class="round-row-actions">
+          <button class="round-inst-btn" id="round-inst-btn-${panelIdx}-${idx}" onclick="toggleRoundInstructors('${cid}', ${panelIdx}, ${idx})" title="회차별 강사 관리">강사관리</button>
+          <button class="round-edit-btn" onclick="startEditRound('${cid}', ${panelIdx}, ${idx})">수정</button>
+          <button class="round-toggle-btn ${active ? 'closer' : 'reopen'}" onclick="toggleRoundActive('${cid}', ${panelIdx}, ${idx})">${active ? '종료' : '재활성'}</button>
+          <button class="delete-btn round-del-btn" onclick="deleteRound('${cid}', ${panelIdx}, ${idx})">삭제</button>
+        </div>
       </div>
-      <div class="round-row-actions">
-        <button class="round-edit-btn" onclick="startEditRound('${cid}', ${panelIdx}, ${idx})">수정</button>
-        <button class="round-toggle-btn ${active ? 'closer' : 'reopen'}" onclick="toggleRoundActive('${cid}', ${panelIdx}, ${idx})">${active ? '종료' : '재활성'}</button>
-        <button class="delete-btn round-del-btn" onclick="deleteRound('${cid}', ${panelIdx}, ${idx})">삭제</button>
-      </div>
+      <div class="round-inst-panel" id="round-inst-panel-${panelIdx}-${idx}" style="display:none;"></div>
     </div>
   `;
 }
@@ -244,4 +248,211 @@ export async function deleteRound(courseId, panelIdx, idx) {
   } catch (e) {
     alert('삭제 중 오류가 발생했습니다.');
   }
+}
+
+// ── 회차별 강사 관리 (Phase 3) ──────────────────────────────
+// 데이터 경로: courses/{cid}/rounds/{rid}/instructors/{iid}
+// 캐시 키: `${panelIdx}-${roundIdx}` — 한 과정 카드 안에서도 회차별로 분리
+
+const roundInstructorsCache = {};
+
+// 회차 행의 [강사관리] 버튼: 같은 panelIdx 내에서 한 번에 한 회차만 열림 (아코디언)
+export async function toggleRoundInstructors(courseId, panelIdx, roundIdx) {
+  const round = panelRounds[panelIdx]?.[roundIdx];
+  if (!round) return;
+  const target = document.getElementById(`round-inst-panel-${panelIdx}-${roundIdx}`);
+  const targetBtn = document.getElementById(`round-inst-btn-${panelIdx}-${roundIdx}`);
+  if (!target) return;
+
+  // 이미 열려있으면 닫기
+  if (target.style.display !== 'none') {
+    target.style.display = 'none';
+    targetBtn?.classList.remove('active');
+    return;
+  }
+
+  // 같은 회차관리 패널 내 다른 강사 패널 모두 닫기
+  document.querySelectorAll(`#round-panel-${panelIdx} .round-inst-panel`).forEach(el => {
+    if (el !== target) el.style.display = 'none';
+  });
+  document.querySelectorAll(`#round-panel-${panelIdx} .round-inst-btn.active`).forEach(b => {
+    if (b !== targetBtn) b.classList.remove('active');
+  });
+
+  target.style.display = 'block';
+  targetBtn?.classList.add('active');
+  await loadRoundInstructors(courseId, round._id, panelIdx, roundIdx);
+}
+
+async function loadRoundInstructors(courseId, roundId, panelIdx, roundIdx) {
+  const key = `${panelIdx}-${roundIdx}`;
+  const panel = document.getElementById(`round-inst-panel-${panelIdx}-${roundIdx}`);
+  if (!panel) return;
+  panel.innerHTML = '<div class="inst-loading">불러오는 중...</div>';
+  try {
+    const snap = await getDocs(collection(db, 'courses', courseId, 'rounds', roundId, 'instructors'));
+    let instructors = snap.docs.map(d => ({ ...d.data(), _id: d.id }));
+    // order 우선, 없으면 createdAt — admin-courses의 loadInstructors와 동일 정책
+    instructors.sort((a, b) => {
+      if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
+      if (a.order !== undefined) return -1;
+      if (b.order !== undefined) return 1;
+      const ta = a.createdAt?.seconds || 0;
+      const tb = b.createdAt?.seconds || 0;
+      return ta - tb;
+    });
+    instructors.forEach((inst, i) => { if (inst.order === undefined) inst.order = i * 10; });
+    roundInstructorsCache[key] = instructors;
+    renderRoundInstructorsPanel(courseId, roundId, panelIdx, roundIdx, instructors);
+  } catch (e) {
+    panel.innerHTML = '<div class="inst-loading">불러오기 실패</div>';
+  }
+}
+
+function renderRoundInstructorsPanel(courseId, roundId, panelIdx, roundIdx, instructors) {
+  const panel = document.getElementById(`round-inst-panel-${panelIdx}-${roundIdx}`);
+  const cid = escapeAttr(courseId);
+  const rid = escapeAttr(roundId);
+  const total = instructors.length;
+
+  const listHtml = total === 0
+    ? '<div class="inst-empty">등록된 강사가 없습니다. 강사를 추가해 주세요.</div>'
+    : `<table class="student-table">
+        <thead><tr>
+          <th>강의명</th><th>강사명</th><th style="width:160px">순서 / 관리</th>
+        </tr></thead>
+        <tbody>
+          ${instructors.map((inst, i) => {
+            const eid = escapeAttr(inst._id || '');
+            const en = escapeAttr(inst.name || '');
+            return `<tr id="round-inst-row-${panelIdx}-${roundIdx}-${i}">
+              <td style="text-align:left">${escapeHtml(inst.education || '')}</td>
+              <td style="text-align:left">${escapeHtml(inst.name || '')}</td>
+              <td>
+                <div class="inst-action-btns">
+                  <button class="inst-move-btn" onclick="moveRoundInstructor('${cid}', '${rid}', ${panelIdx}, ${roundIdx}, ${i}, 'up')" ${i === 0 ? 'disabled' : ''} title="위로">▲</button>
+                  <button class="inst-move-btn" onclick="moveRoundInstructor('${cid}', '${rid}', ${panelIdx}, ${roundIdx}, ${i}, 'down')" ${i === total - 1 ? 'disabled' : ''} title="아래로">▼</button>
+                  <button class="inst-edit-btn" onclick="startEditRoundInstructor('${cid}', '${rid}', ${panelIdx}, ${roundIdx}, ${i})">수정</button>
+                  <button class="delete-btn" onclick="deleteRoundInstructor('${cid}', '${rid}', ${panelIdx}, ${roundIdx}, '${eid}', '${en}', this)">삭제</button>
+                </div>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`;
+
+  panel.innerHTML = `
+    <div class="inst-add-row">
+      <input type="text" id="round-inst-edu-${panelIdx}-${roundIdx}" placeholder="강의명 (예: 리더십 1교시)" maxlength="50">
+      <input type="text" id="round-inst-name-${panelIdx}-${roundIdx}" placeholder="강사명 (예: 홍길동)" maxlength="20">
+      <button class="add-btn round-inst-add-btn" onclick="addRoundInstructor('${cid}', '${rid}', ${panelIdx}, ${roundIdx})">+ 추가</button>
+    </div>
+    <div class="inst-list">${listHtml}</div>
+  `;
+}
+
+export async function addRoundInstructor(courseId, roundId, panelIdx, roundIdx) {
+  const eduEl  = document.getElementById(`round-inst-edu-${panelIdx}-${roundIdx}`);
+  const nameEl = document.getElementById(`round-inst-name-${panelIdx}-${roundIdx}`);
+  const edu  = eduEl?.value.trim();
+  const name = nameEl?.value.trim();
+  if (!edu)  { eduEl?.focus(); return; }
+  if (!name) { nameEl?.focus(); return; }
+
+  const key = `${panelIdx}-${roundIdx}`;
+  const cur = roundInstructorsCache[key] || [];
+  const maxOrder = cur.length > 0 ? Math.max(...cur.map(i => i.order ?? 0)) : -10;
+
+  const btn = document.querySelector(`#round-inst-panel-${panelIdx}-${roundIdx} .round-inst-add-btn`);
+  if (btn) { btn.disabled = true; btn.textContent = '추가 중...'; }
+  try {
+    await addDoc(collection(db, 'courses', courseId, 'rounds', roundId, 'instructors'), {
+      name, education: edu, createdAt: serverTimestamp(), order: maxOrder + 10
+    });
+    if (eduEl)  eduEl.value = '';
+    if (nameEl) nameEl.value = '';
+    await loadRoundInstructors(courseId, roundId, panelIdx, roundIdx);
+  } catch (e) {
+    alert('강사 추가 중 오류가 발생했습니다.');
+    if (btn) { btn.disabled = false; btn.textContent = '+ 추가'; }
+  }
+}
+
+export async function deleteRoundInstructor(courseId, roundId, panelIdx, roundIdx, instId, name, btnEl) {
+  if (!confirm(`"${name}" 강사를 삭제하시겠습니까?`)) return;
+  btnEl.disabled = true; btnEl.textContent = '삭제 중...';
+  try {
+    await deleteDoc(doc(db, 'courses', courseId, 'rounds', roundId, 'instructors', instId));
+    await loadRoundInstructors(courseId, roundId, panelIdx, roundIdx);
+  } catch (e) {
+    alert('삭제 중 오류가 발생했습니다.');
+    btnEl.disabled = false; btnEl.textContent = '삭제';
+  }
+}
+
+export async function moveRoundInstructor(courseId, roundId, panelIdx, roundIdx, idx, direction) {
+  const key = `${panelIdx}-${roundIdx}`;
+  const insts = roundInstructorsCache[key];
+  if (!insts) return;
+  const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+  if (targetIdx < 0 || targetIdx >= insts.length) return;
+
+  const a = insts[idx], b = insts[targetIdx];
+  const t = a.order; a.order = b.order; b.order = t;
+  try {
+    await Promise.all([
+      updateDoc(doc(db, 'courses', courseId, 'rounds', roundId, 'instructors', a._id), { order: a.order }),
+      updateDoc(doc(db, 'courses', courseId, 'rounds', roundId, 'instructors', b._id), { order: b.order }),
+    ]);
+    await loadRoundInstructors(courseId, roundId, panelIdx, roundIdx);
+  } catch (e) {
+    alert('순서 변경 중 오류가 발생했습니다.');
+    const r = a.order; a.order = b.order; b.order = r;  // 메모리 롤백
+  }
+}
+
+export function startEditRoundInstructor(courseId, roundId, panelIdx, roundIdx, idx) {
+  const key = `${panelIdx}-${roundIdx}`;
+  const inst = roundInstructorsCache[key]?.[idx];
+  if (!inst) return;
+  const row = document.getElementById(`round-inst-row-${panelIdx}-${roundIdx}-${idx}`);
+  if (!row) return;
+  const cid = escapeAttr(courseId);
+  const rid = escapeAttr(roundId);
+  row.innerHTML = `
+    <td><input type="text" id="edit-rinst-edu-${panelIdx}-${roundIdx}-${idx}" value="${escapeAttr(inst.education || '')}" maxlength="50" style="width:100%;padding:.4rem .6rem;border:2px solid #0066cc;border-radius:7px;font-size:.88rem;"></td>
+    <td><input type="text" id="edit-rinst-name-${panelIdx}-${roundIdx}-${idx}" value="${escapeAttr(inst.name || '')}" maxlength="20" style="width:100%;padding:.4rem .6rem;border:2px solid #0066cc;border-radius:7px;font-size:.88rem;"></td>
+    <td>
+      <div class="inst-action-btns">
+        <button class="inst-save-btn" onclick="saveEditRoundInstructor('${cid}', '${rid}', ${panelIdx}, ${roundIdx}, ${idx})">저장</button>
+        <button class="inst-cancel-btn" onclick="cancelEditRoundInstructor('${cid}', '${rid}', ${panelIdx}, ${roundIdx})">취소</button>
+      </div>
+    </td>`;
+  document.getElementById(`edit-rinst-edu-${panelIdx}-${roundIdx}-${idx}`)?.focus();
+}
+
+export async function saveEditRoundInstructor(courseId, roundId, panelIdx, roundIdx, idx) {
+  const key = `${panelIdx}-${roundIdx}`;
+  const inst = roundInstructorsCache[key]?.[idx];
+  if (!inst) return;
+  const eduEl  = document.getElementById(`edit-rinst-edu-${panelIdx}-${roundIdx}-${idx}`);
+  const nameEl = document.getElementById(`edit-rinst-name-${panelIdx}-${roundIdx}-${idx}`);
+  const edu  = eduEl?.value.trim();
+  const name = nameEl?.value.trim();
+  if (!edu)  { eduEl?.focus(); return; }
+  if (!name) { nameEl?.focus(); return; }
+
+  const saveBtn = document.querySelector(`#round-inst-row-${panelIdx}-${roundIdx}-${idx} .inst-save-btn`);
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '저장 중...'; }
+  try {
+    await updateDoc(doc(db, 'courses', courseId, 'rounds', roundId, 'instructors', inst._id), { name, education: edu });
+    await loadRoundInstructors(courseId, roundId, panelIdx, roundIdx);
+  } catch (e) {
+    alert('수정 중 오류가 발생했습니다.');
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '저장'; }
+  }
+}
+
+export async function cancelEditRoundInstructor(courseId, roundId, panelIdx, roundIdx) {
+  await loadRoundInstructors(courseId, roundId, panelIdx, roundIdx);
 }
