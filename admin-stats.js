@@ -74,16 +74,43 @@ export async function populateStatsSelect() {
         active: data.active !== false,
         startDate: data.startDate || null,
         endDate: data.endDate || null,
+        type: data.type === 'leadership' ? 'leadership' : 'standard',
       };
     });
     courses.sort((a, b) => (a.active === b.active) ? 0 : (a.active ? -1 : 1));
     const sel = document.getElementById('stats-course-select');
     sel.innerHTML = '<option value="">-- 교육과정을 선택하세요 --</option>' +
-      courses.map(({ id, name, startDate, endDate, active }) => {
+      courses.map(({ id, name, startDate, endDate, active, type }) => {
         const label = buildCourseLabel(name, startDate, endDate, active);
-        return `<option value="${escapeAttr(id)}" data-name="${escapeAttr(name)}">${escapeHtml(label)}</option>`;
+        return `<option value="${escapeAttr(id)}" data-name="${escapeAttr(name)}" data-type="${type}">${escapeHtml(label)}</option>`;
       }).join('');
   } catch (e) {}
+}
+
+// 회차 셀렉트 — 중견리더 과정 선택 시에만 채움/노출. 캐시 키로 같은 과정 재호출 시 재요청 회피.
+let lastPopulatedRoundCourseId = null;
+async function populateRoundSelect(courseId) {
+  const sel = document.getElementById('stats-round-select');
+  sel.disabled = false;
+  sel.innerHTML = '<option value="">-- 회차 선택 --</option>';
+  try {
+    const snap = await getDocs(collection(db, 'courses', courseId, 'rounds'));
+    const rounds = snap.docs.map(d => ({ ...d.data(), _id: d.id }));
+    rounds.sort((a, b) => (a.number ?? 0) - (b.number ?? 0));
+    if (rounds.length === 0) {
+      sel.innerHTML = '<option value="">등록된 회차 없음</option>';
+      sel.disabled = true;
+      return;
+    }
+    sel.innerHTML += rounds.map(r => {
+      const closed = r.active === false ? ' [종료]' : '';
+      const label = (r.name ? `${r.number}회차 · ${r.name}` : `${r.number}회차`) + closed;
+      return `<option value="${escapeAttr(r._id)}" data-num="${r.number}" data-name="${escapeAttr(r.name || '')}">${escapeHtml(label)}</option>`;
+    }).join('');
+  } catch (_) {
+    sel.innerHTML = '<option value="">회차 불러오기 실패</option>';
+    sel.disabled = true;
+  }
 }
 
 export async function loadStats() {
@@ -93,11 +120,58 @@ export async function loadStats() {
   const opt = sel.options[sel.selectedIndex];
   const courseName  = opt?.dataset.name || '';
   const courseLabel = opt?.textContent || courseName;
+  const courseType  = opt?.dataset.type === 'leadership' ? 'leadership' : 'standard';
   state.lastCourseName  = courseName;
   state.lastCourseLabel = courseLabel;
+  state.lastCourseType  = courseType;
 
+  const roundSel = document.getElementById('stats-round-select');
+
+  // 회차 셀렉트 표시/숨김 및 채우기 — 중견리더만
+  if (courseType === 'leadership') {
+    if (lastPopulatedRoundCourseId !== courseId) {
+      await populateRoundSelect(courseId);
+      lastPopulatedRoundCourseId = courseId;
+    }
+    roundSel.style.display = 'inline-block';
+  } else {
+    roundSel.style.display = 'none';
+    state.lastRoundId = '';
+    state.lastRoundLabel = '';
+    state.lastRoundNumber = 0;
+    state.lastRoundName = '';
+  }
+
+  const roundId = courseType === 'leadership' ? roundSel.value : '';
+
+  // 중견리더인데 회차 미선택 — 안내만 보이고 통계 비움
+  if (courseType === 'leadership' && !roundId) {
+    const ph = document.getElementById('stats-placeholder');
+    ph.style.display = 'block';
+    ph.textContent = '회차를 선택해 주세요.';
+    document.getElementById('stats-loading').style.display = 'none';
+    document.getElementById('stats-area').style.display = 'none';
+    document.getElementById('stats-no-data').style.display = 'none';
+    const nameEl = document.getElementById('stats-course-name');
+    if (nameEl) nameEl.textContent = courseLabel;
+    state.lastRoundId = '';
+    state.lastRoundLabel = '';
+    return;
+  }
+
+  // 라벨 갱신
+  let displayLabel = courseLabel;
+  if (courseType === 'leadership') {
+    const rOpt = roundSel.options[roundSel.selectedIndex];
+    const rLabel = rOpt?.textContent || '';
+    state.lastRoundId = roundId;
+    state.lastRoundLabel = rLabel;
+    state.lastRoundNumber = parseInt(rOpt?.dataset.num) || 0;
+    state.lastRoundName = rOpt?.dataset.name || '';
+    displayLabel = `${courseLabel} · ${rLabel}`;
+  }
   const nameEl = document.getElementById('stats-course-name');
-  if (nameEl) nameEl.textContent = courseLabel;
+  if (nameEl) nameEl.textContent = displayLabel;
 
   document.getElementById('stats-placeholder').style.display = 'none';
   document.getElementById('stats-loading').style.display = 'block';
@@ -105,20 +179,36 @@ export async function loadStats() {
   document.getElementById('stats-no-data').style.display = 'none';
 
   try {
+    // 데이터 경로 분기 — 학생 컬렉션은 과정 단위 그대로(C 모델)
+    const responsesRef = courseType === 'leadership'
+      ? collection(db, 'courses', courseId, 'rounds', roundId, 'responses')
+      : collection(db, 'courses', courseId, 'responses');
+    const instructorsRef = courseType === 'leadership'
+      ? collection(db, 'courses', courseId, 'rounds', roundId, 'instructors')
+      : collection(db, 'courses', courseId, 'instructors');
+
     const [responsesSnap, studentsSnap, instructorsSnap] = await Promise.all([
-      getDocs(collection(db, 'courses', courseId, 'responses')),
+      getDocs(responsesRef),
       getDocs(collection(db, 'courses', courseId, 'students')),
-      getDocs(query(collection(db, 'courses', courseId, 'instructors'), orderBy('createdAt')))
+      getDocs(query(instructorsRef, orderBy('createdAt')))
     ]);
 
     const responses = responsesSnap.docs.map(d => ({
       ...d.data(),
       submittedAt: d.data().submittedAt?.toDate?.()?.toISOString() ?? null
     }));
-    const students = studentsSnap.docs.map(d => ({
-      ...d.data(),
-      completedAt: d.data().completedAt?.toDate?.()?.toISOString() ?? null
-    }));
+    // renderStats는 학생.completed 필드를 본다 — 회차 모드에서는 completedRounds.includes(roundId)로 매핑
+    const students = studentsSnap.docs.map(d => {
+      const data = d.data();
+      const isComplete = courseType === 'leadership'
+        ? Array.isArray(data.completedRounds) && data.completedRounds.includes(roundId)
+        : !!data.completed;
+      return {
+        ...data,
+        completed: isComplete,
+        completedAt: data.completedAt?.toDate?.()?.toISOString() ?? null
+      };
+    });
     const orderedInstructorKeys = instructorsSnap.docs.map(d => {
       const { name, education } = d.data();
       return education ? `${education}__${name}` : name;

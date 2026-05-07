@@ -989,6 +989,33 @@ header h1 { font-size: 1.3rem; font-weight: 700; margin: 0; color: #fff; }
   word-break: break-word;
 }
 
+/* 통계/미리보기 헤더에 인라인으로 들어가는 회차 셀렉트 (중견리더 과정 전용) */
+.round-select-inline {
+  padding: 0.5rem 0.8rem;
+  border: 1.5px solid #c4b5fd;
+  border-radius: 8px;
+  background: #faf5ff;
+  color: #5b21b6;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.round-select-inline:hover:not(:disabled) {
+  background: #f5f3ff;
+  border-color: #a78bfa;
+}
+.round-select-inline:focus {
+  outline: none;
+  border-color: #7c3aed;
+}
+.round-select-inline:disabled {
+  background: #f3f4f6;
+  color: #9ca3af;
+  border-color: #e5e7eb;
+  cursor: not-allowed;
+}
+
 /* 미리보기 안내 카드 */
 .preview-notice-card {
   background: #f0f4ff;

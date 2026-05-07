@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>관리자 - 대전광역시 인재개발원</title>
-  <link href="style.css?v=23" rel="stylesheet">
-  <link href="admin.css?v=23" rel="stylesheet">
+  <link href="style.css?v=24" rel="stylesheet">
+  <link href="admin.css?v=24" rel="stylesheet">
 </head>
 <body>
 
@@ -83,6 +83,9 @@
             <span class="course-header-label">설문 결과</span>
             <span class="course-header-name" id="stats-course-name">-</span>
           </div>
+          <select id="stats-round-select" class="round-select-inline" style="display:none;" onchange="loadStats()" title="회차 선택 (중견리더 양성과정)">
+            <option value="">-- 회차 선택 --</option>
+          </select>
           <button class="icon-refresh-btn" onclick="loadStats()" title="새로고침">새로고침</button>
           <select id="stats-course-select" onchange="loadStats()" hidden>
             <option value="">-- 교육과정을 선택하세요 --</option>
@@ -375,6 +378,6 @@
     </div>
   </div>
 
-  <script type="module" src="admin.js?v=23"></script>
+  <script type="module" src="admin.js?v=24"></script>
 </body>
 </html>
