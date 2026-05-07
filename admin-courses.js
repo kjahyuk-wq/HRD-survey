@@ -6,6 +6,7 @@ import {
 import { state, escapeHtml, escapeAttr } from './admin-utils.js';
 import { loadXLSX } from './admin-excel.js';
 import { loadStudents } from './admin-students.js';
+import { loadRounds } from './admin-rounds.js';
 
 // 종료된 과정 토글 펼침 상태 (탭 재진입 시 유지)
 let closedCoursesExpanded = false;
@@ -111,6 +112,7 @@ export async function loadCourseList() {
         id: d.id, name: data.name, active: isActive,
         startDate: data.startDate || null,
         endDate: data.endDate || null,
+        type: data.type === 'leadership' ? 'leadership' : 'standard',  // 미설정 = standard 호환
       };
     });
     // 진행중 우선, 그 안에서는 시작일 내림차순(최근/임박한 과정이 위)
@@ -138,7 +140,7 @@ export async function loadCourseList() {
     for (const k of Object.keys(courseDataCache)) delete courseDataCache[k];
     courses.forEach((c, idx) => {
       c.idx = idx;
-      courseDataCache[idx] = { id: c.id, name: c.name, startDate: c.startDate, endDate: c.endDate };
+      courseDataCache[idx] = { id: c.id, name: c.name, startDate: c.startDate, endDate: c.endDate, type: c.type };
     });
 
     // 카드 골격 먼저 렌더 (요약 칩은 비동기로 채움)
@@ -191,20 +193,29 @@ export async function loadCourseList() {
   }
 }
 
-function renderCourseItem({ id, name, active, idx, startDate, endDate }) {
+function renderCourseItem({ id, name, active, idx, startDate, endDate, type }) {
   const cid = escapeAttr(id);
   const statusBadge = active
     ? `<span class="course-status active">진행중</span>`
     : `<span class="course-status closed">종료</span>`;
+  const typeBadge = type === 'leadership'
+    ? `<span class="course-type-badge leadership" title="회차별 분반 운영">중견리더</span>`
+    : '';
   const dateLabel = formatDateRange(startDate, endDate);
   const dateHtml = dateLabel
     ? `<span class="course-date-range">${escapeHtml(dateLabel)}</span>`
     : '';
 
+  // 중견리더 과정은 강사가 회차별로 달라지므로 [강사관리] 대신 [회차관리] 노출
+  const isLeadership = type === 'leadership';
+  const middleBtn = isLeadership
+    ? `<button class="panel-toggle-btn round-toggle" id="round-toggle-${idx}" onclick="togglePanel('${cid}', ${idx}, 'rounds')" title="회차별 강사·분반 관리">회차관리</button>`
+    : `<button class="panel-toggle-btn inst-toggle" id="inst-toggle-${idx}" onclick="togglePanel('${cid}', ${idx}, 'inst')">강사관리</button>`;
+
   // 진행중: 운영 액션 + 종료. 종료: 결과 조회 + 재활성/삭제만 (운영 데이터 변경 X)
   const actionBtns = active
     ? `<button class="panel-toggle-btn edit-toggle" id="edit-toggle-${idx}" onclick="togglePanel('${cid}', ${idx}, 'edit')" title="과정명·교육기간 수정">교육과정 수정</button>
-       <button class="panel-toggle-btn inst-toggle" id="inst-toggle-${idx}" onclick="togglePanel('${cid}', ${idx}, 'inst')">강사관리</button>
+       ${middleBtn}
        <button class="panel-toggle-btn stu-toggle" id="stu-toggle-${idx}" onclick="togglePanel('${cid}', ${idx}, 'stu')">수강생관리</button>
        <button class="goto-btn preview-btn" onclick="goToCourseTab('preview', '${cid}')" title="이 과정 설문 미리보기">설문 미리보기</button>
        <button class="goto-btn stats-btn" onclick="goToCourseTab('stats', '${cid}')" title="이 과정 설문 결과">설문 결과</button>
@@ -213,10 +224,13 @@ function renderCourseItem({ id, name, active, idx, startDate, endDate }) {
        <button class="course-reopen-btn" onclick="toggleCourseActive('${cid}', false, this)">재활성</button>
        <button class="delete-btn" onclick="deleteCourse('${cid}', this)" title="과정과 수강생·강사·응답 데이터를 모두 삭제">삭제</button>`;
 
-  // 진행중일 때만 수정/강사/수강생 패널 영역 렌더 (모두 강사·수강생과 동일한 아코디언 패턴)
+  // 진행중일 때만 수정/강사(또는 회차)/수강생 패널 영역 렌더 (강사·수강생과 동일한 아코디언 패턴)
+  const middlePanelHtml = isLeadership
+    ? `<div class="round-panel" id="round-panel-${idx}" style="display:none;"></div>`
+    : `<div class="instructor-panel" id="inst-panel-${idx}" style="display:none;"></div>`;
   const panelsHtml = active
     ? `<div class="course-edit-panel" id="edit-panel-${idx}" style="display:none;">${renderEditPanelHtml(idx, name, startDate, endDate)}</div>
-       <div class="instructor-panel" id="inst-panel-${idx}" style="display:none;"></div>
+       ${middlePanelHtml}
        <div class="student-panel" id="stu-panel-${idx}" style="display:none;">${renderStudentPanelHtml(cid, idx)}</div>`
     : '';
 
@@ -224,7 +238,7 @@ function renderCourseItem({ id, name, active, idx, startDate, endDate }) {
     <div class="course-manage-item ${active ? '' : 'is-closed'}" id="course-item-${idx}">
       <div class="course-manage-row">
         <div class="course-manage-info">
-          <span class="course-manage-name">${escapeHtml(name)} ${statusBadge}</span>
+          <span class="course-manage-name">${escapeHtml(name)} ${statusBadge}${typeBadge}</span>
           ${dateHtml}
           <div class="course-meta" id="course-meta-${idx}">
             <span class="course-meta-skeleton">불러오는 중…</span>
@@ -286,17 +300,20 @@ function renderStudentPanelHtml(cid, idx) {
     <button class="icon-refresh-btn" onclick="loadStudents('${cid}', ${idx})" title="새로고침">새로고침</button>`;
 }
 
-// 한 카드의 수정·강사·수강생 패널 토글 — 한 번에 하나만 열림 (아코디언)
+// 한 카드의 수정·강사(또는 회차)·수강생 패널 토글 — 한 번에 하나만 열림 (아코디언)
+// 단기과정: edit/inst/stu / 중견리더: edit/rounds/stu — 사용 안 하는 패널은 DOM에 없어 panels[m] 가 null
 export async function togglePanel(courseId, idx, mode) {
   const panels = {
-    edit: document.getElementById(`edit-panel-${idx}`),
-    inst: document.getElementById(`inst-panel-${idx}`),
-    stu:  document.getElementById(`stu-panel-${idx}`),
+    edit:   document.getElementById(`edit-panel-${idx}`),
+    inst:   document.getElementById(`inst-panel-${idx}`),
+    stu:    document.getElementById(`stu-panel-${idx}`),
+    rounds: document.getElementById(`round-panel-${idx}`),
   };
   const buttons = {
-    edit: document.getElementById(`edit-toggle-${idx}`),
-    inst: document.getElementById(`inst-toggle-${idx}`),
-    stu:  document.getElementById(`stu-toggle-${idx}`),
+    edit:   document.getElementById(`edit-toggle-${idx}`),
+    inst:   document.getElementById(`inst-toggle-${idx}`),
+    stu:    document.getElementById(`stu-toggle-${idx}`),
+    rounds: document.getElementById(`round-toggle-${idx}`),
   };
   const target = panels[mode];
   if (!target) return;
@@ -320,9 +337,10 @@ export async function togglePanel(courseId, idx, mode) {
   target.style.display = 'block';
   buttons[mode]?.classList.add('active');
 
-  if (mode === 'inst')      await loadInstructors(courseId, idx);
-  else if (mode === 'stu')  await loadStudents(courseId, idx);
-  else if (mode === 'edit') document.getElementById(`edit-course-name-${idx}`)?.focus();
+  if (mode === 'inst')        await loadInstructors(courseId, idx);
+  else if (mode === 'stu')    await loadStudents(courseId, idx);
+  else if (mode === 'rounds') await loadRounds(courseId, idx);
+  else if (mode === 'edit')   document.getElementById(`edit-course-name-${idx}`)?.focus();
 }
 
 // ── 과정 인라인 수정 ──────────────────────────────
@@ -406,6 +424,8 @@ export async function addCourse() {
   const name      = input.value.trim();
   const startDate = readDateFields('new-course-start');
   const endDate   = readDateFields('new-course-end');
+  const typeInput = document.querySelector('input[name="new-course-type"]:checked');
+  const type      = typeInput?.value === 'leadership' ? 'leadership' : 'standard';
 
   if (!name) { input.focus(); return; }
   if (!startDate) {
@@ -428,11 +448,14 @@ export async function addCourse() {
   btn.disabled = true; btn.textContent = '추가 중...';
 
   try {
-    await addDoc(collection(db, 'courses'), { name, active: true, startDate, endDate });
+    await addDoc(collection(db, 'courses'), { name, active: true, startDate, endDate, type });
     input.value = '';
     ['new-course-start-y','new-course-start-m','new-course-start-d',
      'new-course-end-y','new-course-end-m','new-course-end-d']
       .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    // 타입 라디오는 단기과정으로 리셋
+    const stdRadio = document.querySelector('input[name="new-course-type"][value="standard"]');
+    if (stdRadio) stdRadio.checked = true;
     await loadCourseList();
   } catch (e) { alert('추가 중 오류가 발생했습니다.'); }
   finally { btn.disabled = false; btn.textContent = '+ 추가'; }
@@ -444,7 +467,7 @@ export async function toggleCourseActive(courseId, currentActive, btnEl) {
   // 카드 헤더에서 과정명 추출 (확인 안내문에 표시)
   const item = btnEl.closest('.course-manage-item');
   const nameEl = item?.querySelector('.course-manage-name');
-  const courseLabel = nameEl ? (nameEl.textContent.replace('진행중', '').replace('종료', '').trim()) : '이 과정';
+  const courseLabel = nameEl ? (nameEl.textContent.replace('진행중', '').replace('종료', '').replace('중견리더', '').trim()) : '이 과정';
   const msg = newActive
     ? `"${courseLabel}" 과정을 다시 활성 상태로 전환하시겠습니까?\n수강생들이 다시 로그인할 수 있게 됩니다.`
     : `"${courseLabel}" 과정을 종료 처리하시겠습니까?\n\n• 수강생 로그인 차단(이름·교번 중복 충돌 방지)\n• 통계·응답 데이터는 그대로 보관됨\n• 언제든 재활성 가능`;
@@ -467,7 +490,7 @@ export async function toggleCourseActive(courseId, currentActive, btnEl) {
 export async function deleteCourse(courseId, btnEl) {
   const item = btnEl.closest('.course-manage-item');
   const nameEl = item?.querySelector('.course-manage-name');
-  const courseLabel = nameEl ? nameEl.textContent.replace('종료', '').trim() : '이 과정';
+  const courseLabel = nameEl ? nameEl.textContent.replace('종료', '').replace('중견리더', '').trim() : '이 과정';
   const msg = `"${courseLabel}" 과정을 영구 삭제하시겠습니까?\n\n` +
     `• 수강생·강사·설문 응답 데이터가 모두 삭제됩니다.\n` +
     `• 이 작업은 되돌릴 수 없습니다.`;
@@ -480,6 +503,7 @@ export async function deleteCourse(courseId, btnEl) {
     await deleteSubcollection(courseId, 'responses');
     await deleteSubcollection(courseId, 'attendance');
     await deleteSubcollection(courseId, 'attendanceConfig');
+    await deleteRoundsCascade(courseId);  // 중견리더 과정의 회차 + 회차 내부 강사/응답 정리
     await deleteDoc(doc(db, 'courses', courseId));
     await loadCourseList();
   } catch (e) {
@@ -491,6 +515,22 @@ export async function deleteCourse(courseId, btnEl) {
 async function deleteSubcollection(courseId, subcollectionName) {
   const snap = await getDocs(collection(db, 'courses', courseId, subcollectionName));
   await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+}
+
+// 회차 + 회차 하위 instructors/responses 일괄 삭제 (중견리더 과정 영구삭제용)
+async function deleteRoundsCascade(courseId) {
+  const roundsSnap = await getDocs(collection(db, 'courses', courseId, 'rounds'));
+  for (const rd of roundsSnap.docs) {
+    const [instSnap, respSnap] = await Promise.all([
+      getDocs(collection(db, 'courses', courseId, 'rounds', rd.id, 'instructors')),
+      getDocs(collection(db, 'courses', courseId, 'rounds', rd.id, 'responses')),
+    ]);
+    await Promise.all([
+      ...instSnap.docs.map(d => deleteDoc(d.ref)),
+      ...respSnap.docs.map(d => deleteDoc(d.ref)),
+    ]);
+    await deleteDoc(rd.ref);
+  }
 }
 
 // ── 강사 엑셀 일괄 등록 ──────────────────────────────

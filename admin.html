@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>관리자 - 대전광역시 인재개발원</title>
-  <link href="style.css?v=22" rel="stylesheet">
-  <link href="admin.css?v=22" rel="stylesheet">
+  <link href="style.css?v=23" rel="stylesheet">
+  <link href="admin.css?v=23" rel="stylesheet">
 </head>
 <body>
 
@@ -50,6 +50,18 @@
               <!-- 날짜 입력 필드는 admin-courses.js의 renderDateFields/wireDateFields로 채움 -->
             </div>
             <button class="add-btn" onclick="addCourse()">+ 추가</button>
+          </div>
+          <div class="course-type-row">
+            <span class="course-type-row-label">과정 유형</span>
+            <label class="course-type-option">
+              <input type="radio" name="new-course-type" value="standard" checked>
+              <span>단기과정</span>
+            </label>
+            <label class="course-type-option">
+              <input type="radio" name="new-course-type" value="leadership">
+              <span>중견리더 양성과정</span>
+              <em class="course-type-hint">회차별 분반 운영</em>
+            </label>
           </div>
         </div>
 
@@ -363,6 +375,6 @@
     </div>
   </div>
 
-  <script type="module" src="admin.js?v=22"></script>
+  <script type="module" src="admin.js?v=23"></script>
 </body>
 </html>

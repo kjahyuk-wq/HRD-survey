@@ -94,6 +94,24 @@ service cloud.firestore {
           || (isAuthenticated() && docId.matches('reset_.*'));
       }
 
+      // 회차 (중견리더 양성과정 전용): 회차 CRUD는 관리자, 읽기는 인증 사용자 전체
+      match /rounds/{roundId} {
+        allow read: if isAuthenticated();
+        allow write: if isAdmin();
+
+        // 회차별 강사: 설문 문항 생성에 필요 → 인증 사용자 read 허용, 쓰기는 관리자
+        match /instructors/{instructorId} {
+          allow read: if isAuthenticated();
+          allow write: if isAdmin();
+        }
+
+        // 회차별 응답: 관리자만 read/update/delete, 익명 교육생 create는 Phase 4에서 검증 추가 예정
+        match /responses/{responseId} {
+          allow read, update, delete: if isAdmin();
+          // create 규칙은 회차별 설문 제출 구현(Phase 4) 시 추가
+        }
+      }
+
       // 출석 기록:
       //   - 관리자: 임의 쓰기/수정/삭제 (수기 출석 입력)
       //   - 익명(키오스크): used 처리된 qr_token을 참조하는 create만 허용

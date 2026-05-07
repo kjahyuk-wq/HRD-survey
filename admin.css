@@ -568,6 +568,63 @@ header h1 { font-size: 1.3rem; font-weight: 700; margin: 0; color: #fff; }
 .course-status.active { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
 .course-status.closed { background: #f3f4f6; color: #6b7280; border: 1px solid #d1d5db; }
 
+/* 과정 유형 뱃지 (중견리더 양성과정 등 장기 분반 운영 과정 식별) */
+.course-type-badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+.course-type-badge.leadership {
+  background: #ede9fe;
+  color: #6d28d9;
+  border: 1px solid #c4b5fd;
+}
+
+/* 새 과정 등록 폼의 유형 선택 라디오 */
+.course-type-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 0.7rem;
+  padding-top: 0.7rem;
+  border-top: 1px dashed #e5e7eb;
+  flex-wrap: wrap;
+}
+.course-type-row-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #475569;
+  letter-spacing: 0.2px;
+}
+.course-type-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  font-size: 0.88rem;
+  color: #1f2937;
+  user-select: none;
+}
+.course-type-option input[type="radio"] {
+  accent-color: #0066cc;
+  cursor: pointer;
+  margin: 0;
+}
+.course-type-option .course-type-hint {
+  font-size: 0.72rem;
+  color: #6d28d9;
+  font-style: normal;
+  background: #ede9fe;
+  border: 1px solid #c4b5fd;
+  padding: 1px 6px;
+  border-radius: 8px;
+  margin-left: 2px;
+}
+
 .course-manage-item.is-closed .course-manage-name { color: #888; }
 .course-manage-item.is-closed { opacity: 0.85; }
 
@@ -677,6 +734,17 @@ header h1 { font-size: 1.3rem; font-weight: 700; margin: 0; color: #fff; }
 .panel-toggle-btn.edit-toggle.active {
   background: #c2410c;
   border-color: #c2410c;
+  color: #fff;
+}
+.panel-toggle-btn.round-toggle {
+  background: #f5f3ff;
+  border-color: #c4b5fd;
+  color: #6d28d9;
+}
+.panel-toggle-btn.round-toggle:hover { background: #ede9fe; }
+.panel-toggle-btn.round-toggle.active {
+  background: #6d28d9;
+  border-color: #6d28d9;
   color: #fff;
 }
 
@@ -1535,5 +1603,216 @@ tr:hover td { background: #f8faff; }
   header h1 { font-size: 0.98rem; }
   .org-name { font-size: 0.66rem; }
   .logo-icon { font-size: 1.8rem; }
+}
+
+/* ── 회차관리 패널 (중견리더 양성과정 전용) ───────────────────────────── */
+.round-panel {
+  margin-top: 0.7rem;
+  background: #faf8ff;
+  border: 1px solid #ddd6fe;
+  border-radius: 10px;
+  padding: 0.9rem 1rem;
+}
+.round-loading,
+.round-empty {
+  padding: 0.8rem 0.4rem;
+  color: #6b7280;
+  font-size: 0.88rem;
+  text-align: center;
+}
+
+.round-add-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  background: #fff;
+  border: 1px solid #ede9fe;
+  border-radius: 9px;
+  padding: 0.7rem 0.8rem;
+  margin-bottom: 0.8rem;
+}
+.round-add-fields {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.round-add-field,
+.round-edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+.round-add-field > span,
+.round-edit-field > span {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #6d28d9;
+  letter-spacing: 0.2px;
+}
+.round-num-field input[type="number"] {
+  width: 4.2rem;
+  padding: 0.45rem 0.6rem;
+  border: 1.5px solid #c4b5fd;
+  border-radius: 8px;
+  font-size: 0.92rem;
+  font-family: inherit;
+  outline: none;
+  background: #fff;
+  text-align: center;
+}
+.round-num-field input[type="number"]:focus { border-color: #6d28d9; }
+.round-name-field {
+  flex: 1 1 180px;
+}
+.round-name-field input[type="text"] {
+  padding: 0.45rem 0.7rem;
+  border: 1.5px solid #c4b5fd;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  outline: none;
+  background: #fff;
+  width: 100%;
+}
+.round-name-field input[type="text"]:focus { border-color: #6d28d9; }
+.round-date-pair {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.round-date-field .course-date-fields {
+  border-color: #c4b5fd;
+  padding: 0.35rem 0.55rem;
+}
+.round-date-field .course-date-fields:focus-within { border-color: #6d28d9; }
+.round-add-btn {
+  padding: 0.5rem 0.9rem;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.round-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.round-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  background: #fff;
+  border: 1px solid #ede9fe;
+  border-radius: 9px;
+  padding: 0.65rem 0.85rem;
+  flex-wrap: wrap;
+}
+.round-row.is-closed { background: #f8fafc; opacity: 0.85; }
+.round-row.is-editing {
+  background: #faf5ff;
+  border-color: #c4b5fd;
+  padding: 0.85rem 0.95rem;
+}
+.round-row-info {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.round-num {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #5b21b6;
+}
+.round-name {
+  font-size: 0.88rem;
+  color: #1f2937;
+  font-weight: 500;
+}
+.round-date {
+  font-size: 0.82rem;
+  color: #64748b;
+  font-weight: 500;
+}
+.round-status {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 9px;
+}
+.round-status.active { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
+.round-status.closed { background: #f3f4f6; color: #6b7280; border: 1px solid #d1d5db; }
+
+.round-row-actions {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+.round-edit-btn,
+.round-toggle-btn,
+.round-del-btn {
+  padding: 0.32rem 0.7rem;
+  border-radius: 7px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid;
+  width: auto;
+  box-shadow: none;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.round-edit-btn {
+  background: #f5f3ff;
+  border-color: #c4b5fd;
+  color: #6d28d9;
+}
+.round-edit-btn:hover { background: #ede9fe; }
+.round-toggle-btn.closer {
+  background: #fff7ed;
+  border-color: #fdba74;
+  color: #c2410c;
+}
+.round-toggle-btn.closer:hover { background: #ffedd5; }
+.round-toggle-btn.reopen {
+  background: #ecfdf5;
+  border-color: #6ee7b7;
+  color: #047857;
+}
+.round-toggle-btn.reopen:hover { background: #d1fae5; }
+
+.round-edit-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+.round-edit-fields {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.round-edit-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+@media (max-width: 600px) {
+  .round-add-form { padding: 0.6rem 0.7rem; }
+  .round-add-fields { gap: 0.5rem; }
+  .round-num-field input[type="number"] { width: 3.6rem; }
+  .round-row { padding: 0.55rem 0.7rem; }
+  .round-num { font-size: 0.88rem; }
+  .round-name { font-size: 0.82rem; }
+  .round-date { font-size: 0.76rem; }
+  .round-edit-btn,
+  .round-toggle-btn,
+  .round-del-btn { padding: 0.28rem 0.6rem; font-size: 0.72rem; }
 }
 

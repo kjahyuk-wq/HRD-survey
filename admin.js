@@ -7,6 +7,7 @@ import { loadStudents, addStudent, deleteStudent, toggleSelectAll, updateBulkDel
 import { populateStatsSelect, loadStats } from './admin-stats.js';
 import { exportStatsExcel, exportResultsExcel } from './admin-excel.js';
 import { populatePreviewSelect, loadPreviewInstructors } from './admin-preview.js';
+import { addRound, startEditRound, saveEditRound, cancelEditRound, toggleRoundActive, deleteRound } from './admin-rounds.js';
 
 // ── 탭 전환 ──────────────────────────────
 function setActiveTab(tab) {
@@ -121,3 +122,9 @@ window.loadStats = loadStats;
 window.exportStatsExcel = exportStatsExcel;
 window.exportResultsExcel = exportResultsExcel;
 window.loadPreviewInstructors = loadPreviewInstructors;
+window.addRound = addRound;
+window.startEditRound = startEditRound;
+window.saveEditRound = saveEditRound;
+window.cancelEditRound = cancelEditRound;
+window.toggleRoundActive = toggleRoundActive;
+window.deleteRound = deleteRound;
