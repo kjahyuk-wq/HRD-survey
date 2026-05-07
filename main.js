@@ -1,11 +1,17 @@
 import { db, auth } from './firebase-config.js';
 import {
-  collectionGroup, collection, query, where, orderBy, getDocs,
-  addDoc, updateDoc, getDoc, serverTimestamp
+  collectionGroup, collection, doc, query, where, orderBy, getDocs,
+  addDoc, updateDoc, getDoc, serverTimestamp, arrayUnion
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { signInAnonymously } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
 
-let currentUser = { name: '', empNo: '', course: '', courseId: '', studentRef: null, instructors: [] };
+// type === 'leadership' 일 때 roundId/roundNumber/roundName이 채워지고 instructors는 회차별 강사로 교체됨.
+let currentUser = {
+  name: '', empNo: '', course: '', courseId: '', studentRef: null,
+  type: 'standard', instructors: [],
+  roundId: '', roundNumber: 0, roundName: '',
+  completedRounds: []
+};
 
 async function doLogin() {
   const name = document.getElementById('input-name').value.trim();
@@ -55,31 +61,52 @@ async function doLogin() {
     const courseDoc = activeMatches[0].courseDoc;
 
     const studentData = found.data();
-    if (studentData.completed) {
+    const matchCourseId = found.ref.parent.parent.id;
+    const matchCourseData = courseDoc.data();
+    const matchCourseName = matchCourseData.name;
+    const courseType = matchCourseData.type === 'leadership' ? 'leadership' : 'standard';
+
+    // 단기과정: completed 플래그로 한 번만 차단
+    // 중견리더: 회차 선택 화면에서 회차별로 disabled 처리 (모든 회차 완료 시 안내)
+    if (courseType === 'standard' && studentData.completed) {
       showLoginError('이미 설문에 참여하셨습니다.\n감사합니다!');
       reset(); return;
     }
 
-    const matchCourseId = found.ref.parent.parent.id;
-    const matchCourseName = courseDoc.data().name;
-
-    const instrSnap = await getDocs(query(collection(db, 'courses', matchCourseId, 'instructors'), orderBy('createdAt')));
-    const instructors = instrSnap.docs.map(d => d.data());
-
-    currentUser = {
-      name, empNo,
-      course: matchCourseName,
-      courseId: matchCourseId,
-      studentRef: found.ref,
-      instructors
-    };
-
     document.getElementById('page-login').style.display = 'none';
     document.getElementById('page-survey').style.display = 'block';
-    document.getElementById('confirm-greeting').textContent = `${name}님, 안녕하세요!`;
-    document.getElementById('confirm-course-name').textContent = matchCourseName;
-    updateSurveyMeta(instructors.length);
-    document.getElementById('screen-confirm').style.display = 'block';
+
+    if (courseType === 'leadership') {
+      currentUser = {
+        name, empNo,
+        course: matchCourseName,
+        courseId: matchCourseId,
+        studentRef: found.ref,
+        type: 'leadership',
+        instructors: [],
+        roundId: '', roundNumber: 0, roundName: '',
+        completedRounds: Array.isArray(studentData.completedRounds) ? studentData.completedRounds : []
+      };
+      await showRoundSelect();
+    } else {
+      const instrSnap = await getDocs(query(collection(db, 'courses', matchCourseId, 'instructors'), orderBy('createdAt')));
+      const instructors = instrSnap.docs.map(d => d.data());
+      currentUser = {
+        name, empNo,
+        course: matchCourseName,
+        courseId: matchCourseId,
+        studentRef: found.ref,
+        type: 'standard',
+        instructors,
+        roundId: '', roundNumber: 0, roundName: '',
+        completedRounds: []
+      };
+      document.getElementById('confirm-greeting').textContent = `${name}님, 안녕하세요!`;
+      document.getElementById('confirm-course-name').textContent = matchCourseName;
+      document.getElementById('confirm-round-line').style.display = 'none';
+      updateSurveyMeta(instructors.length);
+      document.getElementById('screen-confirm').style.display = 'block';
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
   } catch (e) {
@@ -91,6 +118,103 @@ async function doLogin() {
   function reset() {
     btn.disabled = false;
     document.getElementById('login-btn-text').textContent = '확인하기';
+  }
+}
+
+// 중견리더 과정: 활성 회차를 fetch해서 회차 선택 카드를 렌더한다.
+// 학생의 completedRounds에 포함된 회차는 disabled로 표시 (이미 응답 완료).
+async function showRoundSelect() {
+  document.getElementById('round-select-greeting').textContent = `${currentUser.name}님, 안녕하세요!`;
+  document.getElementById('round-select-course-name').textContent = currentUser.course;
+  document.getElementById('round-select-list').innerHTML = '<div class="round-select-loading">회차 목록을 불러오는 중...</div>';
+  document.getElementById('round-select-empty').style.display = 'none';
+  document.getElementById('screen-round-select').style.display = 'block';
+
+  try {
+    const snap = await getDocs(collection(db, 'courses', currentUser.courseId, 'rounds'));
+    const rounds = snap.docs
+      .map(d => ({ ...d.data(), _id: d.id }))
+      .filter(r => r.active !== false);
+    rounds.sort((a, b) => (a.number ?? 0) - (b.number ?? 0));
+
+    const list = document.getElementById('round-select-list');
+    if (rounds.length === 0) {
+      list.innerHTML = '';
+      document.getElementById('round-select-empty').style.display = 'block';
+      return;
+    }
+
+    const completed = new Set(currentUser.completedRounds || []);
+    const allDone = rounds.every(r => completed.has(r._id));
+
+    list.innerHTML = rounds.map(r => {
+      const done = completed.has(r._id);
+      const dateLabel = (r.startDate && r.endDate)
+        ? `${String(r.startDate).replaceAll('-', '.')} ~ ${String(r.endDate).replaceAll('-', '.')}`
+        : '';
+      const nameLine = r.name ? `<span class="rs-name">${escapeHtml(r.name)}</span>` : '';
+      const dateLine = dateLabel ? `<span class="rs-date">${escapeHtml(dateLabel)}</span>` : '';
+      const status = done ? '<span class="rs-done">완료</span>' : '';
+      return `
+        <button class="round-select-btn ${done ? 'is-done' : ''}" ${done ? 'disabled' : ''}
+                onclick="selectRound('${escapeAttr(r._id)}')">
+          <span class="rs-num">${r.number}회차</span>
+          ${nameLine}
+          ${dateLine}
+          ${status}
+        </button>`;
+    }).join('');
+
+    if (allDone) {
+      document.getElementById('round-select-empty').textContent = '모든 활성 회차에 응답을 완료하셨습니다. 감사합니다!';
+      document.getElementById('round-select-empty').style.display = 'block';
+    }
+  } catch (e) {
+    console.error(e);
+    document.getElementById('round-select-list').innerHTML = '<div class="round-select-loading">회차 목록을 불러오지 못했습니다.</div>';
+  }
+}
+
+// 회차 선택 시: 회차 강사를 fetch하고 confirm 화면으로 진입.
+async function selectRound(roundId) {
+  const list = document.getElementById('round-select-list');
+  const buttons = list.querySelectorAll('button');
+  buttons.forEach(b => b.disabled = true);
+
+  try {
+    // 회차 문서 + 회차 강사 동시 fetch
+    const [roundDocSnap, instSnap] = await Promise.all([
+      getDoc(doc(db, 'courses', currentUser.courseId, 'rounds', roundId)),
+      getDocs(query(collection(db, 'courses', currentUser.courseId, 'rounds', roundId, 'instructors'), orderBy('createdAt')))
+    ]);
+    if (!roundDocSnap.exists()) {
+      alert('선택하신 회차를 찾을 수 없습니다. 다시 시도해 주세요.');
+      buttons.forEach(b => { if (!b.classList.contains('is-done')) b.disabled = false; });
+      return;
+    }
+    const roundData = roundDocSnap.data();
+    const instructors = instSnap.docs.map(d => d.data());
+
+    currentUser.roundId = roundId;
+    currentUser.roundNumber = roundData.number;
+    currentUser.roundName = roundData.name || '';
+    currentUser.instructors = instructors;
+
+    document.getElementById('screen-round-select').style.display = 'none';
+    document.getElementById('confirm-greeting').textContent = `${currentUser.name}님, 안녕하세요!`;
+    document.getElementById('confirm-course-name').textContent = currentUser.course;
+    const roundLine = document.getElementById('confirm-round-line');
+    roundLine.textContent = currentUser.roundName
+      ? `${currentUser.roundNumber}회차 · ${currentUser.roundName}`
+      : `${currentUser.roundNumber}회차`;
+    roundLine.style.display = 'block';
+    updateSurveyMeta(instructors.length);
+    document.getElementById('screen-confirm').style.display = 'block';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  } catch (e) {
+    console.error(e);
+    alert('회차 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.');
+    buttons.forEach(b => { if (!b.classList.contains('is-done')) b.disabled = false; });
   }
 }
 
@@ -200,7 +324,8 @@ async function submitSurvey() {
   btn.disabled = true;
 
   try {
-    await addDoc(collection(db, 'courses', currentUser.courseId, 'responses'), {
+    // 응답 본문 — 단기/회차 공통 필드
+    const respBase = {
       name: currentUser.name, empNo: currentUser.empNo, course: currentUser.course,
       q1: answers[0], q2: answers[1], q3: answers[2], q4: answers[3], q5: answers[4],
       q6: answers[5], q7: answers[6], q8: answers[7], q9: answers[8],
@@ -210,12 +335,26 @@ async function submitSurvey() {
       instructors: instructorScores,
       comment1, comment2, comment3,
       submittedAt: serverTimestamp()
-    });
+    };
 
-    await updateDoc(currentUser.studentRef, {
-      completed: true,
-      completedAt: serverTimestamp()
-    });
+    if (currentUser.type === 'leadership') {
+      // 회차 응답: rounds/{rid}/responses 에 저장 + 회차 정보 박제
+      await addDoc(
+        collection(db, 'courses', currentUser.courseId, 'rounds', currentUser.roundId, 'responses'),
+        { ...respBase, roundNumber: currentUser.roundNumber, roundName: currentUser.roundName }
+      );
+      await updateDoc(currentUser.studentRef, {
+        completedRounds: arrayUnion(currentUser.roundId),
+        completedAt: serverTimestamp()
+      });
+    } else {
+      // 단기 응답: 기존 그대로
+      await addDoc(collection(db, 'courses', currentUser.courseId, 'responses'), respBase);
+      await updateDoc(currentUser.studentRef, {
+        completed: true,
+        completedAt: serverTimestamp()
+      });
+    }
 
     document.getElementById('screen-survey').style.display = 'none';
     document.getElementById('screen-result').style.display = 'block';
@@ -232,6 +371,11 @@ function escapeHtml(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+function escapeAttr(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
 window.doLogin = doLogin;
 window.startSurvey = startSurvey;
 window.submitSurvey = submitSurvey;
+window.selectRound = selectRound;
