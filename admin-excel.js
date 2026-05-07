@@ -2,13 +2,15 @@ import { state, Q_LABELS, DEMO_QUESTIONS, escapeHtml } from './admin-utils.js';
 import { computeStats } from './admin-stats.js';
 
 // ── 라벨 헬퍼 ──────────────────────────────
-// state.lastRoundLabel은 중견리더 과정에서 회차 선택 시에만 채워짐. 단기는 빈 문자열.
+// state.lastRoundLabel/lastGroupLabel은 중견리더 과정에서만 채워짐. 단기는 빈 문자열.
 function getExportCourseLabel() {
   return state.lastCourseLabel || state.lastCourseName || '';
 }
 function getExportFullLabel() {
   const c = getExportCourseLabel();
-  return state.lastRoundLabel ? `${c} · ${state.lastRoundLabel}` : c;
+  let label = state.lastRoundLabel ? `${c} · ${state.lastRoundLabel}` : c;
+  if (state.lastGroupLabel) label += ` · ${state.lastGroupLabel}`;
+  return label;
 }
 
 // ── XLSX 동적 로드 ──────────────────────────────
@@ -121,9 +123,11 @@ export async function exportResultsExcel() {
 
   const courseLabelForCell = getExportCourseLabel();
   const roundLabelForCell  = state.lastRoundLabel || '';
+  const groupLabelForCell  = state.lastGroupLabel || '';
   const statsData = [
     ['교육과정', courseLabelForCell, '', '', '', '', '', ''],
     ...(roundLabelForCell ? [['회차', roundLabelForCell, '', '', '', '', '', '']] : []),
+    ...(groupLabelForCell ? [['분반', groupLabelForCell, '', '', '', '', '', '']] : []),
     ['응답자 수', n + '명', '', '', '', '', '', ''],
     ['작성일', new Date().toLocaleDateString('ko-KR'), '', '', '', '', '', ''],
     ['전체 평균 (Q1~Q9 + 강사)', Number(overallAvg.toFixed(2)), '', '', '', '', '', ''],
@@ -167,6 +171,7 @@ export async function exportResultsExcel() {
   const demoData = [
     ['교육과정', courseLabelForCell],
     ...(roundLabelForCell ? [['회차', roundLabelForCell]] : []),
+    ...(groupLabelForCell ? [['분반', groupLabelForCell]] : []),
     ['응답자 수', n + '명'],
     []
   ];
@@ -189,6 +194,7 @@ export async function exportResultsExcel() {
   const commentData = [
     ['교육과정', courseLabelForCell],
     ...(roundLabelForCell ? [['회차', roundLabelForCell]] : []),
+    ...(groupLabelForCell ? [['분반', groupLabelForCell]] : []),
     ['응답자 수', n + '명'],
     [],
     ['순번', 'Q10. 기타 편의시설 건의사항', '소감 및 건의사항', '만족도 평가 개선 필요 부분', '전반적인 과목 및 강사 건의'],

@@ -38,7 +38,10 @@ export async function populatePreviewSelect() {
 }
 
 // 미리보기용 회차 셀렉트 — stats 모듈과 동일 패턴 (캐시 키로 같은 과정 재선택 시 재요청 회피)
+// 회차 데이터(특히 groups)도 캐시해 분반 셀렉트 갱신 시 추가 fetch 없이 처리.
 let lastPopulatedPreviewRoundCourseId = null;
+const previewRoundsByCourse = {};
+
 async function populatePreviewRoundSelect(courseId) {
   const sel = document.getElementById('preview-round-select');
   sel.disabled = false;
@@ -47,6 +50,7 @@ async function populatePreviewRoundSelect(courseId) {
     const snap = await getDocs(collection(db, 'courses', courseId, 'rounds'));
     const rounds = snap.docs.map(d => ({ ...d.data(), _id: d.id }));
     rounds.sort((a, b) => (a.number ?? 0) - (b.number ?? 0));
+    previewRoundsByCourse[courseId] = rounds;
     if (rounds.length === 0) {
       sel.innerHTML = '<option value="">등록된 회차 없음</option>';
       sel.disabled = true;
@@ -63,6 +67,24 @@ async function populatePreviewRoundSelect(courseId) {
   }
 }
 
+function populatePreviewGroupSelect(courseId, roundId) {
+  const sel = document.getElementById('preview-group-select');
+  if (!sel) return;
+  const round = (previewRoundsByCourse[courseId] || []).find(r => r._id === roundId);
+  const groups = Array.isArray(round?.groups) ? round.groups : [];
+  if (groups.length === 0) {
+    sel.style.display = 'none';
+    sel.value = '';
+    sel.innerHTML = '<option value="">(전체)</option>';
+    return;
+  }
+  const prev = sel.value;
+  sel.style.display = 'inline-block';
+  sel.innerHTML = '<option value="">(전체)</option>' +
+    groups.map(g => `<option value="${escapeAttr(g)}">${escapeHtml(g)}</option>`).join('');
+  if (prev && groups.includes(prev)) sel.value = prev;
+}
+
 export async function loadPreviewInstructors() {
   const sel = document.getElementById('preview-course-select');
   const courseId = sel?.value;
@@ -72,11 +94,13 @@ export async function loadPreviewInstructors() {
   const badge = document.getElementById('preview-course-badge');
   const container = document.getElementById('preview-instructor-questions');
   const roundSel = document.getElementById('preview-round-select');
+  const groupSel = document.getElementById('preview-group-select');
 
   if (!courseId) {
     badge.textContent = '교육과정을 선택하세요';
     container.innerHTML = '';
     roundSel.style.display = 'none';
+    if (groupSel) { groupSel.style.display = 'none'; groupSel.value = ''; }
     return;
   }
 
@@ -89,6 +113,7 @@ export async function loadPreviewInstructors() {
     roundSel.style.display = 'inline-block';
   } else {
     roundSel.style.display = 'none';
+    if (groupSel) { groupSel.style.display = 'none'; groupSel.value = ''; }
   }
 
   const roundId = courseType === 'leadership' ? roundSel.value : '';
@@ -97,14 +122,22 @@ export async function loadPreviewInstructors() {
   if (courseType === 'leadership' && !roundId) {
     badge.textContent = courseLabel;
     container.innerHTML = '<div class="no-data" style="margin:0.5rem 0;">회차를 선택해 주세요.</div>';
+    if (groupSel) { groupSel.style.display = 'none'; groupSel.value = ''; }
     return;
   }
 
-  // 라벨 갱신 (중견리더는 회차 라벨도 함께)
+  // 회차 선택됐으면 분반 셀렉트 갱신
+  if (courseType === 'leadership') {
+    populatePreviewGroupSelect(courseId, roundId);
+  }
+  const groupName = (courseType === 'leadership' && groupSel?.style.display !== 'none') ? (groupSel?.value || '') : '';
+
+  // 라벨 갱신 (중견리더는 회차 + 분반)
   let displayLabel = courseLabel;
   if (courseType === 'leadership') {
     const rOpt = roundSel.options[roundSel.selectedIndex];
     displayLabel = `${courseLabel} · ${rOpt?.textContent || ''}`;
+    if (groupName) displayLabel += ` · ${groupName}`;
   }
   badge.textContent = displayLabel;
 
@@ -114,7 +147,16 @@ export async function loadPreviewInstructors() {
       ? collection(db, 'courses', courseId, 'rounds', roundId, 'instructors')
       : collection(db, 'courses', courseId, 'instructors');
     const instSnap = await getDocs(query(instructorsRef, orderBy('createdAt')));
-    const instructors = instSnap.docs.map(d => d.data());
+    let instructors = instSnap.docs.map(d => d.data());
+
+    // 분반 선택 시 강사 필터 (학생 흐름 selectRound와 동일 로직)
+    if (groupName) {
+      instructors = instructors.filter(inst => {
+        const igs = Array.isArray(inst.groups) ? inst.groups : [];
+        if (igs.length === 0) return true;  // 구 데이터 호환
+        return igs.includes(groupName) || igs.includes('common');
+      });
+    }
 
     if (instructors.length === 0) {
       container.innerHTML = '<div class="no-data" style="margin:0.5rem 0;">등록된 강사가 없습니다.</div>';

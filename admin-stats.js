@@ -88,7 +88,10 @@ export async function populateStatsSelect() {
 }
 
 // 회차 셀렉트 — 중견리더 과정 선택 시에만 채움/노출. 캐시 키로 같은 과정 재호출 시 재요청 회피.
+// 회차 데이터(특히 groups)를 캐시해두면 분반 셀렉트 갱신 시 추가 fetch 없이 처리 가능.
 let lastPopulatedRoundCourseId = null;
+const roundsByCourse = {};  // courseId → [{...round, _id}]
+
 async function populateRoundSelect(courseId) {
   const sel = document.getElementById('stats-round-select');
   sel.disabled = false;
@@ -97,6 +100,7 @@ async function populateRoundSelect(courseId) {
     const snap = await getDocs(collection(db, 'courses', courseId, 'rounds'));
     const rounds = snap.docs.map(d => ({ ...d.data(), _id: d.id }));
     rounds.sort((a, b) => (a.number ?? 0) - (b.number ?? 0));
+    roundsByCourse[courseId] = rounds;
     if (rounds.length === 0) {
       sel.innerHTML = '<option value="">등록된 회차 없음</option>';
       sel.disabled = true;
@@ -113,6 +117,26 @@ async function populateRoundSelect(courseId) {
   }
 }
 
+// 분반 셀렉트 채움 — 회차 데이터의 groups 기반. 분반 0개면 셀렉트 숨김.
+function populateGroupSelect(courseId, roundId) {
+  const sel = document.getElementById('stats-group-select');
+  if (!sel) return;
+  const round = (roundsByCourse[courseId] || []).find(r => r._id === roundId);
+  const groups = Array.isArray(round?.groups) ? round.groups : [];
+  if (groups.length === 0) {
+    sel.style.display = 'none';
+    sel.value = '';
+    sel.innerHTML = '<option value="">(전체)</option>';
+    return;
+  }
+  // 기존 선택값 보존 (회차 변경해도 같은 분반 이름이면 유지)
+  const prev = sel.value;
+  sel.style.display = 'inline-block';
+  sel.innerHTML = '<option value="">(전체)</option>' +
+    groups.map(g => `<option value="${escapeAttr(g)}">${escapeHtml(g)}</option>`).join('');
+  if (prev && groups.includes(prev)) sel.value = prev;
+}
+
 export async function loadStats() {
   const sel = document.getElementById('stats-course-select');
   const courseId = sel?.value;
@@ -126,6 +150,7 @@ export async function loadStats() {
   state.lastCourseType  = courseType;
 
   const roundSel = document.getElementById('stats-round-select');
+  const groupSel = document.getElementById('stats-group-select');
 
   // 회차 셀렉트 표시/숨김 및 채우기 — 중견리더만
   if (courseType === 'leadership') {
@@ -136,10 +161,13 @@ export async function loadStats() {
     roundSel.style.display = 'inline-block';
   } else {
     roundSel.style.display = 'none';
+    if (groupSel) { groupSel.style.display = 'none'; groupSel.value = ''; }
     state.lastRoundId = '';
     state.lastRoundLabel = '';
     state.lastRoundNumber = 0;
     state.lastRoundName = '';
+    state.lastGroupName = '';
+    state.lastGroupLabel = '';
   }
 
   const roundId = courseType === 'leadership' ? roundSel.value : '';
@@ -154,12 +182,21 @@ export async function loadStats() {
     document.getElementById('stats-no-data').style.display = 'none';
     const nameEl = document.getElementById('stats-course-name');
     if (nameEl) nameEl.textContent = courseLabel;
+    if (groupSel) { groupSel.style.display = 'none'; groupSel.value = ''; }
     state.lastRoundId = '';
     state.lastRoundLabel = '';
+    state.lastGroupName = '';
+    state.lastGroupLabel = '';
     return;
   }
 
-  // 라벨 갱신
+  // 회차 선택됐으면 분반 셀렉트 갱신
+  if (courseType === 'leadership') {
+    populateGroupSelect(courseId, roundId);
+  }
+  const groupName = (courseType === 'leadership' && groupSel?.style.display !== 'none') ? (groupSel?.value || '') : '';
+
+  // 라벨 갱신 (분반까지 포함)
   let displayLabel = courseLabel;
   if (courseType === 'leadership') {
     const rOpt = roundSel.options[roundSel.selectedIndex];
@@ -169,6 +206,14 @@ export async function loadStats() {
     state.lastRoundNumber = parseInt(rOpt?.dataset.num) || 0;
     state.lastRoundName = rOpt?.dataset.name || '';
     displayLabel = `${courseLabel} · ${rLabel}`;
+    if (groupName) {
+      displayLabel += ` · ${groupName}`;
+      state.lastGroupName = groupName;
+      state.lastGroupLabel = groupName;
+    } else {
+      state.lastGroupName = '';
+      state.lastGroupLabel = '';
+    }
   }
   const nameEl = document.getElementById('stats-course-name');
   if (nameEl) nameEl.textContent = displayLabel;
@@ -193,12 +238,18 @@ export async function loadStats() {
       getDocs(query(instructorsRef, orderBy('createdAt')))
     ]);
 
-    const responses = responsesSnap.docs.map(d => ({
+    let responses = responsesSnap.docs.map(d => ({
       ...d.data(),
       submittedAt: d.data().submittedAt?.toDate?.()?.toISOString() ?? null
     }));
-    // renderStats는 학생.completed 필드를 본다 — 회차 모드에서는 completedRounds.includes(roundId)로 매핑
-    const students = studentsSnap.docs.map(d => {
+    // 분반 선택 시 응답 필터: response.groupName이 일치하는 것만
+    if (groupName) {
+      responses = responses.filter(r => (r.groupName || '') === groupName);
+    }
+
+    // renderStats는 학생.completed 필드를 본다 — 회차 모드에서는 completedRounds.includes(roundId)로 매핑.
+    // 분반 선택 시: 분모 학생도 그 분반 학생으로 좁힘.
+    let students = studentsSnap.docs.map(d => {
       const data = d.data();
       const isComplete = courseType === 'leadership'
         ? Array.isArray(data.completedRounds) && data.completedRounds.includes(roundId)
@@ -209,10 +260,22 @@ export async function loadStats() {
         completedAt: data.completedAt?.toDate?.()?.toISOString() ?? null
       };
     });
-    const orderedInstructorKeys = instructorsSnap.docs.map(d => {
-      const { name, education } = d.data();
-      return education ? `${education}__${name}` : name;
-    });
+    if (groupName) {
+      students = students.filter(s => (s.group || '') === groupName);
+    }
+
+    // 강사 키 순서: 분반 선택 시 그 분반에 노출되는 강사로 좁힘 (학생 흐름과 동일 로직)
+    const allInstructors = instructorsSnap.docs.map(d => d.data());
+    const visibleInstructors = groupName
+      ? allInstructors.filter(inst => {
+          const igs = Array.isArray(inst.groups) ? inst.groups : [];
+          if (igs.length === 0) return true;  // 구 데이터 호환
+          return igs.includes(groupName) || igs.includes('common');
+        })
+      : allInstructors;
+    const orderedInstructorKeys = visibleInstructors.map(({ name, education }) =>
+      education ? `${education}__${name}` : name
+    );
 
     document.getElementById('stats-loading').style.display = 'none';
 

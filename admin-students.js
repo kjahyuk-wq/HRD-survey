@@ -167,7 +167,10 @@ export async function addStudent(courseId, panelIdx) {
     if (empNoEl) empNoEl.value = '';
     if (groupEl) groupEl.value = '';
     await loadStudents(courseId, panelIdx);
-  } catch (e) { alert('등록 중 오류가 발생했습니다.'); }
+  } catch (e) {
+    console.error('addStudent 실패:', e);
+    alert(`등록 중 오류가 발생했습니다.\n${e?.code || ''} ${e?.message || ''}`.trim());
+  }
   finally { if (btn) { btn.disabled = false; btn.textContent = '+ 등록'; } }
 }
 

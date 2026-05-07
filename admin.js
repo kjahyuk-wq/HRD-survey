@@ -68,8 +68,10 @@ function goBackToCourses() {
 }
 
 // ── Firebase Auth 상태 감지 ──────────────────────────────
+// 관리자 = Email 인증 사용자만 통과. 익명(학생용) 세션은 동일 origin의 다른 탭에서
+// 공유될 수 있어 명시적으로 차단해야 권한 거부(rules: isAdmin) 사고를 막을 수 있다.
 onAuthStateChanged(auth, user => {
-  if (user) {
+  if (user && user.email) {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('dashboard').style.display = 'block';
     loadCourseList();
