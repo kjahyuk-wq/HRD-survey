@@ -1,6 +1,16 @@
 import { state, Q_LABELS, DEMO_QUESTIONS, escapeHtml } from './admin-utils.js';
 import { computeStats } from './admin-stats.js';
 
+// ── 라벨 헬퍼 ──────────────────────────────
+// state.lastRoundLabel은 중견리더 과정에서 회차 선택 시에만 채워짐. 단기는 빈 문자열.
+function getExportCourseLabel() {
+  return state.lastCourseLabel || state.lastCourseName || '';
+}
+function getExportFullLabel() {
+  const c = getExportCourseLabel();
+  return state.lastRoundLabel ? `${c} · ${state.lastRoundLabel}` : c;
+}
+
 // ── XLSX 동적 로드 ──────────────────────────────
 let _xlsxLoaded = false;
 
@@ -80,7 +90,7 @@ export async function exportStatsExcel() {
   }
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sheet2Data), '주관식');
 
-  const filename = `${(state.lastCourseLabel || state.lastCourseName)}_설문결과_${new Date().toISOString().slice(0,10)}.xlsx`;
+  const filename = `${getExportFullLabel()}_설문결과_${new Date().toISOString().slice(0,10)}.xlsx`;
   XLSX.writeFile(wb, filename);
 }
 
@@ -109,8 +119,11 @@ export async function exportResultsExcel() {
     ? allScoresForOverall.reduce((a, b) => a + b, 0) / allScoresForOverall.length
     : 0;
 
+  const courseLabelForCell = getExportCourseLabel();
+  const roundLabelForCell  = state.lastRoundLabel || '';
   const statsData = [
-    ['교육과정', (state.lastCourseLabel || state.lastCourseName), '', '', '', '', '', ''],
+    ['교육과정', courseLabelForCell, '', '', '', '', '', ''],
+    ...(roundLabelForCell ? [['회차', roundLabelForCell, '', '', '', '', '', '']] : []),
     ['응답자 수', n + '명', '', '', '', '', '', ''],
     ['작성일', new Date().toLocaleDateString('ko-KR'), '', '', '', '', '', ''],
     ['전체 평균 (Q1~Q9 + 강사)', Number(overallAvg.toFixed(2)), '', '', '', '', '', ''],
@@ -151,7 +164,12 @@ export async function exportResultsExcel() {
   XLSX.utils.book_append_sheet(wb, ws1, '만족도 통계');
 
   // ── 시트2: 응답자 특성 ──
-  const demoData = [['교육과정', (state.lastCourseLabel || state.lastCourseName)], ['응답자 수', n + '명'], []];
+  const demoData = [
+    ['교육과정', courseLabelForCell],
+    ...(roundLabelForCell ? [['회차', roundLabelForCell]] : []),
+    ['응답자 수', n + '명'],
+    []
+  ];
   DEMO_QUESTIONS.forEach(dq => {
     const counts = dq.options.map(opt => demoRaw[dq.key][opt] || 0);
     const total = counts.reduce((a, b) => a + b, 0);
@@ -169,7 +187,10 @@ export async function exportResultsExcel() {
 
   // ── 시트3: 주관식 의견 ──
   const commentData = [
-    ['교육과정', (state.lastCourseLabel || state.lastCourseName)], ['응답자 수', n + '명'], [],
+    ['교육과정', courseLabelForCell],
+    ...(roundLabelForCell ? [['회차', roundLabelForCell]] : []),
+    ['응답자 수', n + '명'],
+    [],
     ['순번', 'Q10. 기타 편의시설 건의사항', '소감 및 건의사항', '만족도 평가 개선 필요 부분', '전반적인 과목 및 강사 건의'],
   ];
   let cidx = 1;
@@ -185,7 +206,7 @@ export async function exportResultsExcel() {
   ws3['!cols'] = [{ wch: 6 }, { wch: 35 }, { wch: 35 }, { wch: 35 }, { wch: 35 }];
   XLSX.utils.book_append_sheet(wb, ws3, '주관식 의견');
 
-  const filename = `${(state.lastCourseLabel || state.lastCourseName)}_만족도결과_${new Date().toISOString().slice(0,10)}.xlsx`;
+  const filename = `${getExportFullLabel()}_만족도결과_${new Date().toISOString().slice(0,10)}.xlsx`;
   XLSX.writeFile(wb, filename);
 
   // ── 분야별 막대그래프 PNG ──
@@ -205,11 +226,11 @@ export async function exportResultsExcel() {
   const chartLabels = [...catDefs.map(c => c.label), '강사'];
   const chartValues = [...catAvgs, instCatAvg];
 
-  const chartPng = generateCategoryChart((state.lastCourseLabel || state.lastCourseName), chartLabels, chartValues);
+  const chartPng = generateCategoryChart(getExportFullLabel(), chartLabels, chartValues);
   setTimeout(() => {
     const a = document.createElement('a');
     a.href = chartPng;
-    a.download = `${(state.lastCourseLabel || state.lastCourseName)}_분야별만족도_${new Date().toISOString().slice(0,10)}.png`;
+    a.download = `${getExportFullLabel()}_분야별만족도_${new Date().toISOString().slice(0,10)}.png`;
     a.click();
   }, 400);
 }
