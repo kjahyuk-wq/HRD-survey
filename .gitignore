@@ -75,3 +75,7 @@ node_modules/
 # Firestore 에뮬레이터 디버그 로그
 firestore-debug.log*
 
+# 일회성 배포/함수 로그 (디버깅용 tee 출력)
+deploy-log*.txt
+functions-log*.txt
+

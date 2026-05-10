@@ -13,7 +13,7 @@ import { httpsCallable } from "https://www.gstatic.com/firebasejs/12.10.0/fireba
 // (기본 LOCAL은 LocalStorage 영속이라 공용 PC에서 자동 로그인 위험)
 setPersistence(auth, browserSessionPersistence).catch(() => {});
 import {
-  escapeHtml, formatTime, formatFullDate, formatShortDate, getBuiltinHolidays
+  escapeHtml, formatTime, formatFullDate, formatShortDate, getBuiltinHolidays, toDateStr
 } from './utils.js';
 
 // ── 상태 ──────────────────────────────
@@ -25,7 +25,7 @@ let scheduleDates = [];
 let customHolidays = [];
 let excludedHolidays = [];
 let dailySessions = 1;
-const todayStr = new Date().toISOString().slice(0, 10);
+const todayStr = toDateStr(new Date());
 
 // ── 관리자 인증 ──────────────────────────────
 // 메인 admin과 동일 계정. Firebase Console > Authentication > Users 에 등록.
@@ -262,7 +262,7 @@ window.applyDateRange = function() {
   while (cur <= end) {
     const dow = cur.getDay();
     if (dow !== 0 && dow !== 6) { // 주말 제외
-      const str = cur.toISOString().slice(0, 10);
+      const str = toDateStr(cur);
       if (!scheduleDates.includes(str)) scheduleDates.push(str);
     }
     cur.setDate(cur.getDate() + 1);
@@ -914,7 +914,7 @@ window.exportExcel = function() {
   // ── 워크북 저장 ──────────────────────────────
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, '출석부');
-  XLSX.writeFile(wb, `출석부_${courseName}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  XLSX.writeFile(wb, `출석부_${courseName}_${toDateStr(new Date())}.xlsx`);
 };
 
 // ── 기기 잠금 초기화 ──────────────────────────────

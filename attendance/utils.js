@@ -10,9 +10,12 @@ export function escapeHtml(str) {
     .replace(/>/g, '&gt;');
 }
 
-// "YYYY-MM-DD"
+// "YYYY-MM-DD" (로컬 시간대 기준 — toISOString 은 UTC 기준이라 KST 자정에 하루 빠지는 버그)
 export function toDateStr(d) {
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 // "YYYY년 M월 D일"
