@@ -119,8 +119,22 @@ window.onCourseChange = async function() {
     return;
   }
   document.getElementById('main-tabs').style.display = 'flex';
+
+  // 이전 과정의 출석 현황 잔재 초기화 (새 과정 데이터 로드 전 깨끗한 상태)
+  allAttendance = [];
+  attendanceIndex = new Map();
+  currentDateTab = null;
+
   await loadConfig();
   await loadStudents();
+
+  // 현재 열린 탭에 새 과정 데이터 반영
+  const activeTab = document.querySelector('.tab-content.active')?.id;
+  if (activeTab === 'tab-students') {
+    await loadAttendanceStudents();
+  } else if (activeTab === 'tab-records') {
+    await loadAttendanceRecords();
+  }
 };
 
 // ── 설정 로드 ──────────────────────────────

@@ -35,7 +35,7 @@ npm run dev
 - 에뮬레이터 UI: http://localhost:4000
 - 출결 관리자: https://<로컬IP>:3000/admin-attendance.html
 - 학생 체크인: https://<로컬IP>:3000/checkin.html
-- 강사 스캔: https://<로컬IP>:3000/scan.html
+- 출결 키오스크 스캔: https://<로컬IP>:3000/scan.html
 
 `.secret.local` 의 pepper 는 **테스트 전용**. 운영 pepper 와 절대 동일하지 말 것.
 
@@ -99,7 +99,7 @@ firebase deploy --only functions --project hrd-data
 1. 출결 관리자 페이지 → admin 로그인
 2. 테스트 과정 만들고 학생 1명 등록 (실제 메일)
 3. 학생 페이지에서 같은 이름+메일 로그인 → QR 발급 확인
-4. 강사 페이지에서 QR 스캔 → 출석 처리 확인
+4. 출결 키오스크(scan.html) 에서 QR 스캔 → 출석 처리 확인
 5. 관리자 출석 현황 탭에서 결과 확인
 6. Firestore 콘솔에서 `attendance_students` 도큐먼트 확인 — `email_hmac` 필드만 있고 `email` 평문 없음 검증
 
