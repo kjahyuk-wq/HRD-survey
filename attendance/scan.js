@@ -220,13 +220,14 @@ async function onScanSuccess(rawText) {
     }
 
     // 출석 처리
-    const { name, courseId, courseName } = token;
+    const { name, courseId, courseName, studentId } = token;
 
     // 토큰 사용 처리
     await updateDoc(tokenRef, { used: true, usedAt: serverTimestamp() });
 
-    // 출석 기록 저장
+    // 출석 기록 저장 (studentId = 학생 식별 인증 uid, 감사용)
     await addDoc(collection(db, 'courses', courseId, 'attendance'), {
+      studentId: studentId || null,
       empNo, name, date: today, session,
       checkedAt: serverTimestamp(),
       tokenId

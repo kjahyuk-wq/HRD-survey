@@ -1,12 +1,13 @@
-import { db, auth } from './firebase-config.js';
+import { db, auth, functions } from './firebase-config.js';
 import {
   collection, getDocs, getDoc,
-  doc, setDoc, serverTimestamp
+  doc, setDoc, deleteDoc, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import {
   signInWithEmailAndPassword, signOut, onAuthStateChanged,
   setPersistence, browserSessionPersistence
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
+import { httpsCallable } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-functions.js";
 
 // 관리자 세션은 탭이 닫히면 로그아웃되도록 SESSION persistence 사용
 // (기본 LOCAL은 LocalStorage 영속이라 공용 PC에서 자동 로그인 위험)
@@ -77,14 +78,16 @@ onAuthStateChanged(auth, user => {
 });
 
 // ── 탭 전환 ──────────────────────────────
+const TAB_NAMES = ['config', 'students', 'records'];
 window.switchTab = function(tab) {
-  ['config', 'records'].forEach(t => {
+  TAB_NAMES.forEach(t => {
     document.getElementById(`tab-${t}`).classList.toggle('active', t === tab);
   });
   document.querySelectorAll('.tab-btn').forEach((btn, i) => {
-    btn.classList.toggle('active', ['config','records'][i] === tab);
+    btn.classList.toggle('active', TAB_NAMES[i] === tab);
   });
   if (tab === 'records') loadAttendanceRecords();
+  if (tab === 'students') loadAttendanceStudents();
 };
 
 // ── 과정 목록 로드 ──────────────────────────────
@@ -164,14 +167,14 @@ async function loadConfig() {
   }
 }
 
-// ── 학생 목록 로드 ──────────────────────────────
+// ── 출결용 학생 목록 로드 (만족도 조사 students와 분리) ──
 async function loadStudents() {
   if (!currentCourseId) return;
   try {
-    const snap = await getDocs(collection(db, 'courses', currentCourseId, 'students'));
+    const snap = await getDocs(collection(db, 'courses', currentCourseId, 'attendance_students'));
     allStudents = snap.docs.map(d => ({ ...d.data(), _id: d.id }));
   } catch(e) {
-    console.error('학생 로드 오류:', e);
+    console.error('출결 학생 로드 오류:', e);
   }
 }
 
@@ -928,6 +931,181 @@ window.resetDeviceLock = async function() {
     statusEl.textContent = '초기화 실패: ' + e.message;
   } finally {
     btn.disabled = false; btn.textContent = '초기화';
+  }
+};
+
+// ── 출결 학생 명단 (attendance_students) ──────────────
+const registerOne = httpsCallable(functions, 'registerAttendanceStudent');
+const registerMany = httpsCallable(functions, 'registerAttendanceStudents');
+
+window.loadAttendanceStudents = async function() {
+  const tbody = document.getElementById('att-stu-tbody');
+  const cnt = document.getElementById('att-stu-count');
+  if (!currentCourseId) {
+    tbody.innerHTML = '<tr><td colspan="4" class="loading">과정을 선택하세요.</td></tr>';
+    cnt.textContent = '0';
+    return;
+  }
+  tbody.innerHTML = '<tr><td colspan="4" class="loading">불러오는 중...</td></tr>';
+
+  try {
+    const snap = await getDocs(collection(db, 'courses', currentCourseId, 'attendance_students'));
+    const list = snap.docs.map(d => ({ _id: d.id, ...d.data() }))
+      .sort((a, b) => String(a.empNo).localeCompare(String(b.empNo), undefined, { numeric: true }));
+
+    cnt.textContent = list.length;
+    allStudents = list;
+
+    if (!list.length) {
+      tbody.innerHTML = '<tr><td colspan="4" class="loading">등록된 학생이 없습니다.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = list.map(s => `
+      <tr data-id="${escapeHtml(s._id)}">
+        <td>${escapeHtml(String(s.empNo || ''))}</td>
+        <td>${escapeHtml(s.name || '')}</td>
+        <td>${s.email_hmac ? '<span style="color:#16a34a;font-size:0.8rem;">✓ 등록됨</span>' : '<span style="color:#dc2626;font-size:0.8rem;">없음</span>'}</td>
+        <td><button class="btn btn-secondary btn-sm" onclick="deleteAttendanceStudent('${escapeHtml(s._id)}', '${escapeHtml(s.name || '')}')" style="padding:0.25rem 0.6rem;font-size:0.78rem;background:#fee2e2;color:#991b1b;border-color:#fecaca;">삭제</button></td>
+      </tr>
+    `).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="4" style="color:#dc2626;">불러오기 실패: ${escapeHtml(e.message)}</td></tr>`;
+  }
+};
+
+window.addAttendanceStudent = async function() {
+  const status = document.getElementById('att-stu-add-status');
+  const btn = document.getElementById('att-stu-add-btn');
+
+  if (!currentCourseId) { alert('과정을 먼저 선택해 주세요.'); return; }
+
+  const name = document.getElementById('att-stu-name').value.trim();
+  const empNo = document.getElementById('att-stu-empno').value.trim();
+  const email = document.getElementById('att-stu-email').value.trim();
+
+  if (!name || !empNo || !email) {
+    showAddStatus('이름/교번/메일을 모두 입력해 주세요.', '#dc2626');
+    return;
+  }
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    showAddStatus('메일 형식이 올바르지 않습니다.', '#dc2626');
+    return;
+  }
+
+  btn.disabled = true; btn.textContent = '등록 중...';
+  status.style.display = 'none';
+
+  try {
+    await registerOne({ courseId: currentCourseId, name, empNo, email });
+    // 평문 메일은 즉시 입력창에서 제거
+    document.getElementById('att-stu-name').value = '';
+    document.getElementById('att-stu-empno').value = '';
+    document.getElementById('att-stu-email').value = '';
+    showAddStatus(`✅ ${name} 님 등록 완료`, '#16a34a');
+    await loadAttendanceStudents();
+  } catch(e) {
+    showAddStatus(`등록 실패: ${e.message || e}`, '#dc2626');
+  } finally {
+    btn.disabled = false; btn.textContent = '+ 추가';
+  }
+
+  function showAddStatus(msg, color) {
+    status.style.display = 'block';
+    status.style.color = color;
+    status.textContent = msg;
+  }
+};
+
+window.deleteAttendanceStudent = async function(docId, name) {
+  if (!currentCourseId) return;
+  if (!confirm(`${name} 학생을 출결 명단에서 삭제할까요?\n출결 기록은 그대로 보존됩니다.`)) return;
+
+  try {
+    await deleteDoc(doc(db, 'courses', currentCourseId, 'attendance_students', docId));
+    await loadAttendanceStudents();
+  } catch(e) {
+    alert('삭제 실패: ' + e.message);
+  }
+};
+
+window.downloadStudentTemplate = function() {
+  const ws = XLSX.utils.aoa_to_sheet([
+    ['이름', '교번', '메일'],
+    ['홍길동', '12345', 'hong@korea.kr'],
+    ['김영희', '12346', 'kim@korea.kr'],
+  ]);
+  ws['!cols'] = [{ wch: 14 }, { wch: 12 }, { wch: 28 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '학생명단');
+  XLSX.writeFile(wb, '출결_학생등록_템플릿.xlsx');
+};
+
+window.bulkUploadAttendanceStudents = async function() {
+  const status = document.getElementById('att-stu-bulk-status');
+  const btn = document.getElementById('att-stu-bulk-btn');
+  const fileEl = document.getElementById('att-stu-xlsx');
+
+  if (!currentCourseId) { alert('과정을 먼저 선택해 주세요.'); return; }
+  if (!fileEl.files?.length) {
+    showBulkStatus('엑셀 파일을 선택해 주세요.', '#dc2626');
+    return;
+  }
+
+  btn.disabled = true; btn.textContent = '읽는 중...';
+  status.style.display = 'none';
+
+  try {
+    const file = fileEl.files[0];
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+    const students = rows.map(row => {
+      const get = keys => {
+        for (const k of Object.keys(row)) {
+          const norm = String(k).trim();
+          if (keys.some(t => norm === t || norm.includes(t))) return String(row[k] || '').trim();
+        }
+        return '';
+      };
+      return {
+        name: get(['이름', '성명', 'name']),
+        empNo: get(['교번', '직원번호', 'empNo']),
+        email: get(['메일', '이메일', 'email']),
+      };
+    }).filter(s => s.name || s.empNo || s.email);
+
+    if (!students.length) {
+      showBulkStatus('엑셀에서 학생 데이터를 찾지 못했습니다. 헤더를 확인해 주세요. (이름/교번/메일)', '#dc2626');
+      return;
+    }
+
+    btn.textContent = `등록 중... (${students.length}명)`;
+    const result = await registerMany({ courseId: currentCourseId, students });
+    const data = result.data || {};
+
+    let msg = `✅ ${data.added || 0}명 등록 완료`;
+    if (Array.isArray(data.errors) && data.errors.length) {
+      msg += ` / ⚠️ ${data.errors.length}건 누락`;
+      const sample = data.errors.slice(0, 3).map(e => `· ${e.name || `행 ${e.idx + 1}`}: ${e.reason}`).join('\n');
+      msg += `\n${sample}${data.errors.length > 3 ? `\n... 외 ${data.errors.length - 3}건` : ''}`;
+    }
+    showBulkStatus(msg, data.errors?.length ? '#d97706' : '#16a34a');
+    fileEl.value = '';
+    await loadAttendanceStudents();
+  } catch(e) {
+    showBulkStatus(`업로드 실패: ${e.message || e}`, '#dc2626');
+  } finally {
+    btn.disabled = false; btn.textContent = '업로드';
+  }
+
+  function showBulkStatus(msg, color) {
+    status.style.display = 'block';
+    status.style.color = color;
+    status.style.whiteSpace = 'pre-line';
+    status.textContent = msg;
   }
 };
 

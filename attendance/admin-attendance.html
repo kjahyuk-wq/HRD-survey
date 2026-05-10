@@ -142,6 +142,7 @@
     <!-- 탭 -->
     <div class="tab-bar" id="main-tabs" style="display:none;">
       <button class="tab-btn active" onclick="switchTab('config')">⚙️ 출석 설정</button>
+      <button class="tab-btn" onclick="switchTab('students')">👥 학생 명단</button>
       <button class="tab-btn" onclick="switchTab('records')">📋 출석 현황</button>
     </div>
 
@@ -258,6 +259,76 @@
           <button class="btn btn-secondary btn-sm" id="reset-lock-btn" onclick="resetDeviceLock()">초기화</button>
         </div>
         <div id="reset-status" style="font-size:0.8rem;margin-top:0.45rem;min-height:1.2em;"></div>
+      </div>
+    </div>
+
+    <!-- 탭: 출결 학생 명단 -->
+    <div id="tab-students" class="tab-content">
+      <div class="section-card" style="background:#fffbeb;border:1.5px solid #fde68a;">
+        <h3 style="color:#92400e;border-color:#fde68a;">🔐 메일 평문은 저장되지 않습니다</h3>
+        <p style="font-size:0.82rem;color:#78350f;line-height:1.6;">
+          메일은 서버에서만 일시적으로 처리되어 HMAC으로 변환된 후 즉시 폐기됩니다.
+          관리자 화면에서도 메일 원문은 다시 조회할 수 없습니다 (보안 정책).<br>
+          메일을 잘못 입력한 경우 해당 학생을 삭제하고 다시 등록해 주세요.
+        </p>
+      </div>
+
+      <div class="section-card">
+        <h3>학생 단건 등록</h3>
+        <div class="two-col">
+          <div class="time-group">
+            <label>이름</label>
+            <input type="text" id="att-stu-name" placeholder="홍길동" maxlength="20" autocomplete="off">
+          </div>
+          <div class="time-group">
+            <label>교번</label>
+            <input type="text" id="att-stu-empno" placeholder="교번" inputmode="numeric" autocomplete="off">
+          </div>
+        </div>
+        <div class="time-group" style="margin-top:0.7rem;">
+          <label>공직자 통합메일</label>
+          <input type="email" id="att-stu-email" placeholder="example@korea.kr" autocomplete="off">
+        </div>
+        <div class="save-row">
+          <button class="btn btn-primary" id="att-stu-add-btn" onclick="addAttendanceStudent()">+ 추가</button>
+        </div>
+        <div id="att-stu-add-status" style="font-size:0.85rem;text-align:right;display:none;"></div>
+      </div>
+
+      <div class="section-card">
+        <h3>엑셀 일괄 등록</h3>
+        <p style="font-size:0.82rem;color:#64748b;line-height:1.6;margin-bottom:0.7rem;">
+          엑셀 첫 행에 <strong>이름 / 교번 / 메일</strong> 헤더를 포함하여 작성해 주세요. (열 순서 자유)<br>
+          업로드 시 메일은 즉시 해싱되어 저장되며 평문은 어디에도 보관되지 않습니다.
+        </p>
+        <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+          <input type="file" id="att-stu-xlsx" accept=".xlsx,.xls" style="flex:1;min-width:200px;font-size:0.85rem;">
+          <button class="btn btn-secondary btn-sm" onclick="downloadStudentTemplate()">📥 템플릿 다운로드</button>
+          <button class="btn btn-primary btn-sm" id="att-stu-bulk-btn" onclick="bulkUploadAttendanceStudents()">업로드</button>
+        </div>
+        <div id="att-stu-bulk-status" style="font-size:0.85rem;margin-top:0.6rem;display:none;"></div>
+      </div>
+
+      <div class="section-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.8rem;">
+          <h3 style="margin:0;border:none;padding:0;">등록된 학생 (<span id="att-stu-count">0</span>명)</h3>
+          <button class="btn btn-secondary btn-sm" onclick="loadAttendanceStudents()">새로고침</button>
+        </div>
+        <div class="att-table-wrap">
+          <table class="att-table">
+            <thead>
+              <tr>
+                <th style="width:80px;">교번</th>
+                <th>이름</th>
+                <th style="width:110px;">메일 등록</th>
+                <th style="width:80px;">관리</th>
+              </tr>
+            </thead>
+            <tbody id="att-stu-tbody">
+              <tr><td colspan="4" class="loading">과정을 선택하세요.</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 

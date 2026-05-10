@@ -38,7 +38,8 @@
 <body>
 <div class="page-wrap">
   <div class="warning-banner">
-    본인 외 대리 출석 적발 시 학칙에 의거하여 강제 퇴교 처리 후 소속기관에 통보됩니다.
+    본인 외 대리 출석 적발 시 학칙에 의거하여 강제 퇴교 처리 후 소속기관에 통보됩니다.<br>
+    공직자 통합메일은 본인 식별 용도로만 사용되며 평문으로 저장되지 않습니다.
   </div>
 
   <div class="att-header">
@@ -54,17 +55,18 @@
     <div class="card">
       <h2 style="font-size:1.05rem;font-weight:700;margin-bottom:1rem;">본인 확인</h2>
       <p style="font-size:0.85rem;color:#64748b;margin-bottom:1.2rem;line-height:1.6;">
-        리플릿에 인쇄된 <strong>교번</strong>과 <strong>이름</strong>을 입력해 주세요.
+        <strong>이름</strong>과 <strong>공직자 통합메일</strong>을 입력해 주세요.<br>
+        한 번 로그인하면 24시간 동안 유지됩니다.
       </p>
       <div class="form-group">
         <label>이름</label>
-        <input type="text" id="input-name" placeholder="홍길동" maxlength="20" autocomplete="off">
+        <input type="text" id="input-name" placeholder="홍길동" maxlength="20" autocomplete="name">
       </div>
       <div class="form-group">
-        <label>교번</label>
-        <input type="number" id="input-empno" placeholder="리플릿의 교번 숫자" min="1" inputmode="numeric">
+        <label>공직자 통합메일</label>
+        <input type="email" id="input-email" placeholder="example@korea.kr" autocomplete="email" inputmode="email">
       </div>
-      <div id="login-error" class="error-text" style="display:none;margin-bottom:0.8rem;"></div>
+      <div id="login-error" class="error-text" style="display:none;margin-bottom:0.8rem;white-space:pre-line;"></div>
       <button class="btn btn-primary" id="login-btn" onclick="doLogin()">확인하기</button>
     </div>
   </div>

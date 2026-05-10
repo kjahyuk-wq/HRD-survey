@@ -1,10 +1,18 @@
-import { db, auth } from './firebase-config.js';
+import { db, auth, functions } from './firebase-config.js';
 import {
-  collectionGroup, collection, query, where, getDocs,
+  collection, query, where, getDocs,
   doc, getDoc, setDoc, deleteDoc, serverTimestamp, Timestamp
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
-import { signInAnonymously } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
+import {
+  signInWithCustomToken, setPersistence, browserLocalPersistence, onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
+import { httpsCallable } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-functions.js";
 import { escapeHtml, toDateStr, formatDisplayDate, formatTime, getBuiltinHolidays } from './utils.js';
+
+// 24시간 세션 유지 — 로컬 영속 (오전/오후 재로그인 불필요)
+setPersistence(auth, browserLocalPersistence).catch(() => {});
+
+const loginByEmail = httpsCallable(functions, 'loginByEmail');
 
 // ── 상태 ──────────────────────────────
 let currentUser = null;   // { name, empNo, courseId, courseName, config }
@@ -27,14 +35,21 @@ function showLoginError(msg) {
   el.style.display = 'block';
 }
 
+// ── 세션 캐시 키 ──
+const SESSION_NAME_KEY = 'att_login_name';
+const SESSION_CANDS_KEY = 'att_login_candidates';
+
+// onAuthStateChanged ↔ doLogin 동시 진행 방지 플래그
+let autoResumed = false;
+
 // ── 로그인 ──────────────────────────────
 window.doLogin = async function() {
   const name = document.getElementById('input-name').value.trim();
-  const empNo = document.getElementById('input-empno').value.trim();
+  const email = document.getElementById('input-email').value.trim().toLowerCase();
 
   if (!name) { document.getElementById('input-name').focus(); return; }
-  if (!/^\d+$/.test(empNo) || parseInt(empNo) < 1) {
-    showLoginError('교번을 올바르게 입력해 주세요. (1 이상의 숫자)');
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    showLoginError('메일 주소를 올바르게 입력해 주세요.');
     return;
   }
 
@@ -43,66 +58,77 @@ window.doLogin = async function() {
   btn.disabled = true; btn.textContent = '확인 중...';
 
   try {
-    if (!auth.currentUser) await signInAnonymously(auth);
+    const result = await loginByEmail({ name, email });
+    const { customToken, candidates: rawCandidates } = result.data || {};
 
-    // 모든 과정에서 해당 교번+이름 학생 검색
-    const q = query(collectionGroup(db, 'students'), where('empNo', '==', empNo));
-    const snap = await getDocs(q);
-    const matches = snap.docs.filter(d => d.data().name === name);
-
-    if (!matches.length) {
-      showLoginError('등록된 수강생 정보를 찾을 수 없습니다.\n이름과 교번을 확인하거나 담당자에게 문의해 주세요.');
+    if (!customToken) {
+      showLoginError('서버 응답이 올바르지 않습니다. 담당자에게 문의해 주세요.');
       return;
     }
 
-    // 각 과정의 attendanceConfig 가져오기
-    const candidates = [];
-    for (const docSnap of matches) {
-      const courseId = docSnap.ref.parent.parent.id;
-      const configRef = doc(db, 'courses', courseId, 'attendanceConfig', 'config');
-      const configSnap = await getDoc(configRef);
-      if (!configSnap.exists()) continue;
+    // 인증 변경 후 onAuthStateChanged 가 동시에 자동 진행하지 않도록 미리 잠금
+    autoResumed = true;
+    await signInWithCustomToken(auth, customToken);
 
-      const config = configSnap.data();
-      const schedDates = config.scheduleDates || [];
-      // 오늘이 교육 일정에 포함된 과정만
-      if (schedDates.includes(today)) {
-        const courseDocSnap = await getDoc(docSnap.ref.parent.parent);
-        candidates.push({
-          courseId,
-          courseName: courseDocSnap.data()?.name || courseId,
-          config,
-          studentDocId: docSnap.id
-        });
-      }
-    }
+    // 메일은 절대 캐싱하지 않음. 이름과 후보 목록만 저장 (24시간 자동 진행용)
+    localStorage.setItem(SESSION_NAME_KEY, name);
+    localStorage.setItem(SESSION_CANDS_KEY, JSON.stringify(rawCandidates || []));
 
-    // 일정에 포함된 과정이 없으면 → 비수업일
-    if (!candidates.length) {
-      // 설정 자체가 없는 경우도 포함
-      showScreen('screen-no-class');
-      document.getElementById('no-class-title').textContent = '오늘은 수업 일정이 없습니다';
-      document.getElementById('no-class-desc').textContent = '오늘은 등록된 교육 일정이 아닙니다.';
-      return;
-    }
-
-    if (candidates.length === 1) {
-      await proceedWithCourse(name, empNo, candidates[0]);
-    } else {
-      // 여러 과정 선택 화면
-      showCoursePicker(name, empNo, candidates);
-    }
-
+    await proceedWithCandidates(name, rawCandidates || []);
   } catch (e) {
     console.error(e);
-    showLoginError('서버 연결에 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.');
+    const code = e?.code || '';
+    if (code === 'functions/not-found') {
+      showLoginError('등록된 수강생 정보를 찾을 수 없습니다.\n이름과 메일을 확인하거나 담당자에게 문의해 주세요.');
+    } else if (code === 'functions/resource-exhausted') {
+      showLoginError('잠시 후 다시 시도해 주세요. (요청 한도 초과)');
+    } else if (code === 'functions/invalid-argument') {
+      showLoginError(e.message || '입력값이 올바르지 않습니다.');
+    } else {
+      showLoginError('서버 연결에 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.');
+    }
   } finally {
     btn.disabled = false; btn.textContent = '확인하기';
   }
 };
 
+// 후보 → 오늘 수업일 필터 → 단일/다수 화면 분기
+async function proceedWithCandidates(name, rawCandidates) {
+  const candidates = [];
+  for (const c of rawCandidates) {
+    const configRef = doc(db, 'courses', c.courseId, 'attendanceConfig', 'config');
+    const configSnap = await getDoc(configRef);
+    if (!configSnap.exists()) continue;
+
+    const config = configSnap.data();
+    if (!(config.scheduleDates || []).includes(today)) continue;
+
+    const courseDocSnap = await getDoc(doc(db, 'courses', c.courseId));
+    candidates.push({
+      courseId: c.courseId,
+      courseName: courseDocSnap.data()?.name || c.courseId,
+      config,
+      studentDocId: c.studentDocId,
+      empNo: c.empNo,
+    });
+  }
+
+  if (!candidates.length) {
+    showScreen('screen-no-class');
+    document.getElementById('no-class-title').textContent = '오늘은 수업 일정이 없습니다';
+    document.getElementById('no-class-desc').textContent = '오늘은 등록된 교육 일정이 아닙니다.';
+    return;
+  }
+
+  if (candidates.length === 1) {
+    await proceedWithCourse(name, candidates[0]);
+  } else {
+    showCoursePicker(name, candidates);
+  }
+}
+
 // ── 과정 선택 ──────────────────────────────
-function showCoursePicker(name, empNo, candidates) {
+function showCoursePicker(name, candidates) {
   showScreen('screen-course-pick');
   const list = document.getElementById('course-picker-list');
   list.innerHTML = candidates.map((c, i) => `
@@ -113,11 +139,10 @@ function showCoursePicker(name, empNo, candidates) {
   `).join('');
   window._candidates = candidates;
   window._pendingName = name;
-  window._pendingEmpNo = empNo;
 }
 
 window.pickCourse = async function(idx) {
-  await proceedWithCourse(window._pendingName, window._pendingEmpNo, window._candidates[idx]);
+  await proceedWithCourse(window._pendingName, window._candidates[idx]);
 };
 
 function getDailySessionLabel(config) {
@@ -128,8 +153,8 @@ function getDailySessionLabel(config) {
 }
 
 // ── 과정 결정 후 처리 ──────────────────────────────
-async function proceedWithCourse(name, empNo, candidate) {
-  const { courseId, courseName, config } = candidate;
+async function proceedWithCourse(name, candidate) {
+  const { courseId, courseName, config, empNo } = candidate;
 
   // ── 기기 잠금 확인 (과정별) ──────────────────────────────
   const deviceLockKey = `device_locked_${courseId}_${today}`;
@@ -259,6 +284,7 @@ async function issueNewQr(name, empNo, courseId, courseName, session, cacheKey) 
   const expiresAt = new Date(now.getTime() + QR_TTL_SEC * 1000);
 
   const tokenData = {
+    studentId: auth.currentUser?.uid || null,  // 식별 인증 uid (firestore.rules 검증용)
     empNo, name, courseId, courseName,
     date: today, session,
     issuedAt: Timestamp.fromDate(now),
@@ -339,5 +365,27 @@ function clearTimer() {
 }
 
 // 엔터키 지원
-document.getElementById('input-name').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('input-empno').focus(); });
-document.getElementById('input-empno').addEventListener('keydown', e => { if (e.key === 'Enter') window.doLogin(); });
+document.getElementById('input-name').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('input-email').focus(); });
+document.getElementById('input-email').addEventListener('keydown', e => { if (e.key === 'Enter') window.doLogin(); });
+
+// 24시간 세션이 살아 있으면 메일 재입력 없이 자동 진행
+onAuthStateChanged(auth, async (user) => {
+  if (!user || user.isAnonymous || autoResumed) return;
+  try {
+    const tokenResult = await user.getIdTokenResult();
+    if (tokenResult.claims?.role !== 'student') return;
+
+    const cachedName = localStorage.getItem(SESSION_NAME_KEY);
+    const cachedCandsRaw = localStorage.getItem(SESSION_CANDS_KEY);
+    if (!cachedName || !cachedCandsRaw) return;
+
+    const cachedCands = JSON.parse(cachedCandsRaw);
+    if (!Array.isArray(cachedCands) || !cachedCands.length) return;
+
+    autoResumed = true;
+    document.getElementById('input-name').value = cachedName;
+    await proceedWithCandidates(cachedName, cachedCands);
+  } catch (e) {
+    console.warn('자동 진행 실패', e);
+  }
+});

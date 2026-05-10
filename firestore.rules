@@ -11,6 +11,11 @@ service cloud.firestore {
     function isAuthenticated() {
       return request.auth != null;
     }
+    // 출결 학생 식별 인증 (custom token claims.role == 'student')
+    function isAttendanceStudent() {
+      return request.auth != null
+        && request.auth.token.role == 'student';
+    }
     // 변경된 키가 허용 목록에만 속하는지 (부분 업데이트 검증)
     function changedKeysOnly(allowed) {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed);
@@ -100,6 +105,23 @@ service cloud.firestore {
           || (isAuthenticated() && docId.matches('reset_.*'));
       }
 
+      // 출결 학생 명단: 메일 평문 절대 저장 금지. Cloud Function 우회 등록만 안전.
+      // - read: 관리자만 (학생 본인은 collectionGroup 으로 검색하지 않음 — Cloud Function이 처리)
+      // - write: 관리자만, 평문 메일 필드 차단
+      match /attendance_students/{studentId} {
+        allow read: if isAdmin();
+        allow create: if isAdmin()
+          && !('email' in request.resource.data)
+          && !('email_plain' in request.resource.data)
+          && request.resource.data.keys().hasAll(['name', 'empNo', 'email_hmac'])
+          && request.resource.data.email_hmac is string
+          && request.resource.data.email_hmac.size() == 64;
+        allow update: if isAdmin()
+          && !('email' in request.resource.data)
+          && !('email_plain' in request.resource.data);
+        allow delete: if isAdmin();
+      }
+
       // 회차 (중견리더 양성과정 전용): 회차 CRUD는 관리자, 읽기는 인증 사용자 전체
       match /rounds/{roundId} {
         allow read: if isAuthenticated();
@@ -172,7 +194,7 @@ service cloud.firestore {
 
       // 출석 기록:
       //   - 관리자: 임의 쓰기/수정/삭제 (수기 출석 입력)
-      //   - 익명(키오스크): used 처리된 qr_token을 참조하는 create만 허용
+      //   - 키오스크(익명): used 처리된 qr_token을 참조 + studentId 일치하는 create만 허용
       match /attendance/{attendanceId} {
         allow read: if isAuthenticated();
         allow update, delete: if isAdmin();
@@ -185,23 +207,25 @@ service cloud.firestore {
           && get(/databases/$(database)/documents/qr_tokens/$(request.resource.data.tokenId)).data.empNo == request.resource.data.empNo
           && get(/databases/$(database)/documents/qr_tokens/$(request.resource.data.tokenId)).data.date == request.resource.data.date
           && get(/databases/$(database)/documents/qr_tokens/$(request.resource.data.tokenId)).data.session == request.resource.data.session
+          && get(/databases/$(database)/documents/qr_tokens/$(request.resource.data.tokenId)).data.studentId == request.resource.data.studentId
         );
       }
     }
 
     // ───────────── QR 토큰 (top-level) ─────────────
-    // - create: 필수 필드 + used==false + expiresAt이 (request.time, request.time+15m) 범위
-    // - update: 미사용→사용 1회 전이만 (used/usedAt 외 변경 금지)
+    // - create: 출결 식별 인증 학생만 (자신의 uid 만 박을 수 있음)
+    // - update: 사용 표시 1회 전이만 (used/usedAt 외 변경 금지)
     // - delete: 관리자만
     match /qr_tokens/{tokenId} {
       allow read: if isAuthenticated();
       allow create: if isAdmin() || (
-        isAuthenticated()
+        isAttendanceStudent()
         && request.resource.data.keys().hasAll([
-            'empNo','name','courseId','date','session',
+            'studentId','empNo','name','courseId','date','session',
             'used','issuedAt','expiresAt'
           ])
         && request.resource.data.used == false
+        && request.resource.data.studentId == request.auth.uid
         && request.resource.data.empNo is string && request.resource.data.empNo.size() <= 20
         && request.resource.data.name is string && request.resource.data.name.size() <= 50
         && request.resource.data.courseId is string && request.resource.data.courseId.size() <= 100
@@ -218,6 +242,11 @@ service cloud.firestore {
         && changedKeysOnly(['used','usedAt'])
       );
       allow delete: if isAdmin();
+    }
+
+    // ───────────── Rate limit (Cloud Function 전용) ─────────────
+    match /rate_limits/{docId} {
+      allow read, write: if false;
     }
 
     // ───────────── collectionGroup: 학생 검색 (로그인) ─────────────
