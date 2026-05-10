@@ -142,6 +142,98 @@ exports.loginByEmail = onCall(
   }
 );
 
+// ── 학생 이름+교번 로그인 (공무직 등 메일 없는 학생) ─────
+exports.loginByEmpNo = onCall(
+  {
+    region: REGION,
+    enforceAppCheck: ENFORCE_APP_CHECK,
+    maxInstances: 10,
+  },
+  async (request) => {
+    const name = String(request.data?.name || '').trim();
+    const empNo = String(request.data?.empNo || '').trim();
+
+    if (!name) {
+      throw new HttpsError('invalid-argument', '이름을 입력해 주세요.');
+    }
+    if (!empNo) {
+      throw new HttpsError('invalid-argument', '교번을 입력해 주세요.');
+    }
+
+    const ip = request.rawRequest?.ip || 'unknown';
+    await enforceRateLimit(`login_${ip}`, { windowMs: 60_000, max: 5 });
+
+    const snap = await db
+      .collectionGroup('attendance_students')
+      .where('empNo', '==', empNo)
+      .get();
+
+    const nameMatches = snap.docs.filter((d) => d.data().name === name);
+
+    if (nameMatches.length === 0) {
+      throw new HttpsError(
+        'not-found',
+        '등록된 수강생 정보를 찾을 수 없습니다. 이름과 교번을 확인하거나 담당자에게 문의해 주세요.'
+      );
+    }
+
+    // 메일이 등록된 학생은 이름+교번 로그인 차단 — 메일 로그인 강제
+    const noEmailMatches = nameMatches.filter((d) => !d.data().email_hmac);
+    if (noEmailMatches.length === 0) {
+      throw new HttpsError(
+        'failed-precondition',
+        '이 계정은 등록된 메일로 로그인해 주세요.'
+      );
+    }
+
+    // 학생 + 부모 과정 active 검증
+    const validMatches = [];
+    let blockedByStudent = 0;
+    let blockedByCourse = 0;
+
+    for (const d of noEmailMatches) {
+      if (d.data().active === false) {
+        blockedByStudent++;
+        continue;
+      }
+      const courseId = d.ref.parent.parent.id;
+      const courseSnap = await db.collection('courses').doc(courseId).get();
+      if (!courseSnap.exists || courseSnap.data().active === false) {
+        blockedByCourse++;
+        continue;
+      }
+      validMatches.push(d);
+    }
+
+    if (validMatches.length === 0) {
+      if (blockedByStudent > 0 && blockedByCourse === 0) {
+        throw new HttpsError('failed-precondition', '비활성 처리된 계정입니다. 담당자에게 문의해 주세요.');
+      }
+      throw new HttpsError('failed-precondition', '등록된 과정이 모두 종료 처리되었습니다. 담당자에게 문의해 주세요.');
+    }
+
+    // uid: 이름+교번 해시 기반 (메일 hmac 와 충돌 회피)
+    const idHash = crypto
+      .createHash('sha256')
+      .update(`empno|${empNo}|${name}`)
+      .digest('hex');
+    const uid = `stu_${idHash.substring(0, 28)}`;
+
+    const customToken = await auth.createCustomToken(uid, {
+      role: 'student',
+      loginType: 'empno',
+    });
+
+    const candidates = validMatches.map((d) => ({
+      courseId: d.ref.parent.parent.id,
+      studentDocId: d.id,
+      empNo: d.data().empNo || '',
+    }));
+
+    return { customToken, candidates };
+  }
+);
+
 // ── 관리자: 출결용 학생 일괄 등록 (메일 평문 → HMAC 후 폐기) ───
 exports.registerAttendanceStudents = onCall(
   {
@@ -179,35 +271,53 @@ exports.registerAttendanceStudents = onCall(
     const errors = [];
     let added = 0;
 
+    // 기존 (이름+교번) 조합 (메일 없는 학생) 도 중복 검사
+    const existingNoEmailKeys = new Set(
+      existing.docs
+        .filter((d) => !d.data().email_hmac)
+        .map((d) => `${d.data().name}|${d.data().empNo}`)
+    );
+
     students.forEach((s, idx) => {
       const name = String(s?.name || '').trim();
       const empNo = String(s?.empNo || '').trim();
       const email = normalizeEmail(s?.email);
 
-      if (!name || !empNo || !email) {
-        errors.push({ idx, reason: '이름/교번/메일 누락' });
-        return;
-      }
-      if (!EMAIL_RE.test(email)) {
-        errors.push({ idx, reason: '메일 형식 오류', name });
+      if (!name || !empNo) {
+        errors.push({ idx, reason: '이름/교번 누락' });
         return;
       }
 
-      const emailHmac = hmacEmail(email, pepper);
-      if (existingHmacs.has(emailHmac)) {
-        errors.push({ idx, reason: '이미 등록된 메일', name });
-        return;
-      }
-      existingHmacs.add(emailHmac);
-
-      const docRef = courseRef.collection('attendance_students').doc();
-      batch.set(docRef, {
+      const docData = {
         name,
         empNo,
-        email_hmac: emailHmac,
         active: true,
         createdAt: FieldValue.serverTimestamp(),
-      });
+      };
+
+      if (email) {
+        if (!EMAIL_RE.test(email)) {
+          errors.push({ idx, reason: '메일 형식 오류', name });
+          return;
+        }
+        const emailHmac = hmacEmail(email, pepper);
+        if (existingHmacs.has(emailHmac)) {
+          errors.push({ idx, reason: '이미 등록된 메일', name });
+          return;
+        }
+        existingHmacs.add(emailHmac);
+        docData.email_hmac = emailHmac;
+      } else {
+        const key = `${name}|${empNo}`;
+        if (existingNoEmailKeys.has(key)) {
+          errors.push({ idx, reason: '이미 등록된 이름+교번 (메일 없음)', name });
+          return;
+        }
+        existingNoEmailKeys.add(key);
+      }
+
+      const docRef = courseRef.collection('attendance_students').doc();
+      batch.set(docRef, docData);
       added++;
     });
 
@@ -236,35 +346,52 @@ exports.registerAttendanceStudent = onCall(
     const empNo = String(request.data?.empNo || '').trim();
     const email = normalizeEmail(request.data?.email);
 
-    if (!courseId || !name || !empNo || !email) {
-      throw new HttpsError('invalid-argument', '모든 필드를 입력해 주세요.');
-    }
-    if (!EMAIL_RE.test(email)) {
-      throw new HttpsError('invalid-argument', '메일 형식이 올바르지 않습니다.');
+    if (!courseId || !name || !empNo) {
+      throw new HttpsError('invalid-argument', '이름과 교번을 입력해 주세요.');
     }
 
-    const pepper = EMAIL_PEPPER.value();
-    const emailHmac = hmacEmail(email, pepper);
     const courseRef = db.collection('courses').doc(courseId);
-
-    // 같은 과정 내 메일 중복 체크
-    const dup = await courseRef
-      .collection('attendance_students')
-      .where('email_hmac', '==', emailHmac)
-      .limit(1)
-      .get();
-    if (!dup.empty) {
-      throw new HttpsError('already-exists', '같은 과정에 이미 등록된 메일입니다.');
-    }
-
-    const docRef = await courseRef.collection('attendance_students').add({
+    const docData = {
       name,
       empNo,
-      email_hmac: emailHmac,
       active: true,
       createdAt: FieldValue.serverTimestamp(),
-    });
+    };
 
+    if (email) {
+      if (!EMAIL_RE.test(email)) {
+        throw new HttpsError('invalid-argument', '메일 형식이 올바르지 않습니다.');
+      }
+      const pepper = EMAIL_PEPPER.value();
+      const emailHmac = hmacEmail(email, pepper);
+
+      const dup = await courseRef
+        .collection('attendance_students')
+        .where('email_hmac', '==', emailHmac)
+        .limit(1)
+        .get();
+      if (!dup.empty) {
+        throw new HttpsError('already-exists', '같은 과정에 이미 등록된 메일입니다.');
+      }
+      docData.email_hmac = emailHmac;
+    } else {
+      // 메일 없는 학생 — 이름+교번 중복 검사
+      const dupSnap = await courseRef
+        .collection('attendance_students')
+        .where('empNo', '==', empNo)
+        .get();
+      const collision = dupSnap.docs.find(
+        (d) => d.data().name === name && !d.data().email_hmac
+      );
+      if (collision) {
+        throw new HttpsError(
+          'already-exists',
+          '같은 과정에 이미 등록된 이름+교번 입니다 (메일 없음).'
+        );
+      }
+    }
+
+    const docRef = await courseRef.collection('attendance_students').add(docData);
     return { id: docRef.id };
   }
 );

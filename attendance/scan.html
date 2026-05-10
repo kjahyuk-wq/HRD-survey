@@ -117,11 +117,47 @@
     #qr-reader__scan_region { border-radius: 16px; }
     #qr-reader__dashboard { display: none !important; }
     #qr-reader img[alt="Info icon"] { display: none !important; }
+
+    /* 관리자 인증 게이트 */
+    .scan-auth-gate {
+      max-width: 360px; margin: 4rem auto; padding: 2rem;
+      background: #1e293b; border-radius: 20px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+      text-align: center;
+    }
+    .scan-auth-gate h2 { font-size: 1.1rem; margin-bottom: 1.2rem; color: #f1f5f9; }
+    .scan-auth-gate p { font-size: 0.85rem; color: #94a3b8; margin-bottom: 1rem; }
+    .scan-auth-gate input {
+      width: 100%; padding: 0.7rem; border: 1.5px solid #334155;
+      background: #0f172a; color: #f1f5f9;
+      border-radius: 10px; font-size: 1rem;
+    }
+    .scan-auth-gate input:focus { outline: none; border-color: #3b82f6; }
+    .scan-auth-gate .btn-primary {
+      width: 100%; margin-top: 1rem;
+      padding: 0.7rem; background: #2563eb; color: #fff;
+      border: none; border-radius: 10px; font-size: 1rem; font-weight: 600;
+      cursor: pointer;
+    }
+    .scan-auth-gate .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+    .scan-auth-gate .err {
+      font-size: 0.8rem; color: #f87171; margin-top: 0.6rem; min-height: 1em;
+    }
   </style>
 </head>
 <body>
 
-<div class="scan-page container">
+<!-- 관리자 인증 게이트 -->
+<div id="scan-auth-screen" class="scan-auth-gate">
+  <div style="font-size:2.5rem;margin-bottom:0.6rem;">🔒</div>
+  <h2>관리자 인증</h2>
+  <p>출결 키오스크는 관리자 인증이 필요합니다.</p>
+  <input type="password" id="scan-admin-pw" placeholder="관리자 암호" autocomplete="current-password">
+  <button class="btn-primary" id="scan-login-btn" onclick="scanLogin()">로그인</button>
+  <div id="scan-login-err" class="err"></div>
+</div>
+
+<div class="scan-page container" id="scan-main" style="display:none;">
 
   <!-- 시계 + 날짜 -->
   <div class="clock-bar">

@@ -107,15 +107,16 @@ service cloud.firestore {
 
       // 출결 학생 명단: 메일 평문 절대 저장 금지. Cloud Function 우회 등록만 안전.
       // - read: 관리자만 (학생 본인은 collectionGroup 으로 검색하지 않음 — Cloud Function이 처리)
-      // - write: 관리자만, 평문 메일 필드 차단
+      // - write: 관리자만, 평문 메일 필드 차단. email_hmac 은 옵셔널 (공무직 등 메일 없는 학생).
       match /attendance_students/{studentId} {
         allow read: if isAdmin();
         allow create: if isAdmin()
           && !('email' in request.resource.data)
           && !('email_plain' in request.resource.data)
-          && request.resource.data.keys().hasAll(['name', 'empNo', 'email_hmac'])
-          && request.resource.data.email_hmac is string
-          && request.resource.data.email_hmac.size() == 64;
+          && request.resource.data.keys().hasAll(['name', 'empNo'])
+          && (!('email_hmac' in request.resource.data)
+              || (request.resource.data.email_hmac is string
+                  && request.resource.data.email_hmac.size() == 64));
         allow update: if isAdmin()
           && !('email' in request.resource.data)
           && !('email_plain' in request.resource.data);

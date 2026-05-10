@@ -430,8 +430,8 @@ function renderStudentsPanelHtml() {
         <div class="time-group"><label>교번</label><input type="text" id="att-stu-empno" placeholder="교번" inputmode="numeric" autocomplete="off"></div>
       </div>
       <div class="time-group" style="margin-top:0.7rem;">
-        <label>공직자 통합메일</label>
-        <input type="email" id="att-stu-email" placeholder="example@korea.kr" autocomplete="off">
+        <label>공직자 통합메일 <span style="color:#94a3b8;font-weight:400;">(공무직 등 메일 없으면 비워두기)</span></label>
+        <input type="email" id="att-stu-email" placeholder="example@korea.kr (선택)" autocomplete="off">
       </div>
       <div class="save-row">
         <button class="btn btn-primary" id="att-stu-add-btn" onclick="addAttendanceStudent()">+ 추가</button>
@@ -1201,8 +1201,8 @@ window.loadAttendanceStudents = async function() {
         ? '<span style="display:inline-block;padding:1px 7px;border-radius:8px;background:#dcfce7;color:#15803d;font-size:0.75rem;font-weight:600;">활성</span>'
         : '<span style="display:inline-block;padding:1px 7px;border-radius:8px;background:#f3f4f6;color:#6b7280;font-size:0.75rem;font-weight:600;">비활성</span>';
       const mailBadge = s.email_hmac
-        ? '<span style="color:#16a34a;font-size:0.78rem;">✓ 등록됨</span>'
-        : '<span style="color:#dc2626;font-size:0.78rem;">없음</span>';
+        ? '<span style="color:#16a34a;font-size:0.78rem;" title="메일로 로그인">✓ 등록됨</span>'
+        : '<span style="color:#6b7280;font-size:0.78rem;" title="이름+교번으로 로그인 (공무직 등)">교번 로그인</span>';
       const toggleBtn = isActive
         ? `<button class="btn btn-secondary btn-sm" onclick="toggleStudentActive('${escapeAttr(s._id)}', true)" style="padding:0.25rem 0.5rem;font-size:0.75rem;background:#fff7ed;color:#c2410c;border-color:#fdba74;" title="이 학생의 메일 로그인을 차단">비활성화</button>`
         : `<button class="btn btn-secondary btn-sm" onclick="toggleStudentActive('${escapeAttr(s._id)}', false)" style="padding:0.25rem 0.5rem;font-size:0.75rem;background:#ecfdf5;color:#047857;border-color:#6ee7b7;" title="이 학생의 메일 로그인을 다시 허용">활성화</button>`;
@@ -1233,11 +1233,11 @@ window.addAttendanceStudent = async function() {
   const empNo = document.getElementById('att-stu-empno').value.trim();
   const email = document.getElementById('att-stu-email').value.trim();
 
-  if (!name || !empNo || !email) {
-    showAddStatus('이름/교번/메일을 모두 입력해 주세요.', '#dc2626');
+  if (!name || !empNo) {
+    showAddStatus('이름과 교번을 입력해 주세요.', '#dc2626');
     return;
   }
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
     showAddStatus('메일 형식이 올바르지 않습니다.', '#dc2626');
     return;
   }

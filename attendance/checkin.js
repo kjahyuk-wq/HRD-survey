@@ -13,6 +13,19 @@ import { escapeHtml, toDateStr, formatDisplayDate, formatTime, getBuiltinHoliday
 setPersistence(auth, browserLocalPersistence).catch(() => {});
 
 const loginByEmail = httpsCallable(functions, 'loginByEmail');
+const loginByEmpNo = httpsCallable(functions, 'loginByEmpNo');
+
+// 두 로그인 화면 토글
+window.showEmailLogin = function() {
+  document.getElementById('login-error').style.display = 'none';
+  document.getElementById('login-error-empno').style.display = 'none';
+  showScreen('screen-login');
+};
+window.showEmpNoLogin = function() {
+  document.getElementById('login-error').style.display = 'none';
+  document.getElementById('login-error-empno').style.display = 'none';
+  showScreen('screen-login-empno');
+};
 
 // ── 상태 ──────────────────────────────
 let currentUser = null;   // { name, empNo, courseId, courseName, config }
@@ -31,6 +44,12 @@ function showScreen(id) {
 
 function showLoginError(msg) {
   const el = document.getElementById('login-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function showEmpNoError(msg) {
+  const el = document.getElementById('login-error-empno');
   el.textContent = msg;
   el.style.display = 'block';
 }
@@ -86,6 +105,56 @@ window.doLogin = async function() {
       showLoginError(e.message || '입력값이 올바르지 않습니다.');
     } else {
       showLoginError('서버 연결에 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.');
+    }
+  } finally {
+    btn.disabled = false; btn.textContent = '확인하기';
+  }
+};
+
+// ── 이름+교번 로그인 (공무직 등 메일 없는 학생) ─────
+window.doLoginEmpNo = async function() {
+  const name = document.getElementById('input-name-empno').value.trim();
+  const empNo = document.getElementById('input-empno').value.trim();
+
+  if (!name) { document.getElementById('input-name-empno').focus(); return; }
+  if (!empNo) {
+    showEmpNoError('교번을 입력해 주세요.');
+    return;
+  }
+
+  document.getElementById('login-error-empno').style.display = 'none';
+  const btn = document.getElementById('login-btn-empno');
+  btn.disabled = true; btn.textContent = '확인 중...';
+
+  try {
+    const result = await loginByEmpNo({ name, empNo });
+    const { customToken, candidates: rawCandidates } = result.data || {};
+
+    if (!customToken) {
+      showEmpNoError('서버 응답이 올바르지 않습니다. 담당자에게 문의해 주세요.');
+      return;
+    }
+
+    autoResumed = true;
+    await signInWithCustomToken(auth, customToken);
+
+    localStorage.setItem(SESSION_NAME_KEY, name);
+    localStorage.setItem(SESSION_CANDS_KEY, JSON.stringify(rawCandidates || []));
+
+    await proceedWithCandidates(name, rawCandidates || []);
+  } catch (e) {
+    console.error(e);
+    const code = e?.code || '';
+    if (code === 'functions/not-found') {
+      showEmpNoError('등록된 수강생 정보를 찾을 수 없습니다.\n이름과 교번을 확인하거나 담당자에게 문의해 주세요.');
+    } else if (code === 'functions/failed-precondition') {
+      showEmpNoError(e.message || '이 계정은 메일로 로그인해 주세요.');
+    } else if (code === 'functions/resource-exhausted') {
+      showEmpNoError('잠시 후 다시 시도해 주세요. (요청 한도 초과)');
+    } else if (code === 'functions/invalid-argument') {
+      showEmpNoError(e.message || '입력값이 올바르지 않습니다.');
+    } else {
+      showEmpNoError('서버 연결에 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.');
     }
   } finally {
     btn.disabled = false; btn.textContent = '확인하기';
@@ -367,6 +436,8 @@ function clearTimer() {
 // 엔터키 지원
 document.getElementById('input-name').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('input-email').focus(); });
 document.getElementById('input-email').addEventListener('keydown', e => { if (e.key === 'Enter') window.doLogin(); });
+document.getElementById('input-name-empno').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('input-empno').focus(); });
+document.getElementById('input-empno').addEventListener('keydown', e => { if (e.key === 'Enter') window.doLoginEmpNo(); });
 
 // 24시간 세션이 살아 있으면 메일 재입력 없이 자동 진행
 onAuthStateChanged(auth, async (user) => {

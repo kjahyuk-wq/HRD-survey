@@ -3,8 +3,55 @@ import {
   doc, getDoc, updateDoc, addDoc,
   collection, serverTimestamp, Timestamp
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
-import { signInAnonymously } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
+import {
+  signInWithEmailAndPassword, signOut, onAuthStateChanged,
+  setPersistence, browserSessionPersistence
+} from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
 import { toDateStr, formatDisplayDate } from './utils.js';
+
+// 키오스크는 탭 닫히면 자동 로그아웃 (공용 디바이스 보안)
+setPersistence(auth, browserSessionPersistence).catch(() => {});
+
+// ── 관리자 인증 게이트 ──────────────────────────────
+const ADMIN_EMAIL = 'kjahyuk@korea.kr';
+let scanInitialized = false;
+
+window.scanLogin = async function() {
+  const pwEl = document.getElementById('scan-admin-pw');
+  const errEl = document.getElementById('scan-login-err');
+  const btn = document.getElementById('scan-login-btn');
+  const pw = pwEl.value;
+  if (!pw) return;
+  btn.disabled = true; btn.textContent = '확인 중...';
+  errEl.textContent = '';
+  try {
+    await signInWithEmailAndPassword(auth, ADMIN_EMAIL, pw);
+  } catch(e) {
+    errEl.textContent = '비밀번호가 올바르지 않습니다.';
+    pwEl.value = '';
+    btn.disabled = false; btn.textContent = '로그인';
+  }
+};
+
+document.getElementById('scan-admin-pw')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') window.scanLogin();
+});
+
+onAuthStateChanged(auth, (user) => {
+  const isAdmin = !!(user && user.email);
+  document.getElementById('scan-auth-screen').style.display = isAdmin ? 'none' : 'block';
+  document.getElementById('scan-main').style.display = isAdmin ? '' : 'none';
+  if (isAdmin && !scanInitialized) {
+    scanInitialized = true;
+    initScanner();
+  }
+});
+
+function initScanner() {
+  initCameraSwitch();
+  startScanner(getSavedFacing());
+  requestWakeLock();
+}
 
 // ── 상태 ──────────────────────────────
 let isProcessing = false;
@@ -268,12 +315,4 @@ function showResult(type, icon, text, sub) {
   }, hideMs);
 }
 
-// ── 시작 ──────────────────────────────
-// 카메라 전환 핸들러는 인증과 무관하게 즉시 부착
-initCameraSwitch();
-startScanner(getSavedFacing());
-requestWakeLock();
-
-signInAnonymously(auth).catch(e => {
-  console.error('익명 로그인 실패:', e);
-});
+// 스캐너 초기화는 onAuthStateChanged 콜백에서 실행됨 (인증 통과 후)
