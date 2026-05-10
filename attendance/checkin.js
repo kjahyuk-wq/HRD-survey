@@ -158,7 +158,7 @@ window.doLoginEmpNo = async function() {
     if (code === 'functions/not-found') {
       showEmpNoError('등록된 수강생 정보를 찾을 수 없습니다.\n이름과 교번을 확인하거나 담당자에게 문의해 주세요.');
     } else if (code === 'functions/failed-precondition') {
-      showEmpNoError(e.message || '이 계정은 메일로 로그인해 주세요.');
+      showEmpNoError(e.message || '로그인할 수 있는 과정이 없습니다.');
     } else if (code === 'functions/resource-exhausted') {
       showEmpNoError('잠시 후 다시 시도해 주세요. (요청 한도 초과)');
     } else if (code === 'functions/invalid-argument') {

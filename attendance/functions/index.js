@@ -177,21 +177,13 @@ exports.loginByEmpNo = onCall(
       );
     }
 
-    // 메일이 등록된 학생은 이름+교번 로그인 차단 — 메일 로그인 강제
-    const noEmailMatches = nameMatches.filter((d) => !d.data().email_hmac);
-    if (noEmailMatches.length === 0) {
-      throw new HttpsError(
-        'failed-precondition',
-        '이 계정은 등록된 메일로 로그인해 주세요.'
-      );
-    }
-
+    // 메일이 있든 없든 이름+교번 로그인 허용. 같은 이름+교번이 여러 과정에 있으면 다음 화면에서 선택.
     // 학생 + 부모 과정 active 검증
     const validMatches = [];
     let blockedByStudent = 0;
     let blockedByCourse = 0;
 
-    for (const d of noEmailMatches) {
+    for (const d of nameMatches) {
       if (d.data().active === false) {
         blockedByStudent++;
         continue;
@@ -212,12 +204,19 @@ exports.loginByEmpNo = onCall(
       throw new HttpsError('failed-precondition', '등록된 과정이 모두 종료 처리되었습니다. 담당자에게 문의해 주세요.');
     }
 
-    // uid: 이름+교번 해시 기반 (메일 hmac 와 충돌 회피)
-    const idHash = crypto
-      .createHash('sha256')
-      .update(`empno|${empNo}|${name}`)
-      .digest('hex');
-    const uid = `stu_${idHash.substring(0, 28)}`;
+    // uid 결정 — 학생 doc 의 email_hmac 우선, 없으면 (이름+교번) 해시.
+    // 한 학생 = 한 uid 유지 (메일 로그인과 교번 로그인이 동일 uid 발급).
+    const firstWithMail = validMatches.find((d) => d.data().email_hmac);
+    let uid;
+    if (firstWithMail) {
+      uid = `stu_${firstWithMail.data().email_hmac.substring(0, 28)}`;
+    } else {
+      const idHash = crypto
+        .createHash('sha256')
+        .update(`empno|${empNo}|${name}`)
+        .digest('hex');
+      uid = `stu_${idHash.substring(0, 28)}`;
+    }
 
     const customToken = await auth.createCustomToken(uid, {
       role: 'student',
