@@ -67,6 +67,7 @@ function initScanner() {
 }
 
 // ── 상태 ──────────────────────────────
+const LATE_GRACE_MIN = 15;   // 세션 시작 + 15분까지는 정상 출석, 초과 시 지각
 let isProcessing = false;
 let wakeLock = null;
 
@@ -282,19 +283,28 @@ async function onScanSuccess(rawText) {
     // 출석 처리
     const { name, courseId, courseName, studentId } = token;
 
+    // 지각 판정 (세션 시작 + 15분 초과 시 'late')
+    const sessionStart = token.sessionStart || (session === 'afternoon' ? '13:00' : '09:00');
+    const [ssH, ssM] = sessionStart.split(':').map(Number);
+    const cutoffMin = ssH * 60 + ssM + LATE_GRACE_MIN;
+    const nowDate = new Date();
+    const nowMin = nowDate.getHours() * 60 + nowDate.getMinutes();
+    const status = nowMin > cutoffMin ? 'late' : 'present';
+
     // 토큰 사용 처리
     await updateDoc(tokenRef, { used: true, usedAt: serverTimestamp() });
 
     // 출석 기록 저장 (studentId = 학생 식별 인증 uid, 감사용)
     await addDoc(collection(db, 'courses', courseId, 'attendance'), {
       studentId: studentId || null,
-      empNo, name, date: today, session,
+      empNo, name, date: today, session, status,
       checkedAt: serverTimestamp(),
       tokenId
     });
 
     const sessionLabel = { single: '', morning: ' (오전)', afternoon: ' (오후)' }[session] || '';
-    showResult('success', '✅', `${name}님 출석 완료${sessionLabel}`, `교번: ${empNo} | ${courseName}`);
+    const statusBadge = status === 'late' ? ' · 지각' : '';
+    showResult('success', '✅', `${name}님 출석 완료${sessionLabel}${statusBadge}`, `교번: ${empNo} | ${courseName}`);
 
     setTimeout(() => { isProcessing = false; }, 3000);
 

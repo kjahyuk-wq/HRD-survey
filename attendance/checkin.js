@@ -347,7 +347,7 @@ async function proceedWithCourse(name, candidate) {
   }
 
   // 새 QR 토큰 발급
-  await issueNewQr(name, empNo, courseId, courseName, session, cacheKey);
+  await issueNewQr(name, empNo, courseId, courseName, session, cacheKey, config);
 }
 
 // ── 세션 판단 ──────────────────────────────
@@ -378,15 +378,20 @@ function generateUUID() {
 }
 
 // ── QR 발급 ──────────────────────────────
-async function issueNewQr(name, empNo, courseId, courseName, session, cacheKey) {
+async function issueNewQr(name, empNo, courseId, courseName, session, cacheKey, config) {
   const tokenId = generateUUID();
   const now = new Date();
   const expiresAt = new Date(now.getTime() + QR_TTL_SEC * 1000);
+
+  const sessionStart = session === 'afternoon'
+    ? (config?.afternoonStart || '13:00')
+    : (config?.morningStart || '09:00');
 
   const tokenData = {
     studentId: auth.currentUser?.uid || null,  // 식별 인증 uid (firestore.rules 검증용)
     empNo, name, courseId, courseName,
     date: today, session,
+    sessionStart,  // 지각 판정용 (스캔 시각이 sessionStart + 15분 초과 시 'late')
     issuedAt: Timestamp.fromDate(now),
     expiresAt: Timestamp.fromDate(expiresAt),
     used: false
@@ -408,7 +413,7 @@ window.reissueQr = async function() {
   const cacheKey = `qr_token_${empNo}_${today}_${session}`;
   localStorage.removeItem(cacheKey);
   clearTimer();
-  await issueNewQr(name, empNo, courseId, courseName, session, cacheKey);
+  await issueNewQr(name, empNo, courseId, courseName, session, cacheKey, config);
 };
 
 // ── QR 화면 표시 ──────────────────────────────
