@@ -10,17 +10,27 @@ import { loadXLSX } from './admin-excel.js';
 const panelRounds = {};
 
 export async function loadRounds(courseId, panelIdx) {
+  console.log('[loadRounds] start', { courseId, panelIdx });
   const panel = document.getElementById(`round-panel-${panelIdx}`);
-  if (!panel) return;
+  if (!panel) { console.warn('[loadRounds] panel 없음', panelIdx); return; }
   panel.innerHTML = '<div class="round-loading">불러오는 중...</div>';
+  let rounds;
   try {
     const snap = await getDocs(collection(db, 'courses', courseId, 'rounds'));
-    const rounds = snap.docs.map(d => ({ ...d.data(), _id: d.id }));
+    console.log('[loadRounds] snap 도착', snap.size);
+    rounds = snap.docs.map(d => ({ ...d.data(), _id: d.id }));
     rounds.sort((a, b) => (a.number ?? 0) - (b.number ?? 0));
     panelRounds[panelIdx] = rounds;
+  } catch (e) {
+    console.error('[loadRounds] Firestore 조회 실패', e);
+    panel.innerHTML = `<div class="round-loading">회차 목록을 불러오지 못했습니다.<br><small style="color:#dc2626;">${escapeHtml(e?.code || e?.name || '')} ${escapeHtml(e?.message || String(e))}</small></div>`;
+    return;
+  }
+  try {
     renderRoundPanel(courseId, panelIdx, rounds);
   } catch (e) {
-    panel.innerHTML = '<div class="round-loading">불러오기 실패</div>';
+    console.error('[loadRounds] 렌더 실패', e);
+    panel.innerHTML = `<div class="round-loading">회차 패널 표시 중 오류가 발생했습니다.<br><small style="color:#dc2626;">${escapeHtml(e?.message || String(e))}</small></div>`;
   }
 }
 
