@@ -1,16 +1,32 @@
-import { db, auth } from './firebase-config.js';
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
 import {
-  doc, getDoc, updateDoc, addDoc,
+  getFirestore, doc, getDoc, updateDoc, addDoc,
   collection, serverTimestamp, Timestamp
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import {
-  signInWithEmailAndPassword, signOut, onAuthStateChanged,
-  setPersistence, browserSessionPersistence
+  getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged,
+  setPersistence, browserLocalPersistence
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
 import { toDateStr, formatDisplayDate } from './utils.js';
 
-// 키오스크는 탭 닫히면 자동 로그아웃 (공용 디바이스 보안)
-setPersistence(auth, browserSessionPersistence).catch(() => {});
+// ── 키오스크 전용 Firebase app (main app 의 admin 인증과 격리) ─────
+// 같은 도메인에서 admin-attendance 와 인증 상태가 섞이지 않도록 별도 인스턴스 사용
+const firebaseConfig = {
+  apiKey: "AIzaSyAw1nRzHaV318mm6vhueWt19PAkVHyMkrw",
+  authDomain: "hrd-data.firebaseapp.com",
+  projectId: "hrd-data",
+  storageBucket: "hrd-data.firebasestorage.app",
+  messagingSenderId: "233199711039",
+  appId: "1:233199711039:web:8f1cb4d26f4ac9306dd98a"
+};
+const scanApp = initializeApp(firebaseConfig, 'scan-kiosk');
+const db = getFirestore(scanApp);
+const auth = getAuth(scanApp);
+
+// 키오스크는 72시간 유지 (단기과정 3일치). LOCAL 지속 + 자체 만료 체크.
+setPersistence(auth, browserLocalPersistence).catch(() => {});
+const SCAN_LOGIN_TS_KEY = 'scan_kiosk_login_ts';
+const SCAN_MAX_AGE_MS = 72 * 60 * 60 * 1000;
 
 // ── 관리자 인증 게이트 ──────────────────────────────
 const ADMIN_EMAIL = 'kjahyuk@korea.kr';
@@ -26,6 +42,7 @@ window.scanLogin = async function() {
   errEl.textContent = '';
   try {
     await signInWithEmailAndPassword(auth, ADMIN_EMAIL, pw);
+    localStorage.setItem(SCAN_LOGIN_TS_KEY, String(Date.now()));
   } catch(e) {
     errEl.textContent = '비밀번호가 올바르지 않습니다.';
     pwEl.value = '';
@@ -37,8 +54,19 @@ document.getElementById('scan-admin-pw')?.addEventListener('keydown', e => {
   if (e.key === 'Enter') window.scanLogin();
 });
 
-onAuthStateChanged(auth, (user) => {
-  const isAdmin = !!(user && user.email);
+onAuthStateChanged(auth, async (user) => {
+  let isAdmin = !!(user && user.email);
+
+  // 72시간 만료 체크 — 초과 시 자동 로그아웃
+  if (isAdmin) {
+    const ts = parseInt(localStorage.getItem(SCAN_LOGIN_TS_KEY) || '0', 10);
+    if (!ts || Date.now() - ts > SCAN_MAX_AGE_MS) {
+      localStorage.removeItem(SCAN_LOGIN_TS_KEY);
+      try { await signOut(auth); } catch(_) {}
+      isAdmin = false;
+    }
+  }
+
   document.getElementById('scan-auth-screen').style.display = isAdmin ? 'none' : 'block';
   document.getElementById('scan-main').style.display = isAdmin ? '' : 'none';
   if (isAdmin && !scanInitialized) {
