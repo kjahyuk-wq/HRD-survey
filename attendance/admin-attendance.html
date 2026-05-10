@@ -93,6 +93,27 @@
 
     /* 변경된 행 강조 */
     tr.row-changed td { background: #fffbeb !important; }
+
+    /* 엑셀 드롭존 */
+    .dropzone {
+      border: 2px dashed #cbd5e1; border-radius: 12px;
+      padding: 1.4rem 1rem; text-align: center;
+      cursor: pointer; transition: all 0.15s;
+      background: #f8faff; user-select: none;
+    }
+    .dropzone:hover { border-color: #0066cc; background: #eff6ff; }
+    .dropzone.dragover { border-color: #0066cc; background: #dbeafe; transform: scale(1.01); }
+    .dropzone.has-file { border-color: #16a34a; background: #f0fdf4; border-style: solid; }
+    .dz-icon { font-size: 1.6rem; line-height: 1; margin-bottom: 0.4rem; }
+    .dz-main { font-size: 0.92rem; font-weight: 600; color: #334155; }
+    .dz-sub  { font-size: 0.78rem; color: #64748b; margin-top: 0.25rem; }
+    .dz-filename { font-size: 0.85rem; color: #166534; font-weight: 600; margin-top: 0.5rem; word-break: break-all; }
+    .dz-clear {
+      display: inline-block; margin-left: 0.4rem; padding: 0 0.45rem;
+      border: 1px solid #d1d5db; border-radius: 6px;
+      background: #fff; color: #64748b; font-size: 0.75rem; cursor: pointer;
+    }
+    .dz-clear:hover { color: #dc2626; border-color: #fca5a5; }
   </style>
 </head>
 <body>
@@ -301,8 +322,16 @@
           엑셀 첫 행에 <strong>이름 / 교번 / 메일</strong> 헤더를 포함하여 작성해 주세요. (열 순서 자유)<br>
           업로드 시 메일은 즉시 해싱되어 저장되며 평문은 어디에도 보관되지 않습니다.
         </p>
-        <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
-          <input type="file" id="att-stu-xlsx" accept=".xlsx,.xls" style="flex:1;min-width:200px;font-size:0.85rem;">
+
+        <input type="file" id="att-stu-xlsx" accept=".xlsx,.xls" hidden>
+        <div id="att-stu-dropzone" class="dropzone">
+          <div class="dz-icon">📁</div>
+          <div class="dz-main">엑셀 파일을 끌어다 놓거나 클릭하여 선택</div>
+          <div class="dz-sub">.xlsx / .xls 형식</div>
+          <div class="dz-filename" id="att-stu-dz-filename"></div>
+        </div>
+
+        <div style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:0.7rem;flex-wrap:wrap;">
           <button class="btn btn-secondary btn-sm" onclick="downloadStudentTemplate()">📥 템플릿 다운로드</button>
           <button class="btn btn-primary btn-sm" id="att-stu-bulk-btn" onclick="bulkUploadAttendanceStudents()">업로드</button>
         </div>

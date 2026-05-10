@@ -1108,6 +1108,7 @@ window.bulkUploadAttendanceStudents = async function() {
     }
     showBulkStatus(msg, data.errors?.length ? '#d97706' : '#16a34a');
     fileEl.value = '';
+    fileEl.dispatchEvent(new Event('change'));
     await loadAttendanceStudents();
   } catch(e) {
     showBulkStatus(`업로드 실패: ${e.message || e}`, '#dc2626');
@@ -1121,6 +1122,68 @@ window.bulkUploadAttendanceStudents = async function() {
     status.style.whiteSpace = 'pre-line';
     status.textContent = msg;
   }
+};
+
+// ── 엑셀 드롭존 ───────────────────────────────
+(function initDropzone() {
+  const dz = document.getElementById('att-stu-dropzone');
+  const fileInput = document.getElementById('att-stu-xlsx');
+  const filenameEl = document.getElementById('att-stu-dz-filename');
+  if (!dz || !fileInput) return;
+
+  const isExcel = (name) => /\.(xlsx|xls)$/i.test(name);
+
+  const refreshUI = () => {
+    const file = fileInput.files?.[0];
+    if (file) {
+      dz.classList.add('has-file');
+      filenameEl.innerHTML = `✓ ${escapeHtml(file.name)} <button type="button" class="dz-clear" onclick="clearAttStudentFile(event)">✕</button>`;
+    } else {
+      dz.classList.remove('has-file');
+      filenameEl.textContent = '';
+    }
+  };
+
+  dz.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', refreshUI);
+
+  ['dragenter', 'dragover'].forEach(evt =>
+    dz.addEventListener(evt, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dz.classList.add('dragover');
+    })
+  );
+  ['dragleave', 'dragend', 'drop'].forEach(evt =>
+    dz.addEventListener(evt, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dz.classList.remove('dragover');
+    })
+  );
+
+  dz.addEventListener('drop', (e) => {
+    const files = e.dataTransfer?.files;
+    if (!files || !files.length) return;
+    const file = files[0];
+    if (!isExcel(file.name)) {
+      alert('엑셀 파일(.xlsx, .xls)만 업로드 가능합니다.');
+      return;
+    }
+    // input.files 에 드롭된 파일 주입 (DataTransfer 사용)
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    fileInput.files = dt.files;
+    refreshUI();
+  });
+})();
+
+window.clearAttStudentFile = function(ev) {
+  ev?.stopPropagation();
+  const fileInput = document.getElementById('att-stu-xlsx');
+  fileInput.value = '';
+  document.getElementById('att-stu-dropzone').classList.remove('has-file');
+  document.getElementById('att-stu-dz-filename').textContent = '';
 };
 
 // ── 시작 ──────────────────────────────
