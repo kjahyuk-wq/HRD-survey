@@ -81,17 +81,50 @@ exports.loginByEmail = onCall(
       .where('email_hmac', '==', emailHmac)
       .get();
 
-    const matches = snap.docs.filter((d) => d.data().name === name);
+    const allMatches = snap.docs.filter((d) => d.data().name === name);
 
-    if (matches.length === 0) {
+    if (allMatches.length === 0) {
       throw new HttpsError(
         'not-found',
         '등록된 수강생 정보를 찾을 수 없습니다. 이름과 메일을 확인하거나 담당자에게 문의해 주세요.'
       );
     }
 
-    // 한 사람 = 한 uid (email_hmac 기반).
-    // attendance_students 가 여러 과정에 걸쳐 있어도 동일 uid 발급.
+    // 학생 본인 active 여부 + 부모 과정 active 여부 검증
+    const validMatches = [];
+    let blockedByStudent = 0;
+    let blockedByCourse = 0;
+
+    for (const d of allMatches) {
+      // 학생 비활성
+      if (d.data().active === false) {
+        blockedByStudent++;
+        continue;
+      }
+      // 과정 비활성
+      const courseId = d.ref.parent.parent.id;
+      const courseSnap = await db.collection('courses').doc(courseId).get();
+      if (!courseSnap.exists || courseSnap.data().active === false) {
+        blockedByCourse++;
+        continue;
+      }
+      validMatches.push(d);
+    }
+
+    if (validMatches.length === 0) {
+      if (blockedByStudent > 0 && blockedByCourse === 0) {
+        throw new HttpsError(
+          'failed-precondition',
+          '비활성 처리된 계정입니다. 담당자에게 문의해 주세요.'
+        );
+      }
+      throw new HttpsError(
+        'failed-precondition',
+        '등록된 과정이 모두 종료 처리되었습니다. 담당자에게 문의해 주세요.'
+      );
+    }
+
+    // 한 사람 = 한 uid (email_hmac 기반)
     const uid = `stu_${emailHmac.substring(0, 28)}`;
 
     const customToken = await auth.createCustomToken(uid, {
@@ -99,7 +132,7 @@ exports.loginByEmail = onCall(
       emailHmac,
     });
 
-    const candidates = matches.map((d) => ({
+    const candidates = validMatches.map((d) => ({
       courseId: d.ref.parent.parent.id,
       studentDocId: d.id,
       empNo: d.data().empNo || '',
@@ -172,6 +205,7 @@ exports.registerAttendanceStudents = onCall(
         name,
         empNo,
         email_hmac: emailHmac,
+        active: true,
         createdAt: FieldValue.serverTimestamp(),
       });
       added++;
@@ -227,6 +261,7 @@ exports.registerAttendanceStudent = onCall(
       name,
       empNo,
       email_hmac: emailHmac,
+      active: true,
       createdAt: FieldValue.serverTimestamp(),
     });
 

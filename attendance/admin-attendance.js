@@ -79,12 +79,11 @@ onAuthStateChanged(auth, user => {
   }
 });
 
-// ── 메인 탭 전환 ──────────────────────────────
+// ── 화면 전환 (카드 리스트 ↔ 출석 현황) ──────────────
 window.switchMainTab = function(tab) {
   document.getElementById('main-tab-courses').style.display = tab === 'courses' ? '' : 'none';
   document.getElementById('main-tab-records').style.display = tab === 'records' ? '' : 'none';
-  document.getElementById('main-tab-btn-courses').classList.toggle('active', tab === 'courses');
-  document.getElementById('main-tab-btn-records').classList.toggle('active', tab === 'records');
+  window.scrollTo(0, 0);
 };
 
 window.backToCourses = function() {
@@ -92,6 +91,18 @@ window.backToCourses = function() {
 };
 
 // ── 교육과정 카드 리스트 ──────────────────────────────
+let closedCoursesExpanded = false;
+
+window.toggleClosedCourses = function() {
+  closedCoursesExpanded = !closedCoursesExpanded;
+  const list = document.getElementById('closed-courses-list');
+  const arrow = document.getElementById('closed-toggle-arrow');
+  const label = document.getElementById('closed-toggle-label');
+  if (list) list.style.display = closedCoursesExpanded ? 'block' : 'none';
+  if (arrow) arrow.textContent = closedCoursesExpanded ? '▲' : '▼';
+  if (label) label.textContent = label.textContent.replace(closedCoursesExpanded ? '보기' : '숨기기', closedCoursesExpanded ? '숨기기' : '보기');
+};
+
 window.loadCourseList = async function() {
   const loading = document.getElementById('course-manage-loading');
   const listEl = document.getElementById('course-manage-list');
@@ -136,7 +147,22 @@ window.loadCourseList = async function() {
 
     courses.forEach((c, idx) => { c.idx = idx; });
 
-    listEl.innerHTML = courses.map(renderCourseCard).join('');
+    const activeCourses = courses.filter(c => c.active);
+    const closedCourses = courses.filter(c => !c.active);
+    let html = activeCourses.map(renderCourseCard).join('');
+    if (closedCourses.length > 0) {
+      const arrow = closedCoursesExpanded ? '▲' : '▼';
+      const label = closedCoursesExpanded ? '숨기기' : '보기';
+      html += `
+        <div class="closed-courses-toggle" id="closed-courses-toggle" onclick="toggleClosedCourses()">
+          <span id="closed-toggle-arrow">${arrow}</span>
+          <span id="closed-toggle-label">종료된 과정 ${closedCourses.length}개 ${label}</span>
+        </div>
+        <div id="closed-courses-list" style="display:${closedCoursesExpanded ? 'block' : 'none'};">
+          ${closedCourses.map(renderCourseCard).join('')}
+        </div>`;
+    }
+    listEl.innerHTML = html;
 
     // 비동기로 메타 정보 채우기 (학생 수)
     courses.forEach(async (c) => {
@@ -165,13 +191,23 @@ function renderCourseCard({ id, name, active, idx, startDate, endDate }) {
     : `<span class="course-status closed">종료</span>`;
   const dateLabel = (startDate && endDate) ? `${formatFullDate(startDate)} ~ ${formatFullDate(endDate)}` : '';
   const dateHtml = dateLabel ? `<span class="course-date-range">${escapeHtml(dateLabel)}</span>` : '';
+  const safeName = escapeAttr(name);
 
-  const actionBtns = `
-    <button class="panel-toggle-btn edit-toggle" id="config-toggle-${idx}"
-      onclick="togglePanel('${cid}', ${idx}, 'config', '${escapeAttr(name)}')">출석 설정</button>
-    <button class="panel-toggle-btn stu-toggle" id="students-toggle-${idx}"
-      onclick="togglePanel('${cid}', ${idx}, 'students', '${escapeAttr(name)}')">학생 명단</button>
-    <button class="panel-toggle-btn" onclick="enterRecords('${cid}', '${escapeAttr(name)}')">출석 현황 →</button>`;
+  const actionBtns = active
+    ? `<button class="panel-toggle-btn edit-toggle" id="config-toggle-${idx}"
+         onclick="togglePanel('${cid}', ${idx}, 'config', '${safeName}')">출석 설정</button>
+       <button class="panel-toggle-btn stu-toggle" id="students-toggle-${idx}"
+         onclick="togglePanel('${cid}', ${idx}, 'students', '${safeName}')">학생 명단</button>
+       <button class="panel-toggle-btn" onclick="enterRecords('${cid}', '${safeName}')">출석 현황 →</button>
+       <button class="course-close-btn" onclick="toggleCourseActive('${cid}', true, this)">종료</button>`
+    : `<button class="panel-toggle-btn" onclick="enterRecords('${cid}', '${safeName}')">출석 현황 →</button>
+       <button class="course-reopen-btn" onclick="toggleCourseActive('${cid}', false, this)">재활성</button>
+       <button class="delete-btn" onclick="deleteCourseAttendance('${cid}', '${safeName}', this)" title="이 과정의 출결 데이터(학생 명단·출석 기록·설정)를 모두 삭제. 만족도 데이터는 보존.">출결 삭제</button>`;
+
+  const panelsHtml = active
+    ? `<div class="att-panel" id="config-panel-${idx}" style="display:none;"></div>
+       <div class="att-panel" id="students-panel-${idx}" style="display:none;"></div>`
+    : '';
 
   return `
     <div class="course-manage-item ${active ? '' : 'is-closed'}" id="course-item-${idx}">
@@ -187,10 +223,53 @@ function renderCourseCard({ id, name, active, idx, startDate, endDate }) {
           ${actionBtns}
         </div>
       </div>
-      <div class="att-panel" id="config-panel-${idx}" style="display:none;"></div>
-      <div class="att-panel" id="students-panel-${idx}" style="display:none;"></div>
+      ${panelsHtml}
     </div>`;
 }
+
+// ── 과정 종료/재활성 ──────────────────────────────
+window.toggleCourseActive = async function(courseId, isCurrentlyActive, btnEl) {
+  const newActive = !isCurrentlyActive;
+  const actionLabel = newActive ? '재활성' : '종료';
+  const desc = newActive
+    ? '학생 메일 로그인이 다시 가능해집니다.'
+    : '이 과정의 학생들은 더 이상 메일로 로그인할 수 없습니다.';
+  if (!confirm(`이 과정을 ${actionLabel} 처리할까요?\n${desc}`)) return;
+
+  btnEl.disabled = true;
+  const origText = btnEl.textContent;
+  btnEl.textContent = '처리 중...';
+  try {
+    await setDoc(doc(db, 'courses', courseId), { active: newActive }, { merge: true });
+    await loadCourseList();
+  } catch(e) {
+    alert(`${actionLabel} 실패: ${e.message}`);
+    btnEl.disabled = false;
+    btnEl.textContent = origText;
+  }
+};
+
+// ── 과정 출결 데이터 삭제 (만족도 데이터는 보존) ─────────
+window.deleteCourseAttendance = async function(courseId, courseName, btnEl) {
+  const msg = `[${courseName}]\n\n이 과정의 출결 데이터를 모두 삭제할까요?\n\n· 출결 학생 명단 (attendance_students)\n· 출석 기록 (attendance)\n· 출석 설정 (attendanceConfig)\n\n만족도 조사 데이터와 과정 자체는 보존됩니다.\n복구할 수 없습니다.`;
+  if (!confirm(msg)) return;
+
+  btnEl.disabled = true;
+  const orig = btnEl.textContent;
+  btnEl.textContent = '삭제 중...';
+  try {
+    const subs = ['attendance_students', 'attendance', 'attendanceConfig'];
+    for (const sub of subs) {
+      const snap = await getDocs(collection(db, 'courses', courseId, sub));
+      await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+    }
+    await loadCourseList();
+  } catch(e) {
+    alert(`삭제 실패: ${e.message}`);
+    btnEl.disabled = false;
+    btnEl.textContent = orig;
+  }
+};
 
 // ── 패널 토글 ──────────────────────────────
 window.togglePanel = async function(courseId, idx, mode, courseName) {
@@ -388,14 +467,15 @@ function renderStudentsPanelHtml() {
         <table class="att-table">
           <thead>
             <tr>
-              <th style="width:80px;">교번</th>
+              <th style="width:72px;">교번</th>
               <th>이름</th>
-              <th style="width:110px;">메일 등록</th>
-              <th style="width:80px;">관리</th>
+              <th style="width:80px;">상태</th>
+              <th style="width:90px;">메일</th>
+              <th style="width:160px;">관리</th>
             </tr>
           </thead>
           <tbody id="att-stu-tbody">
-            <tr><td colspan="4" class="loading">불러오는 중...</td></tr>
+            <tr><td colspan="5" class="loading">불러오는 중...</td></tr>
           </tbody>
         </table>
       </div>
@@ -1111,18 +1191,34 @@ window.loadAttendanceStudents = async function() {
     allStudents = list;
 
     if (!list.length) {
-      tbody.innerHTML = '<tr><td colspan="4" class="loading">등록된 학생이 없습니다.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" class="loading">등록된 학생이 없습니다.</td></tr>';
       return;
     }
 
-    tbody.innerHTML = list.map(s => `
-      <tr data-id="${escapeAttr(s._id)}">
-        <td>${escapeHtml(String(s.empNo || ''))}</td>
-        <td>${escapeHtml(s.name || '')}</td>
-        <td>${s.email_hmac ? '<span style="color:#16a34a;font-size:0.8rem;">✓ 등록됨</span>' : '<span style="color:#dc2626;font-size:0.8rem;">없음</span>'}</td>
-        <td><button class="btn btn-secondary btn-sm" onclick="deleteAttendanceStudent('${escapeAttr(s._id)}', '${escapeAttr(s.name || '')}')" style="padding:0.25rem 0.6rem;font-size:0.78rem;background:#fee2e2;color:#991b1b;border-color:#fecaca;">삭제</button></td>
-      </tr>
-    `).join('');
+    tbody.innerHTML = list.map(s => {
+      const isActive = s.active !== false;
+      const statusBadge = isActive
+        ? '<span style="display:inline-block;padding:1px 7px;border-radius:8px;background:#dcfce7;color:#15803d;font-size:0.75rem;font-weight:600;">활성</span>'
+        : '<span style="display:inline-block;padding:1px 7px;border-radius:8px;background:#f3f4f6;color:#6b7280;font-size:0.75rem;font-weight:600;">비활성</span>';
+      const mailBadge = s.email_hmac
+        ? '<span style="color:#16a34a;font-size:0.78rem;">✓ 등록됨</span>'
+        : '<span style="color:#dc2626;font-size:0.78rem;">없음</span>';
+      const toggleBtn = isActive
+        ? `<button class="btn btn-secondary btn-sm" onclick="toggleStudentActive('${escapeAttr(s._id)}', true)" style="padding:0.25rem 0.5rem;font-size:0.75rem;background:#fff7ed;color:#c2410c;border-color:#fdba74;" title="이 학생의 메일 로그인을 차단">비활성화</button>`
+        : `<button class="btn btn-secondary btn-sm" onclick="toggleStudentActive('${escapeAttr(s._id)}', false)" style="padding:0.25rem 0.5rem;font-size:0.75rem;background:#ecfdf5;color:#047857;border-color:#6ee7b7;" title="이 학생의 메일 로그인을 다시 허용">활성화</button>`;
+      const trClass = isActive ? '' : 'class="is-inactive" style="opacity:0.6;"';
+      return `
+        <tr data-id="${escapeAttr(s._id)}" ${trClass}>
+          <td>${escapeHtml(String(s.empNo || ''))}</td>
+          <td>${escapeHtml(s.name || '')}</td>
+          <td>${statusBadge}</td>
+          <td>${mailBadge}</td>
+          <td style="display:flex;gap:0.3rem;flex-wrap:wrap;">
+            ${toggleBtn}
+            <button class="btn btn-secondary btn-sm" onclick="deleteAttendanceStudent('${escapeAttr(s._id)}', '${escapeAttr(s.name || '')}')" style="padding:0.25rem 0.5rem;font-size:0.75rem;background:#fee2e2;color:#991b1b;border-color:#fecaca;">삭제</button>
+          </td>
+        </tr>`;
+    }).join('');
   } catch(e) {
     tbody.innerHTML = `<tr><td colspan="4" style="color:#dc2626;">불러오기 실패: ${escapeHtml(e.message)}</td></tr>`;
   }
@@ -1178,6 +1274,21 @@ window.deleteAttendanceStudent = async function(docId, name) {
     await loadAttendanceStudents();
   } catch(e) {
     alert('삭제 실패: ' + e.message);
+  }
+};
+
+window.toggleStudentActive = async function(docId, isCurrentlyActive) {
+  if (!currentCourseId) return;
+  const newActive = !isCurrentlyActive;
+  try {
+    await setDoc(
+      doc(db, 'courses', currentCourseId, 'attendance_students', docId),
+      { active: newActive },
+      { merge: true }
+    );
+    await loadAttendanceStudents();
+  } catch(e) {
+    alert('상태 변경 실패: ' + e.message);
   }
 };
 
