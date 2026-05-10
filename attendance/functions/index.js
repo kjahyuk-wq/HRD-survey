@@ -15,6 +15,10 @@ const REGION = 'asia-northeast3';
 const ADMIN_EMAILS = ['kjahyuk@korea.kr'];
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
+// 에뮬레이터에서는 App Check 강제를 우회 (테스트 편의)
+const IS_EMULATOR = process.env.FUNCTIONS_EMULATOR === 'true';
+const ENFORCE_APP_CHECK = !IS_EMULATOR;
+
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
 }
@@ -53,7 +57,7 @@ exports.loginByEmail = onCall(
   {
     region: REGION,
     secrets: [EMAIL_PEPPER],
-    enforceAppCheck: true,
+    enforceAppCheck: ENFORCE_APP_CHECK,
     maxInstances: 10,
   },
   async (request) => {
@@ -110,7 +114,7 @@ exports.registerAttendanceStudents = onCall(
   {
     region: REGION,
     secrets: [EMAIL_PEPPER],
-    enforceAppCheck: true,
+    enforceAppCheck: ENFORCE_APP_CHECK,
     maxInstances: 5,
   },
   async (request) => {
@@ -185,7 +189,7 @@ exports.registerAttendanceStudent = onCall(
   {
     region: REGION,
     secrets: [EMAIL_PEPPER],
-    enforceAppCheck: true,
+    enforceAppCheck: ENFORCE_APP_CHECK,
     maxInstances: 5,
   },
   async (request) => {
