@@ -4,13 +4,14 @@ import {
   doc, getDoc, setDoc, deleteDoc, serverTimestamp, Timestamp
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import {
-  signInWithCustomToken, setPersistence, browserLocalPersistence, onAuthStateChanged
+  signInWithCustomToken, signOut, setPersistence, browserLocalPersistence, onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-functions.js";
 import { escapeHtml, toDateStr, formatDisplayDate, formatTime, getBuiltinHolidays } from './utils.js';
 
-// 24시간 세션 유지 — 로컬 영속 (오전/오후 재로그인 불필요)
+// 72시간 세션 유지 (단기과정 3일치). LOCAL 영속 + 자체 만료 체크.
 setPersistence(auth, browserLocalPersistence).catch(() => {});
+const SESSION_MAX_AGE_MS = 72 * 60 * 60 * 1000;
 
 const loginByEmail = httpsCallable(functions, 'loginByEmail');
 const loginByEmpNo = httpsCallable(functions, 'loginByEmpNo');
@@ -57,6 +58,13 @@ function showEmpNoError(msg) {
 // ── 세션 캐시 키 ──
 const SESSION_NAME_KEY = 'att_login_name';
 const SESSION_CANDS_KEY = 'att_login_candidates';
+const SESSION_TS_KEY = 'att_login_ts';
+
+function clearSessionCache() {
+  localStorage.removeItem(SESSION_NAME_KEY);
+  localStorage.removeItem(SESSION_CANDS_KEY);
+  localStorage.removeItem(SESSION_TS_KEY);
+}
 
 // onAuthStateChanged ↔ doLogin 동시 진행 방지 플래그
 let autoResumed = false;
@@ -89,9 +97,10 @@ window.doLogin = async function() {
     autoResumed = true;
     await signInWithCustomToken(auth, customToken);
 
-    // 메일은 절대 캐싱하지 않음. 이름과 후보 목록만 저장 (24시간 자동 진행용)
+    // 메일은 절대 캐싱하지 않음. 이름/후보/타임스탬프만 저장 (72시간 자동 진행용)
     localStorage.setItem(SESSION_NAME_KEY, name);
     localStorage.setItem(SESSION_CANDS_KEY, JSON.stringify(rawCandidates || []));
+    localStorage.setItem(SESSION_TS_KEY, String(Date.now()));
 
     await proceedWithCandidates(name, rawCandidates || []);
   } catch (e) {
@@ -140,6 +149,7 @@ window.doLoginEmpNo = async function() {
 
     localStorage.setItem(SESSION_NAME_KEY, name);
     localStorage.setItem(SESSION_CANDS_KEY, JSON.stringify(rawCandidates || []));
+    localStorage.setItem(SESSION_TS_KEY, String(Date.now()));
 
     await proceedWithCandidates(name, rawCandidates || []);
   } catch (e) {
@@ -439,7 +449,7 @@ document.getElementById('input-email').addEventListener('keydown', e => { if (e.
 document.getElementById('input-name-empno').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('input-empno').focus(); });
 document.getElementById('input-empno').addEventListener('keydown', e => { if (e.key === 'Enter') window.doLoginEmpNo(); });
 
-// 24시간 세션이 살아 있으면 메일 재입력 없이 자동 진행
+// 72시간 세션이 살아 있으면 메일/교번 재입력 없이 자동 진행
 onAuthStateChanged(auth, async (user) => {
   if (!user || user.isAnonymous || autoResumed) return;
   try {
@@ -448,7 +458,15 @@ onAuthStateChanged(auth, async (user) => {
 
     const cachedName = localStorage.getItem(SESSION_NAME_KEY);
     const cachedCandsRaw = localStorage.getItem(SESSION_CANDS_KEY);
+    const cachedTs = parseInt(localStorage.getItem(SESSION_TS_KEY) || '0', 10);
     if (!cachedName || !cachedCandsRaw) return;
+
+    // 72시간 만료 체크
+    if (!cachedTs || Date.now() - cachedTs > SESSION_MAX_AGE_MS) {
+      clearSessionCache();
+      try { await signOut(auth); } catch(_) {}
+      return;
+    }
 
     const cachedCands = JSON.parse(cachedCandsRaw);
     if (!Array.isArray(cachedCands) || !cachedCands.length) return;
