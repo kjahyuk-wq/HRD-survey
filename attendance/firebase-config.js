@@ -2,7 +2,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/fireba
 import { getFirestore, connectFirestoreEmulator } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
 import { getFunctions, connectFunctionsEmulator } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-functions.js";
-import { initializeAppCheck, ReCaptchaEnterpriseProvider } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app-check.js";
+import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app-check.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAw1nRzHaV318mm6vhueWt19PAkVHyMkrw",
@@ -13,9 +13,9 @@ const firebaseConfig = {
   appId: "1:233199711039:web:8f1cb4d26f4ac9306dd98a"
 };
 
-// 🔑 reCAPTCHA Enterprise 사이트 키 — Firebase 콘솔 > App Check 에서 발급 후 입력
-//    (활성화 전엔 빈 문자열로 둠 → 운영에서도 App Check 초기화 스킵)
-const RECAPTCHA_SITE_KEY = '';
+// 🔑 reCAPTCHA v3 사이트 키 (App Check 용)
+//    비밀 키는 Firebase 콘솔의 App Check 페이지에 별도 등록되어 있음
+const RECAPTCHA_SITE_KEY = '6LfLR-IsAAAAAKpDG_I_gohdgxWDb3265RmblLb3';
 
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
@@ -39,7 +39,7 @@ if (isLocal) {
   // 운영: App Check 활성화 (Cloud Function 호출의 어뷰징 방어)
   try {
     initializeAppCheck(app, {
-      provider: new ReCaptchaEnterpriseProvider(RECAPTCHA_SITE_KEY),
+      provider: new ReCaptchaV3Provider(RECAPTCHA_SITE_KEY),
       isTokenAutoRefreshEnabled: true,
     });
     console.info('[firebase] App Check 활성화');

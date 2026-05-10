@@ -45,10 +45,10 @@ npm run dev
 
 > 순서대로 진행. 각 단계 완료 후 다음 단계로.
 
-### 1. Blaze 플랜 활성화 (인재개발원)
+### 1. Blaze 플랜 활성화
 - Firebase 콘솔 → 프로젝트 `hrd-data` → 사용량 및 결제 → Blaze 업그레이드 (신용카드 등록)
 - 예산 알림: $1 / $5 / $10 (메일 알림)
-- 어뷰징 방어 깔린 상태에서 worst case 비용 $5–15 수준
+- 어뷰징 방어 깔린 상태에서 worst case 비용 $5–15 수준 (정상 운영 시 무료 한도 내)
 
 ### 2. reCAPTCHA Enterprise 활성화
 - Firebase 콘솔 → App Check → 시작하기

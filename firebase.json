@@ -28,7 +28,7 @@
         "source": "**/*.html",
         "headers": [
           { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" },
-          { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdn.sheetjs.com https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://www.gstatic.com https://*.googleapis.com https://*.firebaseio.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://*.cloudfunctions.net https://content-firebaseappcheck.googleapis.com wss://*.firebaseio.com; media-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'" }
+          { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://www.google.com https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://cdn.sheetjs.com https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://www.gstatic.com https://*.googleapis.com https://*.firebaseio.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://*.cloudfunctions.net https://content-firebaseappcheck.googleapis.com wss://*.firebaseio.com; media-src 'self' blob:; frame-src 'self' https://www.google.com https://www.google.com/recaptcha/ https://recaptcha.google.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'" }
         ]
       },
       {
