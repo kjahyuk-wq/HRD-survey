@@ -9,9 +9,9 @@ import {
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-functions.js";
 import { escapeHtml, toDateStr, formatDisplayDate, formatTime, getBuiltinHolidays } from './utils.js';
 
-// 72시간 세션 유지 (단기과정 3일치). LOCAL 영속 + 자체 만료 체크.
+// 최대 2주 세션 유지. 그 안에 관리자가 과정 비활성하면 다음 자동 진행 시 서버에서 차단.
 setPersistence(auth, browserLocalPersistence).catch(() => {});
-const SESSION_MAX_AGE_MS = 72 * 60 * 60 * 1000;
+const SESSION_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 
 const loginByEmail = httpsCallable(functions, 'loginByEmail');
 const loginByEmpNo = httpsCallable(functions, 'loginByEmpNo');
@@ -41,7 +41,28 @@ document.getElementById('today-date').textContent = formatDisplayDate(today);
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
+  // 로그인 화면 외에선 로그아웃 버튼 표시
+  const logoutBtn = document.getElementById('logout-btn');
+  if (logoutBtn) {
+    const isLoginScreen = id === 'screen-login' || id === 'screen-login-empno';
+    logoutBtn.style.display = isLoginScreen ? 'none' : 'inline-block';
+  }
 }
+
+// ── 로그아웃 ──────────────────────────────
+window.doLogout = async function() {
+  if (!confirm('로그아웃 하시겠습니까?')) return;
+  clearSessionCache();
+  try { await signOut(auth); } catch(_) {}
+  ['input-name', 'input-email', 'input-name-empno', 'input-empno'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+  autoResumed = false;
+  currentUser = null;
+  showScreen('screen-login');
+};
 
 function showLoginError(msg) {
   const el = document.getElementById('login-error');

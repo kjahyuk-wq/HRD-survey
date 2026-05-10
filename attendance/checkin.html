@@ -47,7 +47,10 @@
       <h1>📋 출석 체크인</h1>
       <div class="sub">HRD 인력개발교육원</div>
     </div>
-    <div id="today-date" style="font-size:0.82rem;opacity:0.85;"></div>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.35rem;">
+      <button id="logout-btn" onclick="doLogout()" style="display:none;background:rgba(255,255,255,0.18);color:#fff;border:none;padding:0.3rem 0.7rem;border-radius:8px;font-size:0.78rem;cursor:pointer;">로그아웃</button>
+      <div id="today-date" style="font-size:0.82rem;opacity:0.85;"></div>
+    </div>
   </div>
 
   <!-- 스크린 1A: 메일 로그인 -->
@@ -55,8 +58,7 @@
     <div class="card">
       <h2 style="font-size:1.05rem;font-weight:700;margin-bottom:1rem;">본인 확인</h2>
       <p style="font-size:0.85rem;color:#64748b;margin-bottom:1.2rem;line-height:1.6;">
-        <strong>이름</strong>과 <strong>공직자 통합메일</strong>을 입력해 주세요.<br>
-        한 번 로그인하면 <strong>3일(72시간)</strong> 동안 유지됩니다.
+        <strong>이름</strong>과 <strong>공직자 통합메일</strong>을 입력해 주세요.
       </p>
       <div class="form-group">
         <label>이름</label>
