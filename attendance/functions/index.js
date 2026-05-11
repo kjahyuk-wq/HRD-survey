@@ -15,6 +15,11 @@ const REGION = 'asia-northeast3';
 const ADMIN_EMAILS = ['kjahyuk@korea.kr'];
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
+// 로그인 실패 시 enumeration(등록 여부·비활성·과정 종료 구분 누설) 방지를 위해
+// 미등록/비활성/과정종료 모두 동일 메시지 + 동일 code 로 응답한다.
+const LOGIN_FAIL_MSG =
+  '로그인할 수 있는 등록 정보가 없습니다. 정보를 다시 확인하시거나 담당자에게 문의해 주세요.';
+
 // 에뮬레이터에서는 App Check 강제를 우회 (테스트 편의)
 const IS_EMULATOR = process.env.FUNCTIONS_EMULATOR === 'true';
 const ENFORCE_APP_CHECK = !IS_EMULATOR;
@@ -84,44 +89,22 @@ exports.loginByEmail = onCall(
     const allMatches = snap.docs.filter((d) => d.data().name === name);
 
     if (allMatches.length === 0) {
-      throw new HttpsError(
-        'not-found',
-        '등록된 수강생 정보를 찾을 수 없습니다. 이름과 메일을 확인하거나 담당자에게 문의해 주세요.'
-      );
+      throw new HttpsError('not-found', LOGIN_FAIL_MSG);
     }
 
     // 학생 본인 active 여부 + 부모 과정 active 여부 검증
     const validMatches = [];
-    let blockedByStudent = 0;
-    let blockedByCourse = 0;
 
     for (const d of allMatches) {
-      // 학생 비활성
-      if (d.data().active === false) {
-        blockedByStudent++;
-        continue;
-      }
-      // 과정 비활성
+      if (d.data().active === false) continue;
       const courseId = d.ref.parent.parent.id;
       const courseSnap = await db.collection('courses').doc(courseId).get();
-      if (!courseSnap.exists || courseSnap.data().active === false) {
-        blockedByCourse++;
-        continue;
-      }
+      if (!courseSnap.exists || courseSnap.data().active === false) continue;
       validMatches.push(d);
     }
 
     if (validMatches.length === 0) {
-      if (blockedByStudent > 0 && blockedByCourse === 0) {
-        throw new HttpsError(
-          'failed-precondition',
-          '비활성 처리된 계정입니다. 담당자에게 문의해 주세요.'
-        );
-      }
-      throw new HttpsError(
-        'failed-precondition',
-        '등록된 과정이 모두 종료 처리되었습니다. 담당자에게 문의해 주세요.'
-      );
+      throw new HttpsError('not-found', LOGIN_FAIL_MSG);
     }
 
     // 한 사람 = 한 uid (email_hmac 기반)
@@ -177,37 +160,23 @@ exports.loginByEmpNo = onCall(
     const nameMatches = snap.docs.filter((d) => d.data().name === name);
 
     if (nameMatches.length === 0) {
-      throw new HttpsError(
-        'not-found',
-        '등록된 수강생 정보를 찾을 수 없습니다. 이름과 교번을 확인하거나 담당자에게 문의해 주세요.'
-      );
+      throw new HttpsError('not-found', LOGIN_FAIL_MSG);
     }
 
     // 메일이 있든 없든 이름+교번 로그인 허용. 같은 이름+교번이 여러 과정에 있으면 다음 화면에서 선택.
     // 학생 + 부모 과정 active 검증
     const validMatches = [];
-    let blockedByStudent = 0;
-    let blockedByCourse = 0;
 
     for (const d of nameMatches) {
-      if (d.data().active === false) {
-        blockedByStudent++;
-        continue;
-      }
+      if (d.data().active === false) continue;
       const courseId = d.ref.parent.parent.id;
       const courseSnap = await db.collection('courses').doc(courseId).get();
-      if (!courseSnap.exists || courseSnap.data().active === false) {
-        blockedByCourse++;
-        continue;
-      }
+      if (!courseSnap.exists || courseSnap.data().active === false) continue;
       validMatches.push(d);
     }
 
     if (validMatches.length === 0) {
-      if (blockedByStudent > 0 && blockedByCourse === 0) {
-        throw new HttpsError('failed-precondition', '비활성 처리된 계정입니다. 담당자에게 문의해 주세요.');
-      }
-      throw new HttpsError('failed-precondition', '등록된 과정이 모두 종료 처리되었습니다. 담당자에게 문의해 주세요.');
+      throw new HttpsError('not-found', LOGIN_FAIL_MSG);
     }
 
     // uid 결정 — 학생 doc 의 email_hmac 우선, 없으면 (이름+교번) 해시.

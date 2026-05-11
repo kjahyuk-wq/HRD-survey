@@ -403,12 +403,25 @@ async function submitSurvey() {
   }
 }
 
+// 본문 텍스트 + 속성 자리 양쪽에서 안전 (따옴표까지 entity).
 function escapeHtml(str) {
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
+// HTML 속성 + onclick 안의 JS 문자열(작은따옴표) 양쪽 컨텍스트에서 안전.
 function escapeAttr(str) {
-  return String(str).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'");
 }
 
 window.doLogin = doLogin;

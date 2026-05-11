@@ -10,7 +10,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-functions.js";
 import {
-  escapeHtml, formatTime, formatFullDate, formatShortDate, getBuiltinHolidays, toDateStr
+  escapeHtml, escapeAttr, formatTime, formatFullDate, formatShortDate, getBuiltinHolidays, toDateStr
 } from './utils.js';
 
 // 관리자 세션은 탭이 닫히면 로그아웃되도록 SESSION persistence 사용
@@ -27,9 +27,6 @@ let customHolidays = [];
 let excludedHolidays = [];
 let dailySessions = 1;
 const todayStr = toDateStr(new Date());
-
-// HTML escape for attribute (single/double quote 모두 처리)
-function escapeAttr(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
 
 // ── 관리자 인증 ──────────────────────────────
 const ADMIN_EMAIL = 'kjahyuk@korea.kr';

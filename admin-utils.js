@@ -37,9 +37,14 @@ export const state = {
   lastComputedStats: null,
 };
 
-// 유틸 함수
+// 본문 텍스트 + 속성 자리 양쪽에서 안전. (따옴표까지 entity 로 변환)
 export function escapeHtml(str) {
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 // HTML 속성 + onclick 안의 JS 문자열 양쪽 컨텍스트에서 안전하게 사용 가능.
@@ -69,10 +74,3 @@ export function formatDateTime(isoStr) {
   return `${d.getFullYear()}.${pad(d.getMonth()+1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export function formatDateTimeSec(isoStr) {
-  if (!isoStr) return '';
-  const d = new Date(isoStr);
-  if (isNaN(d)) return isoStr;
-  const pad = n => String(n).padStart(2, '0');
-  return `${d.getFullYear()}.${pad(d.getMonth()+1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}

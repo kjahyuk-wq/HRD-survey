@@ -2,12 +2,25 @@
 // checkin.js / scan.js / admin-attendance.js 에서 import.
 import { Timestamp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 
-// HTML 본문(텍스트 노드)에 안전하게 출력하기 위한 이스케이프
+// 본문 텍스트 + 속성 자리 양쪽에서 안전 (따옴표까지 entity 로 변환).
 export function escapeHtml(str) {
   return String(str)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// HTML 속성 + onclick 안의 JS 문자열(작은따옴표) 양쪽 컨텍스트에서 안전.
+export function escapeAttr(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'");
 }
 
 // "YYYY-MM-DD" (로컬 시간대 기준 — toISOString 은 UTC 기준이라 KST 자정에 하루 빠지는 버그)
