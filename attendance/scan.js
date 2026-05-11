@@ -68,8 +68,26 @@ function initScanner() {
 
 // ── 상태 ──────────────────────────────
 const LATE_GRACE_MIN = 15;   // 세션 시작 + 15분까지는 정상 출석, 초과 시 지각
+const PROCESS_LOCK_MS = 1500; // 결과 표시 후 다음 스캔 허용까지 (success/warning 공통)
+const PROCESS_WATCHDOG_MS = 10000; // Firestore hang 등 비정상 상황 안전 해제
 let isProcessing = false;
+let processWatchdog = null;
 let wakeLock = null;
+
+// isProcessing 해제 헬퍼 — setTimeout 누락/hang 대비 워치독 동시 관리
+function lockProcessing() {
+  isProcessing = true;
+  clearTimeout(processWatchdog);
+  processWatchdog = setTimeout(() => { isProcessing = false; }, PROCESS_WATCHDOG_MS);
+}
+function unlockProcessing(delayMs = 0) {
+  clearTimeout(processWatchdog);
+  if (delayMs > 0) {
+    setTimeout(() => { isProcessing = false; }, delayMs);
+  } else {
+    isProcessing = false;
+  }
+}
 
 const today = toDateStr(new Date());
 document.getElementById('scan-date-label').textContent = formatDisplayDate(today);
@@ -180,12 +198,15 @@ async function startScanner(facing) {
     await html5Qr.start(
       source,
       {
-        fps: 10,
+        fps: 15,  // 10 → 15: 같은 시간에 더 많은 프레임을 디코드 시도 (인식률 향상)
         qrbox: (vw, vh) => {
           const m = Math.floor(Math.min(vw, vh) * 0.85);
           return { width: m, height: m };
         },
-        aspectRatio: 1.0
+        aspectRatio: 1.0,
+        // 지원 브라우저(Chrome/Edge 등)에서 네이티브 BarcodeDetector 사용 — ZXing JS 보다
+        // 훨씬 빠르고 인식률 높음. 미지원 브라우저는 자동으로 기본 디코더 폴백.
+        experimentalFeatures: { useBarCodeDetectorIfSupported: true }
       },
       onScanSuccess,
       () => {}
@@ -215,14 +236,14 @@ function initCameraSwitch() {
 // ── QR 스캔 성공 처리 ──────────────────────────────
 async function onScanSuccess(rawText) {
   if (isProcessing) return;
-  isProcessing = true;
+  lockProcessing();
 
   let payload;
   try {
     payload = JSON.parse(rawText);
   } catch {
     showResult('error', '❌', '잘못된 QR 코드입니다', '인식할 수 없는 형식입니다.');
-    setTimeout(() => { isProcessing = false; }, 2000);
+    unlockProcessing(PROCESS_LOCK_MS);
     return;
   }
 
@@ -230,14 +251,14 @@ async function onScanSuccess(rawText) {
 
   if (!tokenId || !empNo || !session || !date) {
     showResult('error', '❌', '등록되지 않은 QR입니다', '필수 정보가 누락된 QR 코드입니다.');
-    setTimeout(() => { isProcessing = false; }, 2000);
+    unlockProcessing(PROCESS_LOCK_MS);
     return;
   }
 
   // 날짜 확인
   if (date !== today) {
     showResult('error', '❌', '날짜가 맞지 않는 QR입니다', `이 QR은 ${date}용입니다.`);
-    setTimeout(() => { isProcessing = false; }, 3000);
+    unlockProcessing(PROCESS_LOCK_MS);
     return;
   }
 
@@ -247,7 +268,7 @@ async function onScanSuccess(rawText) {
 
     if (!tokenSnap.exists()) {
       showResult('error', '❌', '등록되지 않은 QR입니다', 'Firestore에서 토큰을 찾을 수 없습니다.');
-      setTimeout(() => { isProcessing = false; }, 3000);
+      unlockProcessing(PROCESS_LOCK_MS);
       return;
     }
 
@@ -260,14 +281,14 @@ async function onScanSuccess(rawText) {
 
     if (Date.now() > expiresAt) {
       showResult('warning', '⏱', '유효시간이 초과된 QR입니다', '교육생에게 QR을 다시 발급받도록 안내해 주세요.');
-      setTimeout(() => { isProcessing = false; }, 3000);
+      unlockProcessing(PROCESS_LOCK_MS);
       return;
     }
 
     // 이미 처리됨 확인
     if (token.used) {
       showResult('warning', '⚠️', '이미 출석 처리된 교육생입니다', `${token.name}님 (교번: ${token.empNo})`);
-      setTimeout(() => { isProcessing = false; }, 3000);
+      unlockProcessing(PROCESS_LOCK_MS);
       return;
     }
 
@@ -276,7 +297,7 @@ async function onScanSuccess(rawText) {
     if (session !== 'single' && currentSession !== session) {
       const sessionLabel = session === 'morning' ? '오전' : '오후';
       showResult('warning', '⚠️', `${sessionLabel} 출석 시간이 아닙니다`, `이 QR은 ${sessionLabel} 출석용입니다.`);
-      setTimeout(() => { isProcessing = false; }, 3000);
+      unlockProcessing(PROCESS_LOCK_MS);
       return;
     }
 
@@ -306,12 +327,12 @@ async function onScanSuccess(rawText) {
     const statusBadge = status === 'late' ? ' · 지각' : '';
     showResult('success', '✅', `${name}님 출석 완료${sessionLabel}${statusBadge}`, `교번: ${empNo} | ${courseName}`);
 
-    setTimeout(() => { isProcessing = false; }, 3000);
+    unlockProcessing(PROCESS_LOCK_MS);
 
   } catch (e) {
     console.error('처리 오류:', e);
     showResult('error', '❌', '처리 중 오류가 발생했습니다', String(e?.message || e));
-    setTimeout(() => { isProcessing = false; }, 3000);
+    unlockProcessing(PROCESS_LOCK_MS);
   }
 }
 
