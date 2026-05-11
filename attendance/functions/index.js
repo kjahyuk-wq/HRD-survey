@@ -127,9 +127,15 @@ exports.loginByEmail = onCall(
     // 한 사람 = 한 uid (email_hmac 기반)
     const uid = `stu_${emailHmac.substring(0, 28)}`;
 
+    // 본인 명의의 empNo 목록 (rules의 qr_tokens/reset_ 본인성 검증용)
+    const empNos = [
+      ...new Set(validMatches.map((d) => d.data().empNo).filter(Boolean)),
+    ];
+
     const customToken = await auth.createCustomToken(uid, {
       role: 'student',
       emailHmac,
+      empNos,
     });
 
     const candidates = validMatches.map((d) => ({
@@ -221,6 +227,7 @@ exports.loginByEmpNo = onCall(
     const customToken = await auth.createCustomToken(uid, {
       role: 'student',
       loginType: 'empno',
+      empNos: [empNo],
     });
 
     const candidates = validMatches.map((d) => ({

@@ -3,9 +3,13 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ───────────── 헬퍼 ─────────────
-    // 관리자: Firebase Email 인증 사용자 (익명에는 email이 없음)
+    // 관리자: 명시적 이메일 화이트리스트.
+    // 추가/변경 시 이 리스트와 attendance/functions/index.js 의 ADMIN_EMAILS 를 함께 수정.
     function isAdmin() {
-      return request.auth != null && request.auth.token.email != null;
+      return request.auth != null
+        && request.auth.token.email in [
+          'kjahyuk@korea.kr',
+        ];
     }
     // 인증된 사용자: 관리자 + 익명(교육생/키오스크)
     function isAuthenticated() {
@@ -97,12 +101,16 @@ service cloud.firestore {
         );
       }
 
-      // 출석 설정: 관리자만 쓰기, 단 reset_* 마커 문서는 교육생이 소비 후 삭제 가능
+      // 출석 설정: 관리자만 쓰기. reset_* 마커는 본인 empNo 의 문서만 학생이 소비 후 삭제 가능.
+      // (이전에는 익명 인증 누구나 reset_* 를 삭제할 수 있어 다른 학생의 lock 해제를 방해할 수 있었음)
       match /attendanceConfig/{docId} {
         allow read: if isAuthenticated();
         allow create, update: if isAdmin();
         allow delete: if isAdmin()
-          || (isAuthenticated() && docId.matches('reset_.*'));
+          || (isAttendanceStudent()
+              && docId.matches('reset_.*')
+              && 'empNos' in request.auth.token
+              && resource.data.empNo in request.auth.token.empNos);
       }
 
       // 출결 학생 명단: 메일 평문 절대 저장 금지. Cloud Function 우회 등록만 안전.
@@ -193,29 +201,17 @@ service cloud.firestore {
         }
       }
 
-      // 출석 기록:
-      //   - 관리자: 임의 쓰기/수정/삭제 (수기 출석 입력)
-      //   - 키오스크(익명): used 처리된 qr_token을 참조 + studentId 일치하는 create만 허용
+      // 출석 기록: 키오스크가 관리자 계정으로 로그인해 처리하므로 관리자 전용.
+      // (이전에는 익명 분기가 있었으나, 키오스크가 admin 인증을 거치므로 불필요해져 제거)
       match /attendance/{attendanceId} {
         allow read: if isAuthenticated();
-        allow update, delete: if isAdmin();
-        allow create: if isAdmin() || (
-          isAuthenticated()
-          && request.resource.data.tokenId is string
-          && exists(/databases/$(database)/documents/qr_tokens/$(request.resource.data.tokenId))
-          && get(/databases/$(database)/documents/qr_tokens/$(request.resource.data.tokenId)).data.used == true
-          && get(/databases/$(database)/documents/qr_tokens/$(request.resource.data.tokenId)).data.courseId == courseId
-          && get(/databases/$(database)/documents/qr_tokens/$(request.resource.data.tokenId)).data.empNo == request.resource.data.empNo
-          && get(/databases/$(database)/documents/qr_tokens/$(request.resource.data.tokenId)).data.date == request.resource.data.date
-          && get(/databases/$(database)/documents/qr_tokens/$(request.resource.data.tokenId)).data.session == request.resource.data.session
-          && get(/databases/$(database)/documents/qr_tokens/$(request.resource.data.tokenId)).data.studentId == request.resource.data.studentId
-        );
+        allow create, update, delete: if isAdmin();
       }
     }
 
     // ───────────── QR 토큰 (top-level) ─────────────
-    // - create: 출결 식별 인증 학생만 (자신의 uid 만 박을 수 있음)
-    // - update: 사용 표시 1회 전이만 (used/usedAt 외 변경 금지)
+    // - create: 출결 식별 인증 학생만 (본인 uid + 본인 empNo claim 만 박을 수 있음)
+    // - update: 키오스크가 admin 계정으로 used 처리 → 관리자 전용
     // - delete: 관리자만
     match /qr_tokens/{tokenId} {
       allow read: if isAuthenticated();
@@ -228,6 +224,9 @@ service cloud.firestore {
         && request.resource.data.used == false
         && request.resource.data.studentId == request.auth.uid
         && request.resource.data.empNo is string && request.resource.data.empNo.size() <= 20
+        // 본인 empNo 만 허용 — custom token claim 의 empNos list 와 매칭
+        && 'empNos' in request.auth.token
+        && request.resource.data.empNo in request.auth.token.empNos
         && request.resource.data.name is string && request.resource.data.name.size() <= 50
         && request.resource.data.courseId is string && request.resource.data.courseId.size() <= 100
         && request.resource.data.date is string && request.resource.data.date.size() == 10
@@ -236,13 +235,7 @@ service cloud.firestore {
         && request.resource.data.expiresAt > request.time
         && request.resource.data.expiresAt < request.time + duration.value(15, 'm')
       );
-      allow update: if isAdmin() || (
-        isAuthenticated()
-        && resource.data.used == false
-        && request.resource.data.used == true
-        && changedKeysOnly(['used','usedAt'])
-      );
-      allow delete: if isAdmin();
+      allow update, delete: if isAdmin();
     }
 
     // ───────────── Rate limit (Cloud Function 전용) ─────────────
