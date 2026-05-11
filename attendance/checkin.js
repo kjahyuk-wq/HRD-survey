@@ -307,13 +307,27 @@ async function proceedWithCourse(name, candidate) {
     return;
   }
 
-  // 이미 출석 처리됐는지 확인
-  const attSnap = await getDocs(query(
-    collection(db, 'courses', courseId, 'attendance'),
-    where('empNo', '==', empNo),
-    where('date', '==', today),
-    where('session', '==', session)
-  ));
+  // 이미 출석 처리됐는지 확인 — studentId(uid) 기반.
+  // (empNo 기반이면 같은 empNo 로 메일만 다른 다른 학생을 같은 출석으로 인식하는 버그 + 학생 삭제 후
+  //  재등록 시 stale attendance 기록이 따라오는 문제가 있었음. uid 는 학생 정체성 단위.)
+  const myUid = auth.currentUser?.uid;
+  let attSnap;
+  if (myUid) {
+    attSnap = await getDocs(query(
+      collection(db, 'courses', courseId, 'attendance'),
+      where('studentId', '==', myUid),
+      where('date', '==', today),
+      where('session', '==', session)
+    ));
+  } else {
+    // 인증 안 된 비정상 흐름 fallback (정상 흐름에선 발생 안 함)
+    attSnap = await getDocs(query(
+      collection(db, 'courses', courseId, 'attendance'),
+      where('empNo', '==', empNo),
+      where('date', '==', today),
+      where('session', '==', session)
+    ));
+  }
 
   if (!attSnap.empty) {
     showScreen('screen-already');

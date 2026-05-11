@@ -2,7 +2,7 @@ import { db, auth, functions } from './firebase-config.js';
 import {
   collection, getDocs, getDoc,
   doc, setDoc, deleteDoc, serverTimestamp,
-  getCountFromServer, query, where
+  getCountFromServer, query, where, writeBatch
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import {
   signInWithEmailAndPassword, signOut, onAuthStateChanged,
@@ -1262,12 +1262,46 @@ window.addAttendanceStudent = async function() {
   }
 };
 
+// Cloud Function 의 uid 발급 로직과 동일하게 학생 doc 정보 → uid 계산.
+//   - email_hmac 있으면 → stu_{email_hmac[0:28]}
+//   - 없으면         → stu_{sha256('empno|<empNo>|<name>')[0:28]}
+// 학생 doc 삭제 시 이 uid 로 박힌 attendance 기록을 함께 삭제하여 잔재 0.
+async function computeStudentUid(stu) {
+  if (stu.email_hmac) return `stu_${String(stu.email_hmac).substring(0, 28)}`;
+  const buf = new TextEncoder().encode(`empno|${stu.empNo}|${stu.name}`);
+  const hashBuf = await crypto.subtle.digest('SHA-256', buf);
+  const hex = Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  return `stu_${hex.substring(0, 28)}`;
+}
+
 window.deleteAttendanceStudent = async function(docId, name) {
   if (!currentCourseId) return;
-  if (!confirm(`${name} 학생을 출결 명단에서 삭제할까요?\n출결 기록은 그대로 보존됩니다.`)) return;
+  if (!confirm(`${name} 학생을 출결 명단에서 삭제할까요?\n이 학생의 출결 기록(attendance)도 함께 삭제됩니다.\n복구할 수 없습니다.`)) return;
 
   try {
-    await deleteDoc(doc(db, 'courses', currentCourseId, 'attendance_students', docId));
+    // 학생 doc 읽어 uid 계산 (메일 다른 학생의 출결까지 잘못 지우는 일 방지)
+    const stuRef = doc(db, 'courses', currentCourseId, 'attendance_students', docId);
+    const stuSnap = await getDoc(stuRef);
+    if (!stuSnap.exists()) {
+      alert('이미 삭제된 학생입니다.');
+      await loadAttendanceStudents();
+      return;
+    }
+    const stu = stuSnap.data();
+    const uid = await computeStudentUid(stu);
+
+    // 같은 과정의 attendance 에서 studentId 매칭 doc 일괄 삭제 (writeBatch 450 op/배치)
+    const attSnap = await getDocs(query(
+      collection(db, 'courses', currentCourseId, 'attendance'),
+      where('studentId', '==', uid)
+    ));
+    for (let i = 0; i < attSnap.docs.length; i += 450) {
+      const batch = writeBatch(db);
+      attSnap.docs.slice(i, i + 450).forEach(d => batch.delete(d.ref));
+      await batch.commit();
+    }
+
+    await deleteDoc(stuRef);
     await loadAttendanceStudents();
   } catch(e) {
     alert('삭제 실패: ' + e.message);
