@@ -28,7 +28,7 @@ function lsWrite(key, value) {
 // 데이터 변경 직후 캐시 무효화. 변경 후 fresh 가 빈 결과로 와도(행정망 변조 또는
 // 마지막 항목 삭제로 진짜 빈 상태) loadCourseList 의 "빈 결과 + hasCache → 캐시 유지"
 // 분기가 stale 을 잡지 못해 삭제된 항목이 계속 보이던 문제 차단.
-function lsInvalidate(key) {
+export function lsInvalidate(key) {
   try { localStorage.removeItem(LS_PREFIX + key); } catch {}
 }
 
@@ -179,9 +179,13 @@ export async function loadCourseList() {
 function renderCourseList(rawCourses) {
   state.courseIdMap = {};
   state.courseActive = {};
+  state.courseType = {};
+  state.courseTypeById = {};
   const courses = rawCourses.map(c => {
     state.courseIdMap[c.name] = c.id;
     state.courseActive[c.name] = c.active;
+    state.courseType[c.name] = c.type;
+    state.courseTypeById[c.id] = c.type;
     return { ...c };
   });
 
@@ -224,7 +228,23 @@ function renderCourseList(rawCourses) {
   listEl.innerHTML = html;
   wireDateFields(listEl);
 
-  // 요약 칩 비동기 채움
+  // 요약 칩 — 카드별 카운트는 N × 3 RTT(행정망에서 가장 비싼 패턴).
+  // (1) 직전 캐시가 있으면 즉시 표시, (2) 백그라운드에서 fresh 카운트 fetch.
+  // 마지막 페이지 진입 후 30 초 이내 재진입 시 카운트도 즉시 보임.
+  const renderMeta = (idx, total, done, inst) => {
+    const metaEl = document.getElementById(`course-meta-${idx}`);
+    if (!metaEl) return;
+    metaEl.innerHTML = `수강생 <strong>${total}명</strong>${total > 0 ? ` <span class="meta-done">(완료 ${done})</span>` : ''} · 강사 <strong>${inst}명</strong>`;
+  };
+
+  courses.forEach((c) => {
+    const cacheKey = `counts:${c.id}`;
+    const cached = lsRead(cacheKey);
+    if (cached && typeof cached.total === 'number') {
+      renderMeta(c.idx, cached.total, cached.done, cached.inst);
+    }
+  });
+
   courses.forEach(async (c) => {
     try {
       const stuRef  = collection(db, 'courses', c.id, 'students');
@@ -237,13 +257,12 @@ function renderCourseList(rawCourses) {
       const total = totalSnap.data().count;
       const done  = doneSnap.data().count;
       const inst  = instSnap.data().count;
-      const metaEl = document.getElementById(`course-meta-${c.idx}`);
-      if (metaEl) {
-        metaEl.innerHTML = `수강생 <strong>${total}명</strong>${total > 0 ? ` <span class="meta-done">(완료 ${done})</span>` : ''} · 강사 <strong>${inst}명</strong>`;
-      }
+      lsWrite(`counts:${c.id}`, { total, done, inst, at: Date.now() });
+      renderMeta(c.idx, total, done, inst);
     } catch (_) {
+      // 캐시가 이미 그려져 있으면 그대로 유지 — 침묵
       const metaEl = document.getElementById(`course-meta-${c.idx}`);
-      if (metaEl) metaEl.textContent = '요약 불러오기 실패';
+      if (metaEl && metaEl.innerHTML === '') metaEl.textContent = '요약 불러오기 실패';
     }
   });
 }
@@ -567,15 +586,19 @@ export async function deleteCourse(courseId, btnEl) {
 
   btnEl.disabled = true; btnEl.textContent = '삭제 중...';
   try {
-    await deleteSubcollection(courseId, 'instructors');
-    await deleteSubcollection(courseId, 'students');
-    await deleteSubcollection(courseId, 'responses');
-    await deleteSubcollection(courseId, 'attendance');
-    await deleteSubcollection(courseId, 'attendanceConfig');
-    await deleteRoundsCascade(courseId);  // 중견리더 과정의 회차 + 회차 내부 강사/응답 정리
+    // 서브컬렉션 + 회차 cascade 를 동시에 (서로 독립). 행정망에서 직렬 5~6 RTT → 1 RTT.
+    await Promise.all([
+      deleteSubcollection(courseId, 'instructors'),
+      deleteSubcollection(courseId, 'students'),
+      deleteSubcollection(courseId, 'responses'),
+      deleteSubcollection(courseId, 'attendance'),
+      deleteSubcollection(courseId, 'attendanceConfig'),
+      deleteRoundsCascade(courseId),  // 중견리더 과정의 회차 + 회차 내부 강사/응답 정리
+    ]);
     await deleteDoc(doc(db, 'courses', courseId));
     lsInvalidate('courses');
     lsInvalidate(`instructors:${courseId}`);
+    lsInvalidate(`counts:${courseId}`);
     await loadCourseList();
   } catch (e) {
     alert('삭제 중 오류가 발생했습니다.');
@@ -849,6 +872,7 @@ export async function addInstructor(courseId, panelIdx) {
       name, education: edu, createdAt: serverTimestamp(), order: maxOrder + 10
     });
     lsInvalidate(`instructors:${courseId}`);
+    lsInvalidate(`counts:${courseId}`);
     document.getElementById(`inst-edu-${panelIdx}`).value = '';
     document.getElementById(`inst-name-${panelIdx}`).value = '';
     await loadInstructors(courseId, panelIdx);
@@ -861,6 +885,7 @@ export async function deleteInstructor(courseId, panelIdx, name, education, inst
   try {
     await deleteDoc(doc(db, 'courses', courseId, 'instructors', instId));
     lsInvalidate(`instructors:${courseId}`);
+    lsInvalidate(`counts:${courseId}`);
     await loadInstructors(courseId, panelIdx);
   } catch (e) { alert('삭제 중 오류가 발생했습니다.'); btnEl.disabled = false; btnEl.textContent = '삭제'; }
 }
@@ -886,6 +911,7 @@ export async function moveInstructor(courseId, panelIdx, idx, direction) {
       updateDoc(doc(db, 'courses', courseId, 'instructors', instB._id), { order: instB.order }),
     ]);
     lsInvalidate(`instructors:${courseId}`);
+    lsInvalidate(`counts:${courseId}`);
     await loadInstructors(courseId, panelIdx);
   } catch (e) {
     alert('순서 변경 중 오류가 발생했습니다.');
@@ -929,6 +955,7 @@ export async function saveEditInstructor(courseId, panelIdx, idx) {
   try {
     await updateDoc(doc(db, 'courses', courseId, 'instructors', inst._id), { name, education: edu });
     lsInvalidate(`instructors:${courseId}`);
+    lsInvalidate(`counts:${courseId}`);
     await loadInstructors(courseId, panelIdx);
   } catch (e) {
     alert('수정 중 오류가 발생했습니다.');
@@ -970,6 +997,7 @@ export async function deleteSelectedInstructors(courseId, panelIdx) {
   try {
     await Promise.all(Array.from(checked).map(cb => deleteDoc(doc(db, 'courses', courseId, 'instructors', cb.dataset.id))));
     lsInvalidate(`instructors:${courseId}`);
+    lsInvalidate(`counts:${courseId}`);
     await loadInstructors(courseId, panelIdx);
   } catch (e) {
     alert('삭제 중 오류가 발생했습니다.');

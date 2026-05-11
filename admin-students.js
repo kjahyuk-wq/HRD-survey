@@ -5,6 +5,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { state, escapeHtml, escapeAttr, formatDateTime } from './admin-utils.js';
 import { loadXLSX } from './admin-excel.js';
+import { lsInvalidate } from './admin-courses.js';
 
 // ── 패널 단위 상태 ──────────────────────────────
 // panelIdx → 학생 배열 / 엑셀 파싱 결과 / 분반 union 캐시
@@ -44,10 +45,12 @@ export async function loadStudents(courseId, panelIdx) {
   if (statsEl)  statsEl.innerHTML = '';
 
   try {
-    // 학생 + 회차 분반 union 동시 fetch
+    // 학생 + (중견리더 과정에 한해) 회차 분반 union 동시 fetch.
+    // 단기과정은 분반 운영이 없어 rounds 컬렉션 풀스캔이 항상 빈 결과 → 행정망 1 RTT 낭비.
+    const isLeadership = state.courseTypeById[courseId] === 'leadership';
     const [snap, groupsUnion] = await Promise.all([
       getDocs(collection(db, 'courses', courseId, 'students')),
-      fetchRoundGroupsUnion(courseId)
+      isLeadership ? fetchRoundGroupsUnion(courseId) : Promise.resolve([])
     ]);
     const students = snap.docs.map(d => ({
       ...d.data(),
@@ -163,6 +166,7 @@ export async function addStudent(courseId, panelIdx) {
     const data = { name, empNo, completed: false, completedAt: null };
     if (group) data.group = group;
     await addDoc(collection(db, 'courses', courseId, 'students'), data);
+    lsInvalidate(`counts:${courseId}`);
     if (nameEl) nameEl.value = '';
     if (empNoEl) empNoEl.value = '';
     if (groupEl) groupEl.value = '';
@@ -202,15 +206,31 @@ export async function deleteSelectedStudents(courseId, panelIdx) {
   const btn = document.getElementById(`stu-bulk-delete-btn-${panelIdx}`);
   if (btn) { btn.disabled = true; btn.textContent = '삭제 중...'; }
   try {
-    await Promise.all(Array.from(checked).map(async cb => {
-      const studentId = cb.dataset.id;
-      const name = cb.dataset.name;
-      const empNo = cb.dataset.empno;
-      const respSnap = await getDocs(query(collection(db, 'courses', courseId, 'responses'), where('empNo', '==', empNo)));
-      const matching = respSnap.docs.filter(d => d.data().name === name);
-      await Promise.all(matching.map(d => deleteDoc(d.ref)));
-      await deleteDoc(doc(db, 'courses', courseId, 'students', studentId));
+    // 행정망 long-polling 에서 N 개 학생 × N 개 where 쿼리는 사실상 직렬화돼 수십초 걸리는 패턴.
+    // 응답 전체를 한 번에 받아 메모리에서 매칭 + writeBatch (500 op/batch) 로 일괄 삭제.
+    const targets = Array.from(checked).map(cb => ({
+      studentId: cb.dataset.id,
+      name: cb.dataset.name,
+      empNo: cb.dataset.empno,
     }));
+    const targetKeys = new Set(targets.map(t => `${t.name}|${t.empNo}`));
+    const allRespSnap = await getDocs(collection(db, 'courses', courseId, 'responses'));
+    const respDocsToDelete = allRespSnap.docs.filter(d => {
+      const dd = d.data();
+      return targetKeys.has(`${dd.name}|${dd.empNo}`);
+    });
+
+    // Firestore batch 는 500 op/배치. 응답 + 학생 합쳐 청크 단위 commit.
+    const allOps = [
+      ...respDocsToDelete.map(d => d.ref),
+      ...targets.map(t => doc(db, 'courses', courseId, 'students', t.studentId)),
+    ];
+    for (let i = 0; i < allOps.length; i += 450) {
+      const batch = writeBatch(db);
+      allOps.slice(i, i + 450).forEach(ref => batch.delete(ref));
+      await batch.commit();
+    }
+    lsInvalidate(`counts:${courseId}`);
     await loadStudents(courseId, panelIdx);
   } catch (e) {
     alert('삭제 중 오류가 발생했습니다.');
@@ -226,6 +246,7 @@ export async function deleteStudent(courseId, panelIdx, name, empNo, studentId, 
     const matching = respSnap.docs.filter(d => d.data().name === name);
     await Promise.all(matching.map(d => deleteDoc(d.ref)));
     await deleteDoc(doc(db, 'courses', courseId, 'students', studentId));
+    lsInvalidate(`counts:${courseId}`);
     await loadStudents(courseId, panelIdx);
   } catch (e) { alert('삭제 중 오류가 발생했습니다.'); btnEl.disabled = false; btnEl.textContent = '삭제'; }
 }
@@ -471,6 +492,7 @@ export async function uploadExcelStudents(courseId, panelIdx) {
   }
 
   if (progress) progress.textContent = `완료: ${success}명 등록${fail > 0 ? `, ${fail}명 실패` : ''}`;
+  if (success > 0) lsInvalidate(`counts:${courseId}`);
   excelStudentData[panelIdx] = [];
   const inputEl = document.getElementById(`stu-excel-input-${panelIdx}`);
   const nameEl  = document.getElementById(`stu-excel-name-${panelIdx}`);

@@ -365,16 +365,6 @@ export function renderStats(stats, students, responses) {
 
   if (instKeys.length > 0) {
     document.getElementById('instructor-stats-section').style.display = 'block';
-    const allInstScores = instKeys.flatMap(k => {
-      const r = instRaw[k];
-      return Array.from({ length: r.count }, (_, i) => {
-        // reconstruct scores from dist for flat operations
-        let scores = [];
-        r.dist.forEach((cnt, idx) => { for (let j = 0; j < cnt; j++) scores.push(idx + 1); });
-        return scores;
-      }).flat();
-    });
-    // simpler: use sum/count
     const instTotalSum = instKeys.reduce((a, k) => a + instRaw[k].sum, 0);
     const instTotalCount = instKeys.reduce((a, k) => a + instRaw[k].count, 0);
     const instTotalAvg = instTotalSum / instTotalCount;
