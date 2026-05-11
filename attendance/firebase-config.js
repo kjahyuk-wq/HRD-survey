@@ -18,9 +18,12 @@ const firebaseConfig = {
 const RECAPTCHA_SITE_KEY = '6LfLR-IsAAAAAKpDG_I_gohdgxWDb3265RmblLb3';
 
 const app = initializeApp(firebaseConfig);
-// 사무실/키오스크 등 WebSocket 차단 가능성이 있는 환경에서 안정적으로 동작하도록
-// long-polling 강제 (HRD-survey 본체와 동일 정책).
-export const db = initializeFirestore(app, { experimentalForceLongPolling: true });
+// 사무실/키오스크 등 사내 프록시 환경 대응 (HRD-survey 본체와 동일 정책).
+export const db = initializeFirestore(app, {
+  experimentalForceLongPolling: true,
+  useFetchStreams: false,
+  experimentalLongPollingOptions: { timeoutSeconds: 25 },
+});
 export const auth = getAuth(app);
 export const functions = getFunctions(app, 'asia-northeast3');
 
