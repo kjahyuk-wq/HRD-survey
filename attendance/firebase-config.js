@@ -18,12 +18,30 @@ const firebaseConfig = {
 const RECAPTCHA_SITE_KEY = '6LfLR-IsAAAAAKpDG_I_gohdgxWDb3265RmblLb3';
 
 const app = initializeApp(firebaseConfig);
-// 사무실/키오스크 등 사내 프록시 환경 대응 (HRD-survey 본체와 동일 정책).
-export const db = initializeFirestore(app, {
-  experimentalForceLongPolling: true,
-  useFetchStreams: false,
-  experimentalLongPollingOptions: { timeoutSeconds: 25 },
-});
+
+// 사내 행정망/키오스크 등 WebChannel 스트림이 차단되는 환경에서만 long-polling 강제.
+// 일반망(외부 인터넷)은 SDK 자동 감지가 더 빠름.
+// 사용법: 해당 PC 에서 한 번 ?proxy=1 로 열어두면 localStorage 에 박혀 이후에도 유지.
+//        해제는 ?proxy=0.
+try {
+  const qp = new URLSearchParams(location.search);
+  if (qp.get('proxy') === '1') localStorage.setItem('proxyMode', '1');
+  else if (qp.get('proxy') === '0') localStorage.removeItem('proxyMode');
+} catch (_) {}
+const FORCE_LONG_POLL = (() => {
+  try { return localStorage.getItem('proxyMode') === '1'; } catch (_) { return false; }
+})();
+
+export const db = initializeFirestore(
+  app,
+  FORCE_LONG_POLL
+    ? {
+        experimentalForceLongPolling: true,
+        useFetchStreams: false,
+        experimentalLongPollingOptions: { timeoutSeconds: 25 },
+      }
+    : { experimentalAutoDetectLongPolling: true }
+);
 export const auth = getAuth(app);
 export const functions = getFunctions(app, 'asia-northeast3');
 

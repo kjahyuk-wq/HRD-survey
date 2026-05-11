@@ -12,15 +12,28 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-// 행정망 사내 프록시(엣지) 환경에서 /Listen/channel 이 400 Bad Request 로 거절되며
-// 빈 결과·장시간 대기가 발생하는 패턴 대응:
-//  - experimentalForceLongPolling: streaming 차단 우회 (HTTP long-poll)
-//  - useFetchStreams=false: Fetch 스트림만 검사하는 프록시 우회 (XHR 사용)
-//  - longPolling timeoutSeconds 25: 프록시가 30초 무응답 연결을 끊기 전에 클라가
-//    먼저 재요청해서 stale connection 회피
-export const db = initializeFirestore(app, {
-  experimentalForceLongPolling: true,
-  useFetchStreams: false,
-  experimentalLongPollingOptions: { timeoutSeconds: 25 },
-});
+
+// 사내 행정망 등 WebChannel 스트림이 차단되는 환경에서만 long-polling 강제.
+// 일반 인터넷 사용자는 SDK 의 자동 감지가 더 빠르므로 기본은 autoDetect.
+// 사용법: 사내 PC 에서 한 번 ?proxy=1 로 열어두면 localStorage 에 박혀 이후에도 유지.
+//        해제는 ?proxy=0.
+try {
+  const qp = new URLSearchParams(location.search);
+  if (qp.get('proxy') === '1') localStorage.setItem('proxyMode', '1');
+  else if (qp.get('proxy') === '0') localStorage.removeItem('proxyMode');
+} catch (_) {}
+const FORCE_LONG_POLL = (() => {
+  try { return localStorage.getItem('proxyMode') === '1'; } catch (_) { return false; }
+})();
+
+export const db = initializeFirestore(
+  app,
+  FORCE_LONG_POLL
+    ? {
+        experimentalForceLongPolling: true,
+        useFetchStreams: false,
+        experimentalLongPollingOptions: { timeoutSeconds: 25 },
+      }
+    : { experimentalAutoDetectLongPolling: true }
+);
 export const auth = getAuth(app);
