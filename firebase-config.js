@@ -12,13 +12,15 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-// 사내 프록시가 Firestore streaming을 끊는 환경(행정망 등)에서만 long-polling으로 폴백.
-// 일반 망에서는 기본 streaming을 그대로 써서 빠른 응답을 유지한다.
-//  - experimentalAutoDetectLongPolling: SDK가 환경을 보고 필요할 때만 long-poll로 전환
-//  - longPolling timeoutSeconds 25: 일부 프록시가 30초 무응답 연결을 끊기 전에
-//    클라가 먼저 재요청하도록 약간 짧게.
+// 행정망 사내 프록시(엣지) 환경에서 /Listen/channel 이 400 Bad Request 로 거절되며
+// 빈 결과·장시간 대기가 발생하는 패턴 대응:
+//  - experimentalForceLongPolling: streaming 차단 우회 (HTTP long-poll)
+//  - useFetchStreams=false: Fetch 스트림만 검사하는 프록시 우회 (XHR 사용)
+//  - longPolling timeoutSeconds 25: 프록시가 30초 무응답 연결을 끊기 전에 클라가
+//    먼저 재요청해서 stale connection 회피
 export const db = initializeFirestore(app, {
-  experimentalAutoDetectLongPolling: true,
+  experimentalForceLongPolling: true,
+  useFetchStreams: false,
   experimentalLongPollingOptions: { timeoutSeconds: 25 },
 });
 export const auth = getAuth(app);

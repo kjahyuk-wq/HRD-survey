@@ -8,7 +8,7 @@ import { loadXLSX } from './admin-excel.js';
 
 // ── 패널 단위 상태 ──────────────────────────────
 // panelIdx → 학생 배열 / 엑셀 파싱 결과 / 분반 union 캐시
-const studentsCache = {};
+export const studentsCache = {};
 const excelStudentData = {};
 const panelGroupsUnion = {};  // panelIdx → ['1조','2조',...] (회차들에 정의된 분반 union)
 

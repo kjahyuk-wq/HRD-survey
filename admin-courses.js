@@ -5,7 +5,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { state, escapeHtml, escapeAttr } from './admin-utils.js';
 import { loadXLSX } from './admin-excel.js';
-import { loadStudents } from './admin-students.js';
+import { loadStudents, studentsCache } from './admin-students.js';
 import { loadRounds } from './admin-rounds.js';
 
 // 종료된 과정 토글 펼침 상태 (탭 재진입 시 유지)
@@ -340,10 +340,18 @@ export async function togglePanel(courseId, idx, mode) {
   target.style.display = 'block';
   buttons[mode]?.classList.add('active');
 
-  if (mode === 'inst')        await loadInstructors(courseId, idx);
-  else if (mode === 'stu')    await loadStudents(courseId, idx);
-  else if (mode === 'rounds') await loadRounds(courseId, idx);
-  else if (mode === 'edit')   document.getElementById(`edit-course-name-${idx}`)?.focus();
+  // 행정망 long-polling 환경에서 RTT 비용이 크기 때문에, 한 번 로드한 패널은
+  // 토글 재오픈 시 캐시된 DOM을 그대로 보여주고 fetch를 건너뛴다.
+  // 추가/수정/삭제·새로고침 버튼은 각자 loadXxx를 직접 호출해 강제 갱신한다.
+  if (mode === 'inst') {
+    if (!panelInstructors[idx]) await loadInstructors(courseId, idx);
+  } else if (mode === 'stu') {
+    if (!studentsCache[idx]) await loadStudents(courseId, idx);
+  } else if (mode === 'rounds') {
+    await loadRounds(courseId, idx);
+  } else if (mode === 'edit') {
+    document.getElementById(`edit-course-name-${idx}`)?.focus();
+  }
 }
 
 // ── 과정 인라인 수정 ──────────────────────────────
