@@ -12,14 +12,13 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-// 사무실 윈도우 엣지 등 사내 프록시가 Firestore streaming 응답을 변조하는 환경 대응:
-//  - experimentalForceLongPolling: WebSocket/streaming 차단 우회 (HTTP long-poll 사용)
-//  - useFetchStreams=false: Fetch API 대신 XHR 사용 (fetch stream 만 차단하는 프록시 우회)
-//  - longPolling timeoutSeconds 25: 기본 30초이지만, 일부 프록시가 30초 무응답 연결을
-//    끊기 전에 클라가 먼저 재요청하도록 약간 짧게.
+// 사내 프록시가 Firestore streaming을 끊는 환경(행정망 등)에서만 long-polling으로 폴백.
+// 일반 망에서는 기본 streaming을 그대로 써서 빠른 응답을 유지한다.
+//  - experimentalAutoDetectLongPolling: SDK가 환경을 보고 필요할 때만 long-poll로 전환
+//  - longPolling timeoutSeconds 25: 일부 프록시가 30초 무응답 연결을 끊기 전에
+//    클라가 먼저 재요청하도록 약간 짧게.
 export const db = initializeFirestore(app, {
-  experimentalForceLongPolling: true,
-  useFetchStreams: false,
+  experimentalAutoDetectLongPolling: true,
   experimentalLongPollingOptions: { timeoutSeconds: 25 },
 });
 export const auth = getAuth(app);
