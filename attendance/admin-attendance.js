@@ -321,10 +321,23 @@ function renderConfigPanelHtml() {
       </div>
     </div>
 
-    <div class="att-panel-section" id="time-config" style="display:none;">
-      <h4>출석 시간 설정</h4>
+    <div class="att-panel-section" id="time-config-start">
+      <h4>수업 시작 시각 <span style="font-weight:400;color:#94a3b8;font-size:0.78rem;">(지각 판정 기준)</span></h4>
+      <div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap;">
+        <div class="time-group" style="min-width:160px;">
+          <label id="morning-start-label">수업 시작 시간</label>
+          <input type="time" id="morning-start" value="09:00">
+        </div>
+        <div style="font-size:0.78rem;color:#94a3b8;flex:1;min-width:220px;line-height:1.4;">
+          시작 시각 <b>+15분</b> 초과 시 자동 <b>지각</b> 분류.<br>
+          예) 09:00 → 09:16 부터 지각.
+        </div>
+      </div>
+    </div>
+
+    <div class="att-panel-section" id="time-config-rest" style="display:none;">
+      <h4>오후 시간 설정 <span style="font-weight:400;color:#94a3b8;font-size:0.78rem;">(2회 출석 전용)</span></h4>
       <div class="two-col">
-        <div class="time-group"><label>오전 출석 시작</label><input type="time" id="morning-start" value="09:00"></div>
         <div class="time-group"><label>오전 출석 종료</label><input type="time" id="morning-end" value="12:00"></div>
         <div class="time-group"><label>오후 출석 시작</label><input type="time" id="afternoon-start" value="13:00"></div>
         <div class="time-group"><label>오후 출석 종료</label><input type="time" id="afternoon-end" value="18:00"></div>
@@ -567,10 +580,13 @@ window.selectSessions = function(n) {
   dailySessions = n;
   const opt1 = document.getElementById('opt-1');
   const opt2 = document.getElementById('opt-2');
-  const tc = document.getElementById('time-config');
+  const rest = document.getElementById('time-config-rest');
+  const lbl = document.getElementById('morning-start-label');
   if (opt1) opt1.classList.toggle('selected', n === 1);
   if (opt2) opt2.classList.toggle('selected', n === 2);
-  if (tc) tc.style.display = n === 2 ? 'block' : 'none';
+  if (rest) rest.style.display = n === 2 ? 'block' : 'none';
+  // 모드별 morning-start 라벨 변경 (1회: 수업 시작 / 2회: 오전 출석 시작)
+  if (lbl) lbl.textContent = n === 2 ? '오전 출석 시작' : '수업 시작 시간';
 };
 
 // ── 날짜 태그 렌더 ──────────────────────────────

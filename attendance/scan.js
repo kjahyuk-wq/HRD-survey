@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
 import {
-  getFirestore, doc, getDoc, updateDoc, addDoc,
+  initializeFirestore, doc, getDoc, updateDoc, addDoc,
   collection, serverTimestamp, Timestamp
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import {
@@ -18,8 +18,22 @@ const firebaseConfig = {
   messagingSenderId: "233199711039",
   appId: "1:233199711039:web:8f1cb4d26f4ac9306dd98a"
 };
+
+// 사내 프록시 모드 토글: ?proxy=1 로 long-polling 강제, ?proxy=0 으로 해제.
+// localStorage 에 저장돼 다음 방문부터도 적용. main 앱과 동일 정책.
+try {
+  const qp = new URLSearchParams(location.search);
+  if (qp.get('proxy') === '1') localStorage.setItem('proxyMode', '1');
+  else if (qp.get('proxy') === '0') localStorage.removeItem('proxyMode');
+} catch (_) {}
+const FORCE_LONG_POLL = (() => {
+  try { return localStorage.getItem('proxyMode') === '1'; } catch (_) { return false; }
+})();
+
 const scanApp = initializeApp(firebaseConfig, 'scan-kiosk');
-const db = getFirestore(scanApp);
+const db = initializeFirestore(scanApp, FORCE_LONG_POLL
+  ? { experimentalForceLongPolling: true, useFetchStreams: false, experimentalLongPollingOptions: { timeoutSeconds: 25 } }
+  : { experimentalAutoDetectLongPolling: true });
 const auth = getAuth(scanApp);
 
 // 관리자 페이지 — 탭/브라우저 닫히면 자동 로그아웃 (공용 디바이스 보안)
@@ -312,16 +326,16 @@ async function onScanSuccess(rawText) {
     const nowMin = nowDate.getHours() * 60 + nowDate.getMinutes();
     const status = nowMin > cutoffMin ? 'late' : 'present';
 
-    // 토큰 사용 처리
-    await updateDoc(tokenRef, { used: true, usedAt: serverTimestamp() });
-
-    // 출석 기록 저장 (studentId = 학생 식별 인증 uid, 감사용)
-    await addDoc(collection(db, 'courses', courseId, 'attendance'), {
-      studentId: studentId || null,
-      empNo, name, date: today, session, status,
-      checkedAt: serverTimestamp(),
-      tokenId
-    });
+    // 토큰 used 마킹 + 출석 기록 저장을 병렬화 (사내망 RTT 1회 단축)
+    await Promise.all([
+      updateDoc(tokenRef, { used: true, usedAt: serverTimestamp() }),
+      addDoc(collection(db, 'courses', courseId, 'attendance'), {
+        studentId: studentId || null,
+        empNo, name, date: today, session, status,
+        checkedAt: serverTimestamp(),
+        tokenId
+      })
+    ]);
 
     const sessionLabel = { single: '', morning: ' (오전)', afternoon: ' (오후)' }[session] || '';
     const statusBadge = status === 'late' ? ' · 지각' : '';
