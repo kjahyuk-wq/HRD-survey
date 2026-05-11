@@ -276,6 +276,9 @@ async function onScanSuccess(rawText) {
     return;
   }
 
+  // 카메라 인식 직후 즉시 "처리 중..." 표시 — Firestore RTT 동안 무반응처럼 보이는 문제 회피
+  showResult('processing', '⏳', '처리 중...', '잠시만 기다려 주세요');
+
   try {
     const tokenRef = doc(db, 'qr_tokens', tokenId);
     const tokenSnap = await getDoc(tokenRef);
@@ -366,6 +369,8 @@ function showResult(type, icon, text, sub) {
   document.getElementById('result-sub').textContent = sub;
 
   clearTimeout(resultHideTimer);
+  // 'processing' 은 곧 success/error 로 덮어쓸 임시 상태 — 사운드 없음, 자동 숨김 없음
+  if (type === 'processing') return;
   const hideMs = type === 'success' ? 3000 : 4000;
   if (type === 'success') playSuccess(); else playError();
   resultHideTimer = setTimeout(() => {
