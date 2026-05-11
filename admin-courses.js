@@ -774,13 +774,26 @@ async function loadInstructors(courseId, panelIdx) {
 
   try {
     const snap = await getDocs(collection(db, 'courses', courseId, 'instructors'));
-    const instructors = normalizeInstructorOrder(
-      snap.docs.map(d => ({ ...d.data(), _id: d.id }))
-    );
+    const rawDocs = snap.docs.map(d => ({ ...d.data(), _id: d.id }));
+    const missingOrder = rawDocs.filter(i => i.order === undefined);
+    const instructors = normalizeInstructorOrder(rawDocs);
 
     // fresh 가 비어왔는데 캐시는 있다 — 프록시 변조 가능성. 캐시 유지하고 종료.
     if (instructors.length === 0 && hasCache && cached.length > 0) {
       return;
+    }
+
+    // 옛 데이터 호환: order 가 없던 doc 에 정렬 결과를 Firestore 에 백필.
+    // (admin 측은 메모리 i*10 부여로 정렬되지만 학생 측 sortInstructors 는 doc 의
+    //  order 필드를 보므로, 백필 없으면 admin 정렬 ≠ 학생 화면 정렬 이 발생)
+    if (missingOrder.length > 0) {
+      const batch = writeBatch(db);
+      instructors.forEach(inst => {
+        if (missingOrder.some(m => m._id === inst._id)) {
+          batch.update(doc(db, 'courses', courseId, 'instructors', inst._id), { order: inst.order });
+        }
+      });
+      batch.commit().catch(() => {}); // 백필은 best-effort, 실패해도 화면 표시는 진행
     }
 
     panelInstructors[panelIdx] = instructors;

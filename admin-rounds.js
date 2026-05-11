@@ -301,6 +301,7 @@ async function loadRoundInstructors(courseId, roundId, panelIdx, roundIdx) {
   try {
     const snap = await getDocs(collection(db, 'courses', courseId, 'rounds', roundId, 'instructors'));
     let instructors = snap.docs.map(d => ({ ...d.data(), _id: d.id }));
+    const missingOrder = instructors.filter(i => i.order === undefined).map(i => i._id);
     // order 우선, 없으면 createdAt — admin-courses의 loadInstructors와 동일 정책
     instructors.sort((a, b) => {
       if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
@@ -311,6 +312,19 @@ async function loadRoundInstructors(courseId, roundId, panelIdx, roundIdx) {
       return ta - tb;
     });
     instructors.forEach((inst, i) => { if (inst.order === undefined) inst.order = i * 10; });
+
+    // 옛 데이터 호환: order 없던 doc 에 정렬 결과를 Firestore 에 백필.
+    // (학생 측 sortInstructors 가 doc 의 order 를 보므로 백필이 있어야 admin 정렬 ≡ 학생 정렬)
+    if (missingOrder.length > 0) {
+      const batch = writeBatch(db);
+      instructors.forEach(inst => {
+        if (missingOrder.includes(inst._id)) {
+          batch.update(doc(db, 'courses', courseId, 'rounds', roundId, 'instructors', inst._id), { order: inst.order });
+        }
+      });
+      batch.commit().catch(() => {});
+    }
+
     roundInstructorsCache[key] = instructors;
     renderRoundInstructorsPanel(courseId, roundId, panelIdx, roundIdx, instructors);
   } catch (e) {
