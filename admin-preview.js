@@ -26,25 +26,19 @@ function buildCourseLabel(name, startDate, endDate, active) {
   return (active ? '' : '[종료] ') + name + dateLabel;
 }
 
-function renderPreviewCourseOptions(courses, currentSelected) {
+function renderPreviewCourseOptions(courses) {
   courses.sort((a, b) => (a.active === b.active) ? 0 : (a.active ? -1 : 1));
   const sel = document.getElementById('preview-course-select');
-  const current = currentSelected ?? sel.value;
+  const prev = sel.value;
   sel.innerHTML = '<option value="">-- 교육과정을 선택하세요 --</option>' +
     courses.map(({ id, name, startDate, endDate, active, type }) => {
       const label = buildCourseLabel(name, startDate, endDate, active);
-      return `<option value="${escapeAttr(id)}" data-name="${escapeAttr(name)}" data-type="${type}"${id === current ? ' selected' : ''}>${escapeHtml(label)}</option>`;
+      return `<option value="${escapeAttr(id)}" data-name="${escapeAttr(name)}" data-type="${type}">${escapeHtml(label)}</option>`;
     }).join('');
+  if (prev) sel.value = prev;
 }
 
-export async function populatePreviewSelect() {
-  const sel = document.getElementById('preview-course-select');
-  const current = sel?.value;
-  // admin-courses 의 캐시('courses') 즉시 사용 → 행정망에서도 셀렉트 즉시 채워짐
-  const cached = lsRead('courses');
-  if (Array.isArray(cached) && cached.length > 0) {
-    renderPreviewCourseOptions(cached.map(c => ({ ...c })), current);
-  }
+async function refreshPreviewCoursesFresh(prevCached) {
   try {
     const snap = await getDocs(collection(db, 'courses'));
     const courses = snap.docs.map(d => {
@@ -59,15 +53,25 @@ export async function populatePreviewSelect() {
       };
     });
     if (courses.length > 0) lsWrite('courses', courses);
-    if (courses.length === 0 && Array.isArray(cached) && cached.length > 0) {
-      if (current) loadPreviewInstructors();
-      return;
-    }
-    renderPreviewCourseOptions(courses, current);
-    if (current) loadPreviewInstructors();
-  } catch (_) {
-    if (current) loadPreviewInstructors();
+    if (courses.length === 0 && Array.isArray(prevCached) && prevCached.length > 0) return;
+    renderPreviewCourseOptions(courses);
+  } catch (_) {}
+}
+
+export async function populatePreviewSelect() {
+  // 캐시 있으면 즉시 return + fresh 는 백그라운드. 사내망 long-polling 대기 없이
+  // 호출자(goToCourseTab 등)가 sel.value 즉시 설정 가능.
+  const cached = lsRead('courses');
+  if (Array.isArray(cached) && cached.length > 0) {
+    renderPreviewCourseOptions(cached.map(c => ({ ...c })));
+    refreshPreviewCoursesFresh(cached); // fire-and-forget
+    const sel = document.getElementById('preview-course-select');
+    if (sel?.value) loadPreviewInstructors();
+    return;
   }
+  await refreshPreviewCoursesFresh(null);
+  const sel = document.getElementById('preview-course-select');
+  if (sel?.value) loadPreviewInstructors();
 }
 
 // 미리보기용 회차 셀렉트 — stats 모듈과 동일 패턴 (캐시 키로 같은 과정 재선택 시 재요청 회피)

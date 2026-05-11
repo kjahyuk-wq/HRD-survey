@@ -77,23 +77,21 @@ function buildCourseLabel(name, startDate, endDate, active) {
   return (active ? '' : '[종료] ') + name + dateLabel;
 }
 
-// 코스 목록 렌더는 셀렉트 마크업 그대로 분리해 캐시·fresh 양쪽에서 재사용
+// 코스 목록 렌더는 셀렉트 마크업 그대로 분리해 캐시·fresh 양쪽에서 재사용.
+// 현재 sel.value 를 보존 — 백그라운드 fresh 가 사용자 선택을 덮어쓰는 사고 방지.
 function renderStatsCourseOptions(courses) {
   courses.sort((a, b) => (a.active === b.active) ? 0 : (a.active ? -1 : 1));
   const sel = document.getElementById('stats-course-select');
+  const prev = sel.value;
   sel.innerHTML = '<option value="">-- 교육과정을 선택하세요 --</option>' +
     courses.map(({ id, name, startDate, endDate, active, type }) => {
       const label = buildCourseLabel(name, startDate, endDate, active);
       return `<option value="${escapeAttr(id)}" data-name="${escapeAttr(name)}" data-type="${type}">${escapeHtml(label)}</option>`;
     }).join('');
+  if (prev) sel.value = prev;
 }
 
-export async function populateStatsSelect() {
-  // admin-courses 의 캐시 ('courses') 즉시 사용 → 행정망에서도 셀렉트 즉시 채워짐
-  const cached = lsRead('courses');
-  if (Array.isArray(cached) && cached.length > 0) {
-    renderStatsCourseOptions(cached.map(c => ({ ...c })));
-  }
+async function refreshStatsCoursesFresh(prevCached) {
   try {
     const snap = await getDocs(collection(db, 'courses'));
     const courses = snap.docs.map(d => {
@@ -108,11 +106,21 @@ export async function populateStatsSelect() {
       };
     });
     if (courses.length > 0) lsWrite('courses', courses);
-    if (courses.length === 0 && Array.isArray(cached) && cached.length > 0) return; // 빈 응답이면 캐시 유지
+    if (courses.length === 0 && Array.isArray(prevCached) && prevCached.length > 0) return;
     renderStatsCourseOptions(courses);
-  } catch (_) {
-    // 캐시가 이미 렌더되어 있으면 침묵 — 사용자는 적어도 직전 데이터를 봄
+  } catch (_) {}
+}
+
+export async function populateStatsSelect() {
+  // 캐시 있으면 즉시 return + fresh 는 백그라운드 (사내망에서 호출자가 sel.value 즉시 설정 가능).
+  // 캐시 없을 때만 fresh fetch 끝까지 await — 안 그러면 빈 셀렉트 채로 호출자가 진행됨.
+  const cached = lsRead('courses');
+  if (Array.isArray(cached) && cached.length > 0) {
+    renderStatsCourseOptions(cached.map(c => ({ ...c })));
+    refreshStatsCoursesFresh(cached); // fire-and-forget
+    return;
   }
+  await refreshStatsCoursesFresh(null);
 }
 
 // 회차 셀렉트 — 중견리더 과정 선택 시에만 채움/노출. 캐시 키로 같은 과정 재호출 시 재요청 회피.
