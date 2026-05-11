@@ -18,11 +18,11 @@ const courseDataCache = {};
 // 1) 빈 결과 시 한 번 재시도: long-polling 채널 초기 응답이 비어오는 패턴 대응
 // 2) localStorage stale-while-revalidate: 첫 응답이 늦거나 비어와도 직전 캐시를 즉시 표시
 const LS_PREFIX = 'admin:cache:v1:';
-function lsRead(key) {
+export function lsRead(key) {
   try { const raw = localStorage.getItem(LS_PREFIX + key); return raw ? JSON.parse(raw) : null; }
   catch { return null; }
 }
-function lsWrite(key, value) {
+export function lsWrite(key, value) {
   try { localStorage.setItem(LS_PREFIX + key, JSON.stringify(value)); } catch {}
 }
 // 데이터 변경 직후 캐시 무효화. 변경 후 fresh 가 빈 결과로 와도(행정망 변조 또는

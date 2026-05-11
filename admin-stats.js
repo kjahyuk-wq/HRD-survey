@@ -1,8 +1,22 @@
 import { db } from './firebase-config.js';
 import {
-  collection, query, orderBy, getDocs
+  collection, getDocs
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { state, Q_LABELS, QUESTION_CATEGORIES, DEMO_QUESTIONS, escapeHtml, escapeAttr, formatDate } from './admin-utils.js';
+import { lsRead, lsWrite } from './admin-courses.js';
+
+// 강사 정렬 — admin 측 order 우선, 없으면 createdAt fallback (main.js / admin-preview 와 동일 정책).
+function sortInstructors(arr) {
+  arr.sort((a, b) => {
+    if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
+    if (a.order !== undefined) return -1;
+    if (b.order !== undefined) return 1;
+    const ta = a.createdAt?.seconds ?? 0;
+    const tb = b.createdAt?.seconds ?? 0;
+    return ta - tb;
+  });
+  return arr;
+}
 
 // ── 통계 단일 패스 계산 ──────────────────────────────
 export function computeStats(responses, orderedInstructorKeys) {
@@ -63,7 +77,23 @@ function buildCourseLabel(name, startDate, endDate, active) {
   return (active ? '' : '[종료] ') + name + dateLabel;
 }
 
+// 코스 목록 렌더는 셀렉트 마크업 그대로 분리해 캐시·fresh 양쪽에서 재사용
+function renderStatsCourseOptions(courses) {
+  courses.sort((a, b) => (a.active === b.active) ? 0 : (a.active ? -1 : 1));
+  const sel = document.getElementById('stats-course-select');
+  sel.innerHTML = '<option value="">-- 교육과정을 선택하세요 --</option>' +
+    courses.map(({ id, name, startDate, endDate, active, type }) => {
+      const label = buildCourseLabel(name, startDate, endDate, active);
+      return `<option value="${escapeAttr(id)}" data-name="${escapeAttr(name)}" data-type="${type}">${escapeHtml(label)}</option>`;
+    }).join('');
+}
+
 export async function populateStatsSelect() {
+  // admin-courses 의 캐시 ('courses') 즉시 사용 → 행정망에서도 셀렉트 즉시 채워짐
+  const cached = lsRead('courses');
+  if (Array.isArray(cached) && cached.length > 0) {
+    renderStatsCourseOptions(cached.map(c => ({ ...c })));
+  }
   try {
     const snap = await getDocs(collection(db, 'courses'));
     const courses = snap.docs.map(d => {
@@ -77,14 +107,12 @@ export async function populateStatsSelect() {
         type: data.type === 'leadership' ? 'leadership' : 'standard',
       };
     });
-    courses.sort((a, b) => (a.active === b.active) ? 0 : (a.active ? -1 : 1));
-    const sel = document.getElementById('stats-course-select');
-    sel.innerHTML = '<option value="">-- 교육과정을 선택하세요 --</option>' +
-      courses.map(({ id, name, startDate, endDate, active, type }) => {
-        const label = buildCourseLabel(name, startDate, endDate, active);
-        return `<option value="${escapeAttr(id)}" data-name="${escapeAttr(name)}" data-type="${type}">${escapeHtml(label)}</option>`;
-      }).join('');
-  } catch (e) {}
+    if (courses.length > 0) lsWrite('courses', courses);
+    if (courses.length === 0 && Array.isArray(cached) && cached.length > 0) return; // 빈 응답이면 캐시 유지
+    renderStatsCourseOptions(courses);
+  } catch (_) {
+    // 캐시가 이미 렌더되어 있으면 침묵 — 사용자는 적어도 직전 데이터를 봄
+  }
 }
 
 // 회차 셀렉트 — 중견리더 과정 선택 시에만 채움/노출. 캐시 키로 같은 과정 재호출 시 재요청 회피.
@@ -235,7 +263,7 @@ export async function loadStats() {
     const [responsesSnap, studentsSnap, instructorsSnap] = await Promise.all([
       getDocs(responsesRef),
       getDocs(collection(db, 'courses', courseId, 'students')),
-      getDocs(query(instructorsRef, orderBy('createdAt')))
+      getDocs(instructorsRef)
     ]);
 
     let responses = responsesSnap.docs.map(d => ({
@@ -265,7 +293,7 @@ export async function loadStats() {
     }
 
     // 강사 키 순서: 분반 선택 시 그 분반에 노출되는 강사로 좁힘 (학생 흐름과 동일 로직)
-    const allInstructors = instructorsSnap.docs.map(d => d.data());
+    const allInstructors = sortInstructors(instructorsSnap.docs.map(d => d.data()));
     const visibleInstructors = groupName
       ? allInstructors.filter(inst => {
           const igs = Array.isArray(inst.groups) ? inst.groups : [];

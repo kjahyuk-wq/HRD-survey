@@ -3,6 +3,7 @@ import {
   collection, getDocs
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { state, escapeHtml, escapeAttr } from './admin-utils.js';
+import { lsRead, lsWrite } from './admin-courses.js';
 
 // 강사 정렬 — admin 측이 박은 order 필드 우선, 없으면 createdAt fallback.
 // (학생 설문 main.js 의 sortInstructors 와 동일 정책)
@@ -25,7 +26,25 @@ function buildCourseLabel(name, startDate, endDate, active) {
   return (active ? '' : '[종료] ') + name + dateLabel;
 }
 
+function renderPreviewCourseOptions(courses, currentSelected) {
+  courses.sort((a, b) => (a.active === b.active) ? 0 : (a.active ? -1 : 1));
+  const sel = document.getElementById('preview-course-select');
+  const current = currentSelected ?? sel.value;
+  sel.innerHTML = '<option value="">-- 교육과정을 선택하세요 --</option>' +
+    courses.map(({ id, name, startDate, endDate, active, type }) => {
+      const label = buildCourseLabel(name, startDate, endDate, active);
+      return `<option value="${escapeAttr(id)}" data-name="${escapeAttr(name)}" data-type="${type}"${id === current ? ' selected' : ''}>${escapeHtml(label)}</option>`;
+    }).join('');
+}
+
 export async function populatePreviewSelect() {
+  const sel = document.getElementById('preview-course-select');
+  const current = sel?.value;
+  // admin-courses 의 캐시('courses') 즉시 사용 → 행정망에서도 셀렉트 즉시 채워짐
+  const cached = lsRead('courses');
+  if (Array.isArray(cached) && cached.length > 0) {
+    renderPreviewCourseOptions(cached.map(c => ({ ...c })), current);
+  }
   try {
     const snap = await getDocs(collection(db, 'courses'));
     const courses = snap.docs.map(d => {
@@ -39,16 +58,16 @@ export async function populatePreviewSelect() {
         type: data.type === 'leadership' ? 'leadership' : 'standard',
       };
     });
-    courses.sort((a, b) => (a.active === b.active) ? 0 : (a.active ? -1 : 1));
-    const sel = document.getElementById('preview-course-select');
-    const current = sel.value;
-    sel.innerHTML = '<option value="">-- 교육과정을 선택하세요 --</option>' +
-      courses.map(({ id, name, startDate, endDate, active, type }) => {
-        const label = buildCourseLabel(name, startDate, endDate, active);
-        return `<option value="${escapeAttr(id)}" data-name="${escapeAttr(name)}" data-type="${type}"${id === current ? ' selected' : ''}>${escapeHtml(label)}</option>`;
-      }).join('');
+    if (courses.length > 0) lsWrite('courses', courses);
+    if (courses.length === 0 && Array.isArray(cached) && cached.length > 0) {
+      if (current) loadPreviewInstructors();
+      return;
+    }
+    renderPreviewCourseOptions(courses, current);
     if (current) loadPreviewInstructors();
-  } catch (e) {}
+  } catch (_) {
+    if (current) loadPreviewInstructors();
+  }
 }
 
 // 미리보기용 회차 셀렉트 — stats 모듈과 동일 패턴 (캐시 키로 같은 과정 재선택 시 재요청 회피)
