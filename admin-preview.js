@@ -1,8 +1,22 @@
 import { db } from './firebase-config.js';
 import {
-  collection, query, orderBy, getDocs
+  collection, getDocs
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { state, escapeHtml, escapeAttr } from './admin-utils.js';
+
+// 강사 정렬 — admin 측이 박은 order 필드 우선, 없으면 createdAt fallback.
+// (학생 설문 main.js 의 sortInstructors 와 동일 정책)
+function sortInstructors(arr) {
+  arr.sort((a, b) => {
+    if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
+    if (a.order !== undefined) return -1;
+    if (b.order !== undefined) return 1;
+    const ta = a.createdAt?.seconds ?? 0;
+    const tb = b.createdAt?.seconds ?? 0;
+    return ta - tb;
+  });
+  return arr;
+}
 
 function buildCourseLabel(name, startDate, endDate, active) {
   const dateLabel = (startDate && endDate)
@@ -146,8 +160,8 @@ export async function loadPreviewInstructors() {
     const instructorsRef = courseType === 'leadership'
       ? collection(db, 'courses', courseId, 'rounds', roundId, 'instructors')
       : collection(db, 'courses', courseId, 'instructors');
-    const instSnap = await getDocs(query(instructorsRef, orderBy('createdAt')));
-    let instructors = instSnap.docs.map(d => d.data());
+    const instSnap = await getDocs(instructorsRef);
+    let instructors = sortInstructors(instSnap.docs.map(d => d.data()));
 
     // 분반 선택 시 강사 필터 (학생 흐름 selectRound와 동일 로직)
     if (groupName) {

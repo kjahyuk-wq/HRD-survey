@@ -1,6 +1,6 @@
 import { db, auth } from './firebase-config.js';
 import {
-  collectionGroup, collection, doc, query, where, orderBy, getDocs,
+  collectionGroup, collection, doc, query, where, getDocs,
   addDoc, updateDoc, getDoc, serverTimestamp, arrayUnion
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { signInAnonymously } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
@@ -92,8 +92,9 @@ async function doLogin() {
       };
       await showRoundSelect();
     } else {
-      const instrSnap = await getDocs(query(collection(db, 'courses', matchCourseId, 'instructors'), orderBy('createdAt')));
+      const instrSnap = await getDocs(collection(db, 'courses', matchCourseId, 'instructors'));
       const instructors = instrSnap.docs.map(d => d.data());
+      sortInstructors(instructors);
       currentUser = {
         name, empNo,
         course: matchCourseName,
@@ -191,7 +192,7 @@ async function selectRound(roundId) {
     // 회차 문서 + 회차 강사 동시 fetch
     const [roundDocSnap, instSnap] = await Promise.all([
       getDoc(doc(db, 'courses', currentUser.courseId, 'rounds', roundId)),
-      getDocs(query(collection(db, 'courses', currentUser.courseId, 'rounds', roundId, 'instructors'), orderBy('createdAt')))
+      getDocs(collection(db, 'courses', currentUser.courseId, 'rounds', roundId, 'instructors'))
     ]);
     if (!roundDocSnap.exists()) {
       alert('선택하신 회차를 찾을 수 없습니다. 다시 시도해 주세요.');
@@ -200,6 +201,7 @@ async function selectRound(roundId) {
     }
     const roundData = roundDocSnap.data();
     const allInstructors = instSnap.docs.map(d => d.data());
+    sortInstructors(allInstructors);
 
     // 분반 검증 + 강사 필터링
     const definedGroups = Array.isArray(roundData.groups) ? roundData.groups : [];
@@ -401,6 +403,21 @@ async function submitSurvey() {
     btn.disabled = false;
     alert('제출 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.');
   }
+}
+
+// 강사 정렬 — admin 측이 박은 order 필드 우선, 없으면 createdAt fallback.
+// (admin-courses / admin-rounds 의 정책과 동일. orderBy('createdAt') 으로 fetch 하면
+// admin 에서 수기로 조정한 시간표 순서가 무시되는 버그가 있었음)
+function sortInstructors(arr) {
+  arr.sort((a, b) => {
+    if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
+    if (a.order !== undefined) return -1;
+    if (b.order !== undefined) return 1;
+    const ta = a.createdAt?.seconds ?? 0;
+    const tb = b.createdAt?.seconds ?? 0;
+    return ta - tb;
+  });
+  return arr;
 }
 
 // 본문 텍스트 + 속성 자리 양쪽에서 안전 (따옴표까지 entity).
