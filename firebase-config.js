@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
-import { getFirestore } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
+import { initializeFirestore } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { getAuth } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
 
 const firebaseConfig = {
@@ -12,5 +12,8 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
+// 사무실 윈도우 엣지 등 WebSocket 차단/프록시 환경에서 빈 결과·장시간 대기가 발생해
+// long-polling 을 강제. auto-detect 는 첫 쿼리에서 5~10초 probe 지연을 일으키고,
+// 일부 사내망에서는 그마저 실패해서 결과가 비는 경우가 있어 강제 모드가 안정적.
+export const db = initializeFirestore(app, { experimentalForceLongPolling: true });
 export const auth = getAuth(app);

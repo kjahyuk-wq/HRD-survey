@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
-import { getFirestore, connectFirestoreEmulator } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
+import { initializeFirestore, connectFirestoreEmulator } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
 import { getFunctions, connectFunctionsEmulator } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-functions.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app-check.js";
@@ -18,7 +18,9 @@ const firebaseConfig = {
 const RECAPTCHA_SITE_KEY = '6LfLR-IsAAAAAKpDG_I_gohdgxWDb3265RmblLb3';
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
+// 사무실/키오스크 등 WebSocket 차단 가능성이 있는 환경에서 안정적으로 동작하도록
+// long-polling 강제 (HRD-survey 본체와 동일 정책).
+export const db = initializeFirestore(app, { experimentalForceLongPolling: true });
 export const auth = getAuth(app);
 export const functions = getFunctions(app, 'asia-northeast3');
 
