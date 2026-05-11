@@ -14,6 +14,29 @@ let closedCoursesExpanded = false;
 // 카드 idx → 과정 원본 데이터 (수정 진입 시 폼에 채울 용도)
 const courseDataCache = {};
 
+// ── 사내 프록시(행정망) 회복 헬퍼 ──────────────────────────────
+// 1) 빈 결과 시 한 번 재시도: long-polling 채널 초기 응답이 비어오는 패턴 대응
+// 2) localStorage stale-while-revalidate: 첫 응답이 늦거나 비어와도 직전 캐시를 즉시 표시
+const LS_PREFIX = 'admin:cache:v1:';
+function lsRead(key) {
+  try { const raw = localStorage.getItem(LS_PREFIX + key); return raw ? JSON.parse(raw) : null; }
+  catch { return null; }
+}
+function lsWrite(key, value) {
+  try { localStorage.setItem(LS_PREFIX + key, JSON.stringify(value)); } catch {}
+}
+
+async function getDocsResilient(refOrQuery) {
+  let snap = await getDocs(refOrQuery);
+  if (snap.empty) {
+    // 행정망 프록시가 첫 long-polling 응답을 변조해 빈 결과로 오는 패턴.
+    // 800ms 후 한 번만 재시도 — 진짜 빈 컬렉션이면 이 비용은 한 번뿐.
+    await new Promise(r => setTimeout(r, 800));
+    snap = await getDocs(refOrQuery);
+  }
+  return snap;
+}
+
 // ISO 날짜 문자열 → "YYYY.MM.DD ~ YYYY.MM.DD" 표시 (둘 중 하나라도 없으면 null)
 function formatDateRange(start, end) {
   if (!start || !end) return null;
@@ -94,103 +117,129 @@ export async function loadCourseList() {
     });
   }
 
-  document.getElementById('course-manage-loading').style.display = 'block';
-  document.getElementById('course-manage-list').innerHTML = '';
-  document.getElementById('course-manage-empty').style.display = 'none';
+  // 직전 캐시가 있으면 즉시 렌더 — 행정망 느린 첫 응답 동안 빈 화면 회피.
+  // 백그라운드에서 fresh fetch 후 갱신 (stale-while-revalidate).
+  const cached = lsRead('courses');
+  const hasCache = Array.isArray(cached) && cached.length > 0;
+
+  if (hasCache) {
+    renderCourseList(cached);
+    document.getElementById('course-manage-loading').style.display = 'none';
+  } else {
+    document.getElementById('course-manage-loading').style.display = 'block';
+    document.getElementById('course-manage-list').innerHTML = '';
+    document.getElementById('course-manage-empty').style.display = 'none';
+  }
 
   try {
-    const snap = await getDocs(collection(db, 'courses'));
-
-    state.courseIdMap = {};
-    state.courseActive = {};
+    const snap = await getDocsResilient(collection(db, 'courses'));
     const courses = snap.docs.map(d => {
       const data = d.data();
-      const isActive = data.active !== false;  // 필드 없으면 활성으로 간주 (마이그레이션)
-      state.courseIdMap[data.name] = d.id;
-      state.courseActive[data.name] = isActive;
+      const isActive = data.active !== false;
       return {
         id: d.id, name: data.name, active: isActive,
         startDate: data.startDate || null,
         endDate: data.endDate || null,
-        type: data.type === 'leadership' ? 'leadership' : 'standard',  // 미설정 = standard 호환
+        type: data.type === 'leadership' ? 'leadership' : 'standard',
       };
     });
-    // 진행중 우선, 그 안에서는 시작일 내림차순(최근/임박한 과정이 위)
-    // startDate 없는 기존 데이터는 맨 뒤로
-    courses.sort((a, b) => {
-      if (a.active !== b.active) return a.active ? -1 : 1;
-      const sa = a.startDate || '';
-      const sb = b.startDate || '';
-      if (!sa && !sb) return 0;
-      if (!sa) return 1;
-      if (!sb) return -1;
-      return sb.localeCompare(sa);
-    });
 
-    document.getElementById('course-count').textContent = courses.length + '개';
-    document.getElementById('course-manage-loading').style.display = 'none';
-
-    if (!courses.length) {
-      document.getElementById('course-manage-empty').style.display = 'block';
+    // fresh 가 비어 왔지만 캐시는 있다 — 프록시 변조 가능성. 캐시 유지하고 종료.
+    if (courses.length === 0 && hasCache) {
+      document.getElementById('course-manage-loading').style.display = 'none';
       return;
     }
 
-    // 각 과정마다 인덱스 부여 (active/closed 통합 인덱스 공간)
-    // 수정 진입 시 원본 데이터 복원 가능하도록 캐시도 갱신
-    for (const k of Object.keys(courseDataCache)) delete courseDataCache[k];
-    courses.forEach((c, idx) => {
-      c.idx = idx;
-      courseDataCache[idx] = { id: c.id, name: c.name, startDate: c.startDate, endDate: c.endDate, type: c.type };
-    });
+    renderCourseList(courses);
+    document.getElementById('course-manage-loading').style.display = 'none';
 
-    // 카드 골격 먼저 렌더 (요약 칩은 비동기로 채움)
-    const activeCourses = courses.filter(c => c.active);
-    const closedCourses = courses.filter(c => !c.active);
-
-    let html = activeCourses.map(renderCourseItem).join('');
-    if (closedCourses.length > 0) {
-      const arrow = closedCoursesExpanded ? '▲' : '▼';
-      const label = closedCoursesExpanded ? '숨기기' : '보기';
-      html += `
-        <div class="closed-courses-toggle" id="closed-courses-toggle" onclick="toggleClosedCourses()">
-          <span id="closed-toggle-arrow">${arrow}</span>
-          <span id="closed-toggle-label">종료된 과정 ${closedCourses.length}개 ${label}</span>
-        </div>
-        <div id="closed-courses-list" style="display:${closedCoursesExpanded ? 'block' : 'none'};">
-          ${closedCourses.map(renderCourseItem).join('')}
-        </div>`;
+    if (courses.length === 0) {
+      document.getElementById('course-manage-empty').style.display = 'block';
+      lsWrite('courses', []);
+      return;
     }
-    const listEl = document.getElementById('course-manage-list');
-    listEl.innerHTML = html;
-    // 모든 과정의 수정 폼 날짜 입력에 자동 포커스 이동 wiring (한 번에)
-    wireDateFields(listEl);
 
-    // 요약 칩 비동기 채움 (count aggregation은 doc 읽기 1회로 청구되어 가벼움)
-    courses.forEach(async (c) => {
-      try {
-        const stuRef  = collection(db, 'courses', c.id, 'students');
-        const instRef = collection(db, 'courses', c.id, 'instructors');
-        const [totalSnap, doneSnap, instSnap] = await Promise.all([
-          getCountFromServer(stuRef),
-          getCountFromServer(query(stuRef, where('completed', '==', true))),
-          getCountFromServer(instRef),
-        ]);
-        const total = totalSnap.data().count;
-        const done  = doneSnap.data().count;
-        const inst  = instSnap.data().count;
-        const metaEl = document.getElementById(`course-meta-${c.idx}`);
-        if (metaEl) {
-          metaEl.innerHTML = `수강생 <strong>${total}명</strong>${total > 0 ? ` <span class="meta-done">(완료 ${done})</span>` : ''} · 강사 <strong>${inst}명</strong>`;
-        }
-      } catch (_) {
-        const metaEl = document.getElementById(`course-meta-${c.idx}`);
-        if (metaEl) metaEl.textContent = '요약 불러오기 실패';
-      }
-    });
-
+    // 다음 새로고침에서 즉시 표시할 수 있도록 캐시 저장
+    lsWrite('courses', courses);
   } catch (e) {
-    document.getElementById('course-manage-loading').textContent = '불러오기 실패';
+    if (!hasCache) {
+      document.getElementById('course-manage-loading').textContent = '불러오기 실패';
+    }
+    // 캐시가 있으면 그대로 두고 침묵 — 사용자는 적어도 직전 데이터를 볼 수 있음
   }
+}
+
+// 코스 배열 → 정렬·렌더·요약칩 fetch (캐시 표시와 fresh 표시 양쪽에서 재사용)
+function renderCourseList(rawCourses) {
+  state.courseIdMap = {};
+  state.courseActive = {};
+  const courses = rawCourses.map(c => {
+    state.courseIdMap[c.name] = c.id;
+    state.courseActive[c.name] = c.active;
+    return { ...c };
+  });
+
+  // 진행중 우선, 그 안에서는 시작일 내림차순. startDate 없는 데이터는 맨 뒤.
+  courses.sort((a, b) => {
+    if (a.active !== b.active) return a.active ? -1 : 1;
+    const sa = a.startDate || '';
+    const sb = b.startDate || '';
+    if (!sa && !sb) return 0;
+    if (!sa) return 1;
+    if (!sb) return -1;
+    return sb.localeCompare(sa);
+  });
+
+  document.getElementById('course-count').textContent = courses.length + '개';
+
+  for (const k of Object.keys(courseDataCache)) delete courseDataCache[k];
+  courses.forEach((c, idx) => {
+    c.idx = idx;
+    courseDataCache[idx] = { id: c.id, name: c.name, startDate: c.startDate, endDate: c.endDate, type: c.type };
+  });
+
+  const activeCourses = courses.filter(c => c.active);
+  const closedCourses = courses.filter(c => !c.active);
+
+  let html = activeCourses.map(renderCourseItem).join('');
+  if (closedCourses.length > 0) {
+    const arrow = closedCoursesExpanded ? '▲' : '▼';
+    const label = closedCoursesExpanded ? '숨기기' : '보기';
+    html += `
+      <div class="closed-courses-toggle" id="closed-courses-toggle" onclick="toggleClosedCourses()">
+        <span id="closed-toggle-arrow">${arrow}</span>
+        <span id="closed-toggle-label">종료된 과정 ${closedCourses.length}개 ${label}</span>
+      </div>
+      <div id="closed-courses-list" style="display:${closedCoursesExpanded ? 'block' : 'none'};">
+        ${closedCourses.map(renderCourseItem).join('')}
+      </div>`;
+  }
+  const listEl = document.getElementById('course-manage-list');
+  listEl.innerHTML = html;
+  wireDateFields(listEl);
+
+  // 요약 칩 비동기 채움
+  courses.forEach(async (c) => {
+    try {
+      const stuRef  = collection(db, 'courses', c.id, 'students');
+      const instRef = collection(db, 'courses', c.id, 'instructors');
+      const [totalSnap, doneSnap, instSnap] = await Promise.all([
+        getCountFromServer(stuRef),
+        getCountFromServer(query(stuRef, where('completed', '==', true))),
+        getCountFromServer(instRef),
+      ]);
+      const total = totalSnap.data().count;
+      const done  = doneSnap.data().count;
+      const inst  = instSnap.data().count;
+      const metaEl = document.getElementById(`course-meta-${c.idx}`);
+      if (metaEl) {
+        metaEl.innerHTML = `수강생 <strong>${total}명</strong>${total > 0 ? ` <span class="meta-done">(완료 ${done})</span>` : ''} · 강사 <strong>${inst}명</strong>`;
+      }
+    } catch (_) {
+      const metaEl = document.getElementById(`course-meta-${c.idx}`);
+      if (metaEl) metaEl.textContent = '요약 불러오기 실패';
+    }
+  });
 }
 
 function renderCourseItem({ id, name, active, idx, startDate, endDate, type }) {
@@ -659,32 +708,59 @@ export async function uploadExcelInstructors(courseId, panelIdx) {
 // 패널별 현재 강사 목록 저장 (순서 변경, 수정에 활용)
 const panelInstructors = {};
 
+function normalizeInstructorOrder(instructors) {
+  instructors.sort((a, b) => {
+    if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
+    if (a.order !== undefined) return -1;
+    if (b.order !== undefined) return 1;
+    const ta = a.createdAt?.seconds || 0;
+    const tb = b.createdAt?.seconds || 0;
+    return ta - tb;
+  });
+  instructors.forEach((inst, i) => {
+    if (inst.order === undefined) inst.order = i * 10;
+  });
+  return instructors;
+}
+
 async function loadInstructors(courseId, panelIdx) {
   const panel = document.getElementById(`inst-panel-${panelIdx}`);
-  panel.innerHTML = '<div class="inst-loading">불러오는 중...</div>';
+  const cacheKey = `instructors:${courseId}`;
+  const cached = lsRead(cacheKey);
+  const hasCache = Array.isArray(cached);
+
+  if (hasCache) {
+    // 캐시 즉시 표시 — 행정망 RTT 비용 없이 첫 화면이 즉시 뜸
+    const cachedInsts = normalizeInstructorOrder(cached.map(c => ({ ...c })));
+    panelInstructors[panelIdx] = cachedInsts;
+    renderInstructorPanel(courseId, panelIdx, cachedInsts);
+  } else {
+    panel.innerHTML = '<div class="inst-loading">불러오는 중...</div>';
+  }
+
   try {
     const snap = await getDocs(collection(db, 'courses', courseId, 'instructors'));
-    let instructors = snap.docs.map(d => ({ ...d.data(), _id: d.id }));
+    const instructors = normalizeInstructorOrder(
+      snap.docs.map(d => ({ ...d.data(), _id: d.id }))
+    );
 
-    // order 필드 기준 정렬 (없으면 createdAt 기준)
-    instructors.sort((a, b) => {
-      if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
-      if (a.order !== undefined) return -1;
-      if (b.order !== undefined) return 1;
-      const ta = a.createdAt?.seconds || 0;
-      const tb = b.createdAt?.seconds || 0;
-      return ta - tb;
-    });
-
-    // order 없는 항목에 초기값 부여 (메모리 내)
-    instructors.forEach((inst, i) => {
-      if (inst.order === undefined) inst.order = i * 10;
-    });
+    // fresh 가 비어왔는데 캐시는 있다 — 프록시 변조 가능성. 캐시 유지하고 종료.
+    if (instructors.length === 0 && hasCache && cached.length > 0) {
+      return;
+    }
 
     panelInstructors[panelIdx] = instructors;
     renderInstructorPanel(courseId, panelIdx, instructors);
+    // createdAt 같은 Timestamp 객체는 JSON 직렬화 시 손실 — seconds 만 보존
+    lsWrite(cacheKey, instructors.map(i => ({
+      _id: i._id, name: i.name, education: i.education, order: i.order,
+      createdAt: i.createdAt?.seconds ? { seconds: i.createdAt.seconds } : null,
+    })));
   } catch (e) {
-    panel.innerHTML = '<div class="inst-loading">불러오기 실패</div>';
+    if (!hasCache) {
+      panel.innerHTML = '<div class="inst-loading">불러오기 실패</div>';
+    }
+    // 캐시가 있으면 그대로 두고 침묵
   }
 }
 
