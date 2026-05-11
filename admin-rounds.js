@@ -10,14 +10,12 @@ import { loadXLSX } from './admin-excel.js';
 const panelRounds = {};
 
 export async function loadRounds(courseId, panelIdx) {
-  console.log('[loadRounds] start', { courseId, panelIdx });
   const panel = document.getElementById(`round-panel-${panelIdx}`);
-  if (!panel) { console.warn('[loadRounds] panel 없음', panelIdx); return; }
+  if (!panel) return;
   panel.innerHTML = '<div class="round-loading">불러오는 중...</div>';
   let rounds;
   try {
     const snap = await getDocs(collection(db, 'courses', courseId, 'rounds'));
-    console.log('[loadRounds] snap 도착', snap.size);
     rounds = snap.docs.map(d => ({ ...d.data(), _id: d.id }));
     rounds.sort((a, b) => (a.number ?? 0) - (b.number ?? 0));
     panelRounds[panelIdx] = rounds;

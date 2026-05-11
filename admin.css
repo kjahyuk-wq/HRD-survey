@@ -333,37 +333,6 @@ header h1 { font-size: 1.3rem; font-weight: 700; margin: 0; color: #fff; }
 }
 .pw-error { color: #d00; font-size: 0.85rem; margin-top: 0.6rem; }
 
-/* 탭 */
-.tabs {
-  display: flex;
-  gap: 0.5rem;
-  margin-bottom: 1.2rem;
-}
-
-.tab-btn {
-  flex: 1;
-  padding: 0.7rem;
-  background: #fff;
-  border: 2px solid #dde3ea;
-  border-radius: 10px;
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: #666;
-  cursor: pointer;
-  transition: all 0.15s;
-  box-shadow: none;
-  width: auto;
-}
-
-.tab-btn.active {
-  background: linear-gradient(135deg, #003d99, #0066cc);
-  border-color: #0066cc;
-  color: #fff;
-  box-shadow: 0 4px 12px rgba(0,102,204,0.3);
-}
-
-.tab-btn:hover:not(.active) { border-color: #0066cc; color: #0066cc; transform: none; }
-
 /* 섹션 카드 */
 .section-card {
   background: #fff;
@@ -1317,151 +1286,6 @@ tr:hover td { background: #f8faff; }
 .score-5 { color: #22c55e; }
 .avg-cell { font-weight: 800; color: #003d99; }
 
-/* ── PDF 분석 탭 ── */
-.pdf-upload-area {
-  border: 2.5px dashed #b3c8e8;
-  border-radius: 14px;
-  background: #f8faff;
-  padding: 2rem 1.5rem;
-  text-align: center;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
-}
-.pdf-upload-area.drag-over {
-  background: #e8f0fe;
-  border-color: #0066cc;
-}
-.pdf-upload-icon { font-size: 3rem; margin-bottom: 0.5rem; }
-.pdf-upload-text { font-size: 1rem; font-weight: 600; color: #334155; margin-bottom: 0.4rem; }
-.pdf-upload-tip { font-size: 0.8rem; color: #64748b; margin-bottom: 0.8rem; }
-.pdf-select-btn { display: inline-block; margin-top: 0.5rem; }
-.pdf-file-name-display {
-  margin-top: 0.5rem;
-  font-size: 0.85rem;
-  color: #64748b;
-}
-.pdf-parse-status {
-  margin-top: 1rem;
-  font-size: 0.88rem;
-  font-weight: 500;
-  color: #0066cc;
-}
-.pdf-raw-text {
-  margin-top: 0.8rem;
-  background: #f1f5f9;
-  border: 1px solid #dde3ea;
-  border-radius: 8px;
-  padding: 1rem;
-  font-size: 0.78rem;
-  font-family: monospace;
-  white-space: pre-wrap;
-  word-break: break-all;
-  max-height: 240px;
-  overflow-y: auto;
-  color: #334155;
-}
-.pdf-info-notice {
-  background: #fffbeb;
-  border: 1px solid #fde68a;
-  border-radius: 8px;
-  padding: 0.6rem 1rem;
-  font-size: 0.82rem;
-  color: #92400e;
-  margin-bottom: 1rem;
-}
-.pdf-form-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.8rem;
-}
-@media (max-width: 600px) {
-  .pdf-form-grid { grid-template-columns: 1fr; }
-}
-.pdf-form-group { display: flex; flex-direction: column; gap: 0.35rem; }
-.pdf-form-group label {
-  font-size: 0.83rem;
-  font-weight: 600;
-  color: #334155;
-}
-.required-mark { color: #ef4444; }
-.pdf-form-group input,
-.pdf-form-group textarea {
-  padding: 0.65rem 0.9rem;
-  border: 2px solid #dde3ea;
-  border-radius: 10px;
-  font-size: 0.9rem;
-  font-family: inherit;
-  outline: none;
-  transition: border-color 0.2s;
-  resize: vertical;
-}
-.pdf-form-group input:focus,
-.pdf-form-group textarea:focus { border-color: #0066cc; }
-.pdf-item-list { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.8rem; }
-.pdf-item-row {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  background: #f8faff;
-  border: 1px solid #dde8ff;
-  border-radius: 8px;
-  padding: 0.5rem 0.8rem;
-  font-size: 0.88rem;
-  flex-wrap: wrap;
-}
-.pdf-item-tag {
-  background: #e8f0ff;
-  color: #0055aa;
-  font-size: 0.75rem;
-  font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 5px;
-}
-.pdf-item-name { flex: 1; color: #333; font-weight: 600; }
-.pdf-empty-msg { color: #aaa; font-size: 0.85rem; padding: 0.6rem; }
-.pdf-add-row {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  align-items: center;
-}
-.pdf-add-row input {
-  flex: 1;
-  min-width: 80px;
-  padding: 0.6rem 0.8rem;
-  border: 2px solid #dde3ea;
-  border-radius: 10px;
-  font-size: 0.88rem;
-  font-family: inherit;
-  outline: none;
-  transition: border-color 0.2s;
-}
-.pdf-add-row input:focus { border-color: #0066cc; }
-.pdf-generate-btn {
-  padding: 0.9rem 2.5rem;
-  background: linear-gradient(135deg, #003d99, #0066cc);
-  color: #fff;
-  border: none;
-  border-radius: 12px;
-  font-size: 1.05rem;
-  font-weight: 700;
-  cursor: pointer;
-  box-shadow: 0 4px 16px rgba(0,102,204,0.3);
-  transition: background 0.2s, transform 0.1s;
-  width: auto;
-}
-.pdf-generate-btn:hover:not(:disabled) {
-  background: linear-gradient(135deg, #002d7a, #0055aa);
-  transform: translateY(-1px);
-}
-.pdf-generate-btn:disabled { opacity: 0.7; cursor: not-allowed; transform: none; }
-.pdf-generate-status {
-  margin-top: 0.8rem;
-  font-size: 0.9rem;
-  font-weight: 500;
-  line-height: 1.6;
-}
-
 /* 인구통계 분포 */
 .demo-dist { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; }
 .demo-item { display: flex; align-items: center; gap: 0.8rem; min-height: 24px; }
@@ -1523,16 +1347,6 @@ tr:hover td { background: #f8faff; }
   .org-name { font-size: 0.7rem; margin-bottom: 0.1rem; }
   header h1 { font-size: 1.05rem; }
   .logout-btn { padding: 0.35rem 0.8rem; font-size: 0.78rem; }
-
-  /* 탭 */
-  .tabs { gap: 0.35rem; margin-bottom: 0.9rem; }
-  .tab-btn {
-    font-size: 0.72rem;
-    padding: 0.55rem 0.25rem;
-    line-height: 1.3;
-    border-radius: 8px;
-    border-width: 1.5px;
-  }
 
   /* 섹션 카드 */
   .section-card { padding: 1rem 0.9rem; border-radius: 10px; }
@@ -1650,7 +1464,6 @@ tr:hover td { background: #f8faff; }
 
 /* 아주 작은 화면 */
 @media (max-width: 380px) {
-  .tab-btn { font-size: 0.66rem; padding: 0.5rem 0.2rem; }
   header h1 { font-size: 0.98rem; }
   .org-name { font-size: 0.66rem; }
   .logo-icon { font-size: 1.8rem; }

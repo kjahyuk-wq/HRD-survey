@@ -119,12 +119,19 @@ Pepper 가 분실되면: 기존 학생 전원 메일 재수집 후 재등록.
 
 ---
 
-## Firestore Rules 동기화 주의
+## Firestore Rules / Indexes 동기화
 
-`attendance/firestore.rules` 와 부모 `firestore.rules` 는 **동일 내용을 유지**해야 함.
-Firebase CLI 가 프로젝트 외부 경로를 거부하므로 emulator 구동을 위해 attendance/ 안에 사본 보관.
+`attendance/firestore.rules` 와 `attendance/firestore.indexes.json` 은 **루트의 mirror**.
+정본은 항상 루트(`/firestore.rules`, `/firestore.indexes.json`).
+Firebase CLI 가 프로젝트 외부 경로(`../firestore.rules`)를 거부하므로 emulator 구동을 위해 attendance/ 안에 사본을 둔다.
 
-부모 변경 시:
+운영 deploy(`firebase deploy --only firestore`) 는 **반드시 루트에서**.
+attendance/ 에서 deploy 하면 stale mirror 가 운영에 덮어쓰는 사고가 발생하므로 절대 금지.
+
+루트 rules·indexes 를 수정한 뒤 attendance/ 동기화:
 ```bash
-cp /Users/sonnim/Desktop/HRD-survey/firestore.rules /Users/sonnim/Desktop/HRD-survey/attendance/firestore.rules
+cd attendance
+npm run sync-rules
 ```
+
+(쉘에서 직접: `cp ../firestore.rules . && cp ../firestore.indexes.json .`)

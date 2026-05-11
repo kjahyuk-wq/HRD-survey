@@ -25,6 +25,12 @@ function lsRead(key) {
 function lsWrite(key, value) {
   try { localStorage.setItem(LS_PREFIX + key, JSON.stringify(value)); } catch {}
 }
+// 데이터 변경 직후 캐시 무효화. 변경 후 fresh 가 빈 결과로 와도(행정망 변조 또는
+// 마지막 항목 삭제로 진짜 빈 상태) loadCourseList 의 "빈 결과 + hasCache → 캐시 유지"
+// 분기가 stale 을 잡지 못해 삭제된 항목이 계속 보이던 문제 차단.
+function lsInvalidate(key) {
+  try { localStorage.removeItem(LS_PREFIX + key); } catch {}
+}
 
 async function getDocsResilient(refOrQuery) {
   let snap = await getDocs(refOrQuery);
@@ -447,6 +453,7 @@ export async function saveEditCourse(idx) {
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '저장 중...'; }
   try {
     await updateDoc(doc(db, 'courses', c.id), { name, startDate, endDate });
+    lsInvalidate('courses');
     await loadCourseList();
   } catch (e) {
     alert('수정 중 오류가 발생했습니다.');
@@ -509,6 +516,7 @@ export async function addCourse() {
 
   try {
     await addDoc(collection(db, 'courses'), { name, active: true, startDate, endDate, type });
+    lsInvalidate('courses');
     input.value = '';
     ['new-course-start-y','new-course-start-m','new-course-start-d',
      'new-course-end-y','new-course-end-m','new-course-end-d']
@@ -538,6 +546,7 @@ export async function toggleCourseActive(courseId, currentActive, btnEl) {
   btnEl.textContent = '처리 중...';
   try {
     await updateDoc(doc(db, 'courses', courseId), { active: newActive });
+    lsInvalidate('courses');
     await loadCourseList();
   } catch (e) {
     alert('상태 변경 중 오류가 발생했습니다.');
@@ -565,6 +574,8 @@ export async function deleteCourse(courseId, btnEl) {
     await deleteSubcollection(courseId, 'attendanceConfig');
     await deleteRoundsCascade(courseId);  // 중견리더 과정의 회차 + 회차 내부 강사/응답 정리
     await deleteDoc(doc(db, 'courses', courseId));
+    lsInvalidate('courses');
+    lsInvalidate(`instructors:${courseId}`);
     await loadCourseList();
   } catch (e) {
     alert('삭제 중 오류가 발생했습니다.');
@@ -837,6 +848,7 @@ export async function addInstructor(courseId, panelIdx) {
     await addDoc(collection(db, 'courses', courseId, 'instructors'), {
       name, education: edu, createdAt: serverTimestamp(), order: maxOrder + 10
     });
+    lsInvalidate(`instructors:${courseId}`);
     document.getElementById(`inst-edu-${panelIdx}`).value = '';
     document.getElementById(`inst-name-${panelIdx}`).value = '';
     await loadInstructors(courseId, panelIdx);
@@ -848,6 +860,7 @@ export async function deleteInstructor(courseId, panelIdx, name, education, inst
   btnEl.disabled = true; btnEl.textContent = '삭제 중...';
   try {
     await deleteDoc(doc(db, 'courses', courseId, 'instructors', instId));
+    lsInvalidate(`instructors:${courseId}`);
     await loadInstructors(courseId, panelIdx);
   } catch (e) { alert('삭제 중 오류가 발생했습니다.'); btnEl.disabled = false; btnEl.textContent = '삭제'; }
 }
@@ -872,6 +885,7 @@ export async function moveInstructor(courseId, panelIdx, idx, direction) {
       updateDoc(doc(db, 'courses', courseId, 'instructors', instA._id), { order: instA.order }),
       updateDoc(doc(db, 'courses', courseId, 'instructors', instB._id), { order: instB.order }),
     ]);
+    lsInvalidate(`instructors:${courseId}`);
     await loadInstructors(courseId, panelIdx);
   } catch (e) {
     alert('순서 변경 중 오류가 발생했습니다.');
@@ -914,6 +928,7 @@ export async function saveEditInstructor(courseId, panelIdx, idx) {
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '저장 중...'; }
   try {
     await updateDoc(doc(db, 'courses', courseId, 'instructors', inst._id), { name, education: edu });
+    lsInvalidate(`instructors:${courseId}`);
     await loadInstructors(courseId, panelIdx);
   } catch (e) {
     alert('수정 중 오류가 발생했습니다.');
@@ -954,6 +969,7 @@ export async function deleteSelectedInstructors(courseId, panelIdx) {
   btn.disabled = true; btn.textContent = '삭제 중...';
   try {
     await Promise.all(Array.from(checked).map(cb => deleteDoc(doc(db, 'courses', courseId, 'instructors', cb.dataset.id))));
+    lsInvalidate(`instructors:${courseId}`);
     await loadInstructors(courseId, panelIdx);
   } catch (e) {
     alert('삭제 중 오류가 발생했습니다.');

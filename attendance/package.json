@@ -5,7 +5,8 @@
     "dev": "concurrently -k -n \"EMU,WEB\" -c \"cyan,green\" \"firebase emulators:start --only firestore,auth,functions --project hrd-data\" \"serve . --listen 3000 --ssl-cert 192.168.123.118+1.pem --ssl-key 192.168.123.118+1-key.pem\"",
     "emulator": "firebase emulators:start --only firestore,auth,functions --project hrd-data",
     "start": "serve . --listen 3000 --ssl-cert 192.168.123.118+1.pem --ssl-key 192.168.123.118+1-key.pem",
-    "serve-only": "serve . --listen 3000"
+    "serve-only": "serve . --listen 3000",
+    "sync-rules": "cp ../firestore.rules firestore.rules && cp ../firestore.indexes.json firestore.indexes.json && echo '[sync-rules] attendance/ 의 rules·indexes 를 루트와 동기화 완료'"
   },
   "devDependencies": {
     "concurrently": "^9.1.0",
