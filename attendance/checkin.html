@@ -5,6 +5,41 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <meta name="theme-color" content="#003d99">
   <title>출석 체크인 - HRD Survey</title>
+
+  <!-- 카카오톡·네이버앱 등 인앱 브라우저 감지 → 외부 브라우저로 리다이렉트 (가능한 환경 한해).
+       인앱 webview 는 IndexedDB/localStorage 가 휘발되기 쉬워 Firebase Auth 세션이 유지 안 됨.
+       이 스크립트는 다른 JS 보다 먼저 실행되어야 하므로 inline + head 상단. -->
+  <script>
+  (function() {
+    var ua = navigator.userAgent || '';
+    var isInApp = /KAKAOTALK|NAVER\(inapp|Line\/|FBAV|FB_IAB|Instagram|; wv\)/i.test(ua);
+    if (!isInApp) return;
+
+    var isAndroid = /Android/i.test(ua);
+
+    // 안내 배너 표시 (auto-redirect 실패 시 fallback)
+    function showBanner() {
+      var el = document.getElementById('in-app-warning');
+      if (el) el.style.display = 'block';
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', showBanner);
+    } else {
+      showBanner();
+    }
+
+    // Android: Chrome intent 스킴으로 외부 강제 (세션당 1회 시도, 실패 시 배너 유지)
+    if (!isAndroid) return;
+    try {
+      if (sessionStorage.getItem('att_extTried') === '1') return;
+      sessionStorage.setItem('att_extTried', '1');
+    } catch (_) { return; }
+
+    location.href = 'intent://' + location.host + location.pathname + location.search + location.hash
+      + '#Intent;scheme=https;package=com.android.chrome;end';
+  })();
+  </script>
+
   <link rel="stylesheet" href="attendance.css?v=2">
   <style>
     body { background: #f0f4f8; }
@@ -36,6 +71,13 @@
   </style>
 </head>
 <body>
+<!-- 인앱 브라우저 감지 시 표시되는 안내 배너 (auto-redirect 실패한 iOS 등 fallback) -->
+<div id="in-app-warning" style="display:none;background:#fef3c7;color:#92400e;padding:1rem 1.1rem;font-size:0.88rem;line-height:1.55;border-bottom:2px solid #d97706;text-align:left;">
+  <b>⚠️ 외부 브라우저로 열어주세요</b><br>
+  카카오톡·네이버 앱 내부 브라우저는 매번 로그인이 풀려요.<br>
+  <span style="font-size:0.82rem;">우측 상단/하단 메뉴 (<b>⋮</b> 또는 <b>⋯</b>) → <b>"다른 브라우저로 열기"</b> 또는 <b>"외부 브라우저로 열기"</b> 선택</span>
+</div>
+
 <div class="page-wrap">
   <div class="warning-banner">
     본인 외 대리 출석 적발 시 학칙에 의거하여 강제 퇴교 처리 후 소속기관에 통보됩니다.<br>
