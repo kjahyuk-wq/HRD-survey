@@ -460,6 +460,7 @@ header h1 { font-size: 1.3rem; font-weight: 700; margin: 0; color: #fff; }
   color: #1d4ed8;
   font-weight: 600;
   letter-spacing: 0.2px;
+  white-space: nowrap;
 }
 .course-manage-item.is-closed .course-date-range { color: #64748b; font-weight: 500; }
 
@@ -527,9 +528,11 @@ header h1 { font-size: 1.3rem; font-weight: 700; margin: 0; color: #fff; }
   font-size: 0.78rem;
   color: #6b7280;
   letter-spacing: 0.1px;
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
-.course-meta strong { color: #1e3a8a; font-weight: 700; }
-.course-meta .meta-done { color: #16a34a; font-weight: 600; }
+.course-meta strong { color: #1e3a8a; font-weight: 700; white-space: nowrap; }
+.course-meta .meta-done { color: #16a34a; font-weight: 600; white-space: nowrap; }
 .course-meta-skeleton { color: #b0b8c4; font-style: italic; }
 .course-manage-item.is-closed .course-meta { color: #94a3b8; }
 .course-manage-item.is-closed .course-meta strong { color: #64748b; }
