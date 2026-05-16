@@ -501,7 +501,17 @@ header h1 { font-size: 1.3rem; font-weight: 700; margin: 0; color: #fff; }
   align-items: center;
 }
 
-.course-manage-name { font-size: 0.95rem; font-weight: 600; color: #333; word-break: keep-all; overflow-wrap: break-word; }
+.course-manage-name {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #333;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
 
 /* 과정 카드 좌측 정보 블록 (이름 + 요약 칩) */
 .course-manage-info {
@@ -554,15 +564,14 @@ header h1 { font-size: 1.3rem; font-weight: 700; margin: 0; color: #fff; }
 /* 과정 상태 뱃지 */
 .course-status {
   display: inline-block;
-  font-size: 0.7rem;
+  font-size: 0.78rem;
   font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 10px;
-  margin-left: 6px;
+  padding: 0.22rem 0.65rem;
+  border-radius: 8px;
   vertical-align: middle;
   white-space: nowrap;
   word-break: keep-all;
-  min-width: max-content;
+  flex: 0 0 auto;
 }
 .course-status.active { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
 .course-status.closed { background: #f3f4f6; color: #6b7280; border: 1px solid #d1d5db; }
@@ -570,15 +579,14 @@ header h1 { font-size: 1.3rem; font-weight: 700; margin: 0; color: #fff; }
 /* 과정 유형 뱃지 (중견리더 양성과정 등 장기 분반 운영 과정 식별) */
 .course-type-badge {
   display: inline-block;
-  font-size: 0.7rem;
+  font-size: 0.78rem;
   font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 10px;
-  margin-left: 4px;
+  padding: 0.22rem 0.65rem;
+  border-radius: 8px;
   vertical-align: middle;
   white-space: nowrap;
   word-break: keep-all;
-  min-width: max-content;
+  flex: 0 0 auto;
 }
 .course-type-badge.leadership {
   background: #ede9fe;
