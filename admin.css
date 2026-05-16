@@ -561,6 +561,8 @@ header h1 { font-size: 1.3rem; font-weight: 700; margin: 0; color: #fff; }
   margin-left: 6px;
   vertical-align: middle;
   white-space: nowrap;
+  word-break: keep-all;
+  min-width: max-content;
 }
 .course-status.active { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
 .course-status.closed { background: #f3f4f6; color: #6b7280; border: 1px solid #d1d5db; }
@@ -575,6 +577,8 @@ header h1 { font-size: 1.3rem; font-weight: 700; margin: 0; color: #fff; }
   margin-left: 4px;
   vertical-align: middle;
   white-space: nowrap;
+  word-break: keep-all;
+  min-width: max-content;
 }
 .course-type-badge.leadership {
   background: #ede9fe;
