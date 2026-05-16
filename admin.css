@@ -212,12 +212,15 @@ header h1 { font-size: 1.3rem; font-weight: 700; margin: 0; color: #fff; }
   padding: 0.6rem 0.8rem;
   text-align: center;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .student-table td {
   padding: 0.55rem 0.8rem;
   text-align: center;
   border-bottom: 1px solid #f0f4f8;
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 .student-table tr:last-child td { border-bottom: none; }
@@ -842,8 +845,8 @@ header h1 { font-size: 1.3rem; font-weight: 700; margin: 0; color: #fff; }
 }
 
 .inst-move-btn {
-  padding: 0.28rem 0.5rem;
-  font-size: 0.78rem;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.85rem;
   background: #f0f4f8;
   border: 1px solid #c8d4e0;
   border-radius: 6px;
@@ -851,6 +854,8 @@ header h1 { font-size: 1.3rem; font-weight: 700; margin: 0; color: #fff; }
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
   line-height: 1;
+  min-width: 32px;
+  min-height: 32px;
 }
 .inst-move-btn:hover:not(:disabled) { background: #d4e4f8; border-color: #0066cc; color: #003d99; }
 .inst-move-btn:disabled { opacity: 0.3; cursor: not-allowed; }
@@ -1412,16 +1417,18 @@ tr:hover td { background: #f8faff; }
   .status-done, .status-pending { font-size: 0.76rem; }
   .completed-at { font-size: 0.66rem; }
 
-  /* 액션 버튼 모바일 — 통일된 작은 사이즈 */
-  .inst-action-btns { gap: 0.25rem; }
+  /* 액션 버튼 모바일 — 터치 타겟 ~36px 확보 */
+  .inst-action-btns { gap: 0.3rem; }
   .inst-action-btns .inst-edit-btn,
   .inst-action-btns .delete-btn,
   .inst-action-btns .inst-save-btn,
   .inst-action-btns .inst-cancel-btn {
-    min-width: 44px;
-    padding: 0.28rem 0.45rem;
-    font-size: 0.74rem;
+    min-width: 48px;
+    min-height: 34px;
+    padding: 0.45rem 0.55rem;
+    font-size: 0.78rem;
   }
+  .inst-move-btn { min-width: 34px; min-height: 34px; padding: 0.4rem 0.55rem; font-size: 0.85rem; }
 
   /* 강사·수강생 패널 */
   .instructor-panel,

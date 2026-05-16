@@ -161,6 +161,9 @@ body {
   border-radius: 10px;
   padding: 0.8rem 1rem;
   margin-bottom: 0.7rem;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  line-height: 1.45;
 }
 .confirm-card .cnote { font-size: 0.82rem; color: #888; line-height: 1.65; margin-bottom: 1.5rem; }
 
@@ -217,7 +220,7 @@ body {
   color: #5b21b6;
 }
 .round-select-btn.is-done .rs-num { color: #9ca3af; }
-.round-select-btn .rs-name { font-size: 0.92rem; color: #1f2937; font-weight: 500; }
+.round-select-btn .rs-name { font-size: 0.92rem; color: #1f2937; font-weight: 500; word-break: keep-all; overflow-wrap: break-word; min-width: 0; }
 .round-select-btn.is-done .rs-name { color: #94a3b8; }
 .round-select-btn .rs-date { font-size: 0.82rem; color: #64748b; }
 .round-select-btn .rs-done {
@@ -277,11 +280,13 @@ body {
   font-weight: 600;
   margin-bottom: 1.2rem;
   line-height: 1.5;
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 /* 별점 (관리자 색상 그대로) */
-.rating-group { display: flex; gap: 10px; }
-.rating-label { flex: 1; cursor: pointer; }
+.rating-group { display: flex; gap: 10px; flex-wrap: nowrap; }
+.rating-label { flex: 1 1 0; min-width: 0; cursor: pointer; }
 .rating-label input[type="radio"] { display: none; }
 
 .rating-btn {
@@ -306,6 +311,8 @@ body {
   margin-top: 4px;
   letter-spacing: -0.01em;
   line-height: 1.25;
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 .rating-label input[type="radio"]:checked + .rating-btn {
@@ -396,6 +403,14 @@ button:disabled { opacity: 0.65; cursor: not-allowed; transform: none; }
   .rating-btn { font-size: 0.95rem; padding: 0.5rem 0.1rem; }
   .rating-btn small { font-size: 0.72rem; margin-top: 3px; }
   .sv-title { font-size: 1.15rem; }
+  .q-card { padding: 1.2rem 1rem; }
+  .confirm-card { padding: 2rem 1.2rem; }
+}
+
+@media (max-width: 360px) {
+  .rating-group { gap: 4px; }
+  .rating-btn { font-size: 0.88rem; padding: 0.45rem 0.05rem; }
+  .rating-btn small { font-size: 0.66rem; }
 }
 
 /* 선택형 문항 그룹 (인구통계 Q11-Q16) */

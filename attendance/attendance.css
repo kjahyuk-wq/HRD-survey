@@ -195,18 +195,21 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 0.5rem;
   padding: 0.5rem 0;
   border-bottom: 1px solid #f1f5f9;
   font-size: 0.88rem;
+  flex-wrap: wrap;
 }
 .att-list-item:last-child { border-bottom: none; }
 .att-empno { color: #64748b; font-size: 0.8rem; }
 .att-time { color: #94a3b8; font-size: 0.78rem; }
 .att-badge {
-  font-size: 0.72rem;
-  padding: 0.15rem 0.5rem;
+  font-size: 0.78rem;
+  padding: 0.2rem 0.55rem;
   border-radius: 10px;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 /* ── 관리자 대시보드 ── */
@@ -286,13 +289,21 @@ body {
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 0.75rem;
+  font-size: 0.95rem;
   color: inherit;
   opacity: 0.7;
-  padding: 0;
+  padding: 0.15rem 0.3rem;
+  margin: -0.2rem -0.3rem -0.2rem 0;
   line-height: 1;
+  min-width: 28px;
+  min-height: 28px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
-.date-tag button:hover { opacity: 1; }
+.date-tag button:hover { opacity: 1; background: rgba(0,0,0,0.08); }
+.date-tag button:active { background: rgba(0,0,0,0.15); }
 
 .date-add-row { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem; }
 .date-add-row input[type="date"] {
@@ -322,6 +333,8 @@ table.att-table {
 .att-table td {
   padding: 0.55rem 0.8rem;
   border-bottom: 1px solid #f1f5f9;
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 .att-table tr:hover td { background: #f8faff; }
 .att-table .absent td { background: #fff5f5; }
