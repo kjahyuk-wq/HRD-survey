@@ -503,7 +503,8 @@ header h1 { font-size: 1.3rem; font-weight: 700; margin: 0; color: #fff; }
   gap: 0.4rem;
   align-items: center;
   flex-wrap: wrap;
-  flex-shrink: 0;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .course-manage-name {
