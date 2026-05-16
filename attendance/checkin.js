@@ -215,7 +215,7 @@ async function proceedWithCandidates(name, rawCandidates) {
 
   if (!candidates.length) {
     showScreen('screen-no-class');
-    document.getElementById('no-class-title').textContent = '오늘은 수업 일정이 없습니다';
+    document.getElementById('no-class-title').textContent = `${name}님, 오늘은 수업 일정이 없습니다`;
     document.getElementById('no-class-desc').textContent = '오늘은 등록된 교육 일정이 아닙니다.';
     return;
   }
@@ -289,7 +289,7 @@ async function proceedWithCourse(name, candidate) {
   ].filter(d => !excluded.has(d));
   if (allHolidays.includes(today)) {
     showScreen('screen-no-class');
-    document.getElementById('no-class-title').textContent = '오늘은 휴강일입니다';
+    document.getElementById('no-class-title').textContent = `${name}님, 오늘은 휴강일입니다`;
     document.getElementById('no-class-desc').textContent = '법정 공휴일 또는 관리자 지정 휴강일입니다.';
     return;
   }
@@ -300,6 +300,7 @@ async function proceedWithCourse(name, candidate) {
   const session = getCurrentSession(config);
   if (!session) {
     showScreen('screen-no-session');
+    document.querySelector('#screen-no-session .status-title').textContent = `${name}님, 현재 출석 시간이 아닙니다`;
     document.getElementById('no-session-desc').textContent =
       config.dailySessions === 2
         ? `오전 출석: ${config.morningStart} ~ ${config.morningEnd}\n오후 출석: ${config.afternoonStart} ~ ${config.afternoonEnd}`
@@ -334,6 +335,7 @@ async function proceedWithCourse(name, candidate) {
     const rec = attSnap.docs[0].data();
     const sessionLabel = sessionName(session);
     const checkedTime = rec.checkedAt ? formatTime(rec.checkedAt) : '';
+    document.querySelector('#screen-already .status-title').textContent = `${name}님, 이미 출석 처리되었습니다`;
     document.getElementById('already-desc').textContent =
       `${sessionLabel} 출석이 이미 처리되었습니다.${checkedTime ? ` (${checkedTime})` : ''}`;
     return;
