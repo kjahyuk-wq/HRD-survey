@@ -1,6 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
 import { initializeFirestore } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { getAuth } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
+import { getFunctions } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-functions.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app-check.js";
 
 const firebaseConfig = {
@@ -42,6 +43,7 @@ export const db = initializeFirestore(
     : { experimentalAutoDetectLongPolling: true }
 );
 export const auth = getAuth(app);
+export const functions = getFunctions(app, 'asia-northeast3');
 
 // App Check — 운영에서만 활성화 (localhost / 사내 IP 는 제외)
 const host = location.hostname;

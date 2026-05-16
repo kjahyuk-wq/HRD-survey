@@ -1,9 +1,9 @@
-import { db, auth } from './firebase-config.js';
+import { db, auth, functions } from './firebase-config.js';
 import {
-  collectionGroup, collection, doc, query, where, getDocs,
-  addDoc, updateDoc, getDoc, serverTimestamp, arrayUnion
+  collectionGroup, collection, doc, query, where, getDocs, getDoc
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { signInAnonymously } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
+import { httpsCallable } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-functions.js";
 
 // type === 'leadership' 일 때 roundId/roundNumber/roundName이 채워지고 instructors는 회차별 강사로 교체됨.
 // group은 중견리더 분반 운영 시 사용 (학생.group). 분반 미운영이면 빈 문자열.
@@ -356,9 +356,8 @@ async function submitSurvey() {
   btn.disabled = true;
 
   try {
-    // 응답 본문 — 단기/회차 공통 필드
-    const respBase = {
-      name: currentUser.name, empNo: currentUser.empNo, course: currentUser.course,
+    // 응답 본문 — name/empNo/course/submittedAt 은 서버가 신뢰 가능한 소스에서 박음 (보안)
+    const response = {
       q1: answers[0], q2: answers[1], q3: answers[2], q4: answers[3], q5: answers[4],
       q6: answers[5], q7: answers[6], q8: answers[7], q9: answers[8],
       q10_comment: q10Comment,
@@ -366,33 +365,20 @@ async function submitSurvey() {
       q14: demographics.q14, q15: demographics.q15, q16: demographics.q16,
       instructors: instructorScores,
       comment1, comment2, comment3,
-      submittedAt: serverTimestamp()
     };
-
-    if (currentUser.type === 'leadership') {
-      // 회차 응답: rounds/{rid}/responses 에 저장 + 회차/분반 정보 박제
-      const leadershipResp = {
-        ...respBase,
-        roundNumber: currentUser.roundNumber,
-        roundName: currentUser.roundName
-      };
-      if (currentUser.group) leadershipResp.groupName = currentUser.group;
-      await addDoc(
-        collection(db, 'courses', currentUser.courseId, 'rounds', currentUser.roundId, 'responses'),
-        leadershipResp
-      );
-      await updateDoc(currentUser.studentRef, {
-        completedRounds: arrayUnion(currentUser.roundId),
-        completedAt: serverTimestamp()
-      });
-    } else {
-      // 단기 응답: 기존 그대로
-      await addDoc(collection(db, 'courses', currentUser.courseId, 'responses'), respBase);
-      await updateDoc(currentUser.studentRef, {
-        completed: true,
-        completedAt: serverTimestamp()
-      });
+    if (currentUser.type === 'leadership' && currentUser.group) {
+      response.groupName = currentUser.group;
     }
+
+    // 서버에서 본인성 검증 + 트랜잭션으로 응답 + completed 갱신
+    const submit = httpsCallable(functions, 'submitSurveyResponse');
+    await submit({
+      name: currentUser.name,
+      empNo: currentUser.empNo,
+      courseId: currentUser.courseId,
+      roundId: currentUser.type === 'leadership' ? currentUser.roundId : null,
+      response,
+    });
 
     document.getElementById('screen-survey').style.display = 'none';
     document.getElementById('screen-result').style.display = 'block';
@@ -401,7 +387,20 @@ async function submitSurvey() {
     console.error(e);
     document.getElementById('btn-text').textContent = '설문 제출하기';
     btn.disabled = false;
-    alert('제출 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.');
+    const code = e?.code || '';
+    if (code === 'functions/already-exists') {
+      alert(e.message || '이미 응답하셨습니다. 감사합니다!');
+    } else if (code === 'functions/resource-exhausted') {
+      alert('잠시 후 다시 시도해 주세요. (요청 한도 초과)');
+    } else if (
+      code === 'functions/invalid-argument'
+      || code === 'functions/failed-precondition'
+      || code === 'functions/not-found'
+    ) {
+      alert(e.message || '제출할 수 없습니다. 담당자에게 문의해 주세요.');
+    } else {
+      alert('제출 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.');
+    }
   }
 }
 

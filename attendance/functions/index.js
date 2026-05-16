@@ -303,6 +303,188 @@ exports.registerAttendanceStudents = onCall(
   }
 );
 
+// ── 만족도 응답 제출 (단기 + 회차 통합) ─────────────────
+// 학생 직접 쓰기를 차단하고 서버에서 본인성/중복 검증 + 트랜잭션 처리.
+// rules 의 students.update / responses.create 가 admin only 로 잠긴 뒤로 이 함수만 통과 경로.
+exports.submitSurveyResponse = onCall(
+  {
+    region: REGION,
+    enforceAppCheck: ENFORCE_APP_CHECK,
+    maxInstances: 10,
+  },
+  async (request) => {
+    const data = request.data || {};
+    const name = String(data.name || '').trim();
+    const empNo = String(data.empNo || '').trim();
+    const courseId = String(data.courseId || '').trim();
+    const roundId = data.roundId ? String(data.roundId).trim() : '';
+    const response = data.response;
+
+    if (!name || name.length > 50) {
+      throw new HttpsError('invalid-argument', '이름이 올바르지 않습니다.');
+    }
+    if (!empNo || empNo.length > 20) {
+      throw new HttpsError('invalid-argument', '교번이 올바르지 않습니다.');
+    }
+    if (!courseId || courseId.length > 100) {
+      throw new HttpsError('invalid-argument', 'courseId가 올바르지 않습니다.');
+    }
+    if (!response || typeof response !== 'object') {
+      throw new HttpsError('invalid-argument', '응답 데이터가 없습니다.');
+    }
+
+    const ip = request.rawRequest?.ip || 'unknown';
+    await enforceRateLimit(`submit_${ip}`, { windowMs: 60_000, max: 10 });
+
+    // 응답 필드 검증
+    for (let i = 1; i <= 9; i++) {
+      const v = response[`q${i}`];
+      if (!Number.isInteger(v) || v < 1 || v > 5) {
+        throw new HttpsError('invalid-argument', `q${i} 값이 올바르지 않습니다.`);
+      }
+    }
+    for (let i = 11; i <= 16; i++) {
+      const v = response[`q${i}`];
+      if (typeof v !== 'string' || v.length > 50) {
+        throw new HttpsError('invalid-argument', `q${i} 값이 올바르지 않습니다.`);
+      }
+    }
+    if (!response.instructors || typeof response.instructors !== 'object') {
+      throw new HttpsError('invalid-argument', '강사 평가가 없습니다.');
+    }
+    for (const [k, v] of Object.entries(response.instructors)) {
+      if (typeof k !== 'string' || k.length > 200) {
+        throw new HttpsError('invalid-argument', '강사 키가 올바르지 않습니다.');
+      }
+      if (!Number.isInteger(v) || v < 1 || v > 5) {
+        throw new HttpsError('invalid-argument', '강사 평가 값이 올바르지 않습니다.');
+      }
+    }
+    const checkLen = (field, max) => {
+      const v = response[field];
+      if (v == null || v === '') return;
+      if (typeof v !== 'string' || v.length > max) {
+        throw new HttpsError('invalid-argument', `${field} 가 올바르지 않습니다.`);
+      }
+    };
+    checkLen('q10_comment', 1000);
+    checkLen('comment1', 2000);
+    checkLen('comment2', 2000);
+    checkLen('comment3', 2000);
+
+    // 과정 검증
+    const courseRef = db.collection('courses').doc(courseId);
+    const courseSnap = await courseRef.get();
+    if (!courseSnap.exists) {
+      throw new HttpsError('not-found', '과정을 찾을 수 없습니다.');
+    }
+    const courseData = courseSnap.data();
+    if (courseData.active === false) {
+      throw new HttpsError('failed-precondition', '비활성 과정입니다.');
+    }
+    const isLeadership = courseData.type === 'leadership';
+
+    // 학생 매칭 (해당 과정 내에서만 — collectionGroup 우회 차단)
+    const studentsSnap = await courseRef
+      .collection('students')
+      .where('empNo', '==', empNo)
+      .get();
+    const matches = studentsSnap.docs.filter((d) => d.data().name === name);
+    if (matches.length === 0) {
+      throw new HttpsError('not-found', '등록된 수강생을 찾을 수 없습니다.');
+    }
+    if (matches.length > 1) {
+      throw new HttpsError(
+        'failed-precondition',
+        '동명이인 수강생이 있어 자동 매칭이 어렵습니다. 담당자에게 문의해 주세요.'
+      );
+    }
+    const studentRef = matches[0].ref;
+
+    // 회차 검증 (leadership)
+    let roundData = null;
+    if (isLeadership) {
+      if (!roundId || roundId.length > 100) {
+        throw new HttpsError('invalid-argument', '회차 정보가 필요합니다.');
+      }
+      const roundSnap = await courseRef.collection('rounds').doc(roundId).get();
+      if (!roundSnap.exists) {
+        throw new HttpsError('not-found', '회차를 찾을 수 없습니다.');
+      }
+      roundData = roundSnap.data();
+      if (roundData.active === false) {
+        throw new HttpsError('failed-precondition', '비활성 회차입니다.');
+      }
+    } else if (roundId) {
+      throw new HttpsError('invalid-argument', '단기과정은 회차 정보가 없어야 합니다.');
+    }
+
+    // 응답 본문 — 클라이언트 입력에서 받되 name/empNo/course 는 서버 신뢰 값으로 강제
+    const respBase = {
+      name,
+      empNo,
+      course: String(courseData.name || ''),
+      q1: response.q1, q2: response.q2, q3: response.q3, q4: response.q4, q5: response.q5,
+      q6: response.q6, q7: response.q7, q8: response.q8, q9: response.q9,
+      q10_comment: typeof response.q10_comment === 'string' ? response.q10_comment : '',
+      q11: response.q11, q12: response.q12, q13: response.q13,
+      q14: response.q14, q15: response.q15, q16: response.q16,
+      instructors: response.instructors,
+      comment1: typeof response.comment1 === 'string' ? response.comment1 : '',
+      comment2: typeof response.comment2 === 'string' ? response.comment2 : '',
+      comment3: typeof response.comment3 === 'string' ? response.comment3 : '',
+      submittedAt: FieldValue.serverTimestamp(),
+    };
+
+    if (isLeadership) {
+      respBase.roundNumber = roundData.number;
+      respBase.roundName = roundData.name || '';
+      if (typeof response.groupName === 'string' && response.groupName.length > 0
+          && response.groupName.length <= 50) {
+        respBase.groupName = response.groupName;
+      }
+    }
+
+    // 트랜잭션: 학생 doc 최신 상태 확인 후 응답 생성 + 완료 마킹
+    const responseCol = isLeadership
+      ? courseRef.collection('rounds').doc(roundId).collection('responses')
+      : courseRef.collection('responses');
+    const newResponseRef = responseCol.doc();
+
+    await db.runTransaction(async (tx) => {
+      const freshStudent = await tx.get(studentRef);
+      if (!freshStudent.exists) {
+        throw new HttpsError('not-found', '수강생 정보가 사라졌습니다.');
+      }
+      const freshData = freshStudent.data();
+      if (isLeadership) {
+        const completed = Array.isArray(freshData.completedRounds)
+          ? freshData.completedRounds
+          : [];
+        if (completed.includes(roundId)) {
+          throw new HttpsError('already-exists', '이미 응답하신 회차입니다.');
+        }
+        tx.set(newResponseRef, respBase);
+        tx.update(studentRef, {
+          completedRounds: FieldValue.arrayUnion(roundId),
+          completedAt: FieldValue.serverTimestamp(),
+        });
+      } else {
+        if (freshData.completed === true) {
+          throw new HttpsError('already-exists', '이미 응답하셨습니다.');
+        }
+        tx.set(newResponseRef, respBase);
+        tx.update(studentRef, {
+          completed: true,
+          completedAt: FieldValue.serverTimestamp(),
+        });
+      }
+    });
+
+    return { ok: true };
+  }
+);
+
 // ── 관리자: 출결용 학생 단건 등록 ─────────────────────
 exports.registerAttendanceStudent = onCall(
   {

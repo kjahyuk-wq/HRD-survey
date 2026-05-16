@@ -36,69 +36,19 @@ service cloud.firestore {
         allow write: if isAdmin();
       }
 
-      // 수강생: 관리자만 등록/삭제, 본인이 설문 완료 처리만 가능
-      // - 단기과정: completed/completedAt 변경 (한 번만)
-      // - 중견리더 회차과정: completedRounds(arrayUnion)/completedAt 변경 (회차마다)
+      // 수강생: 관리자만 등록/삭제/수정.
+      // 학생의 completed/completedRounds 갱신은 Cloud Function (submitSurveyResponse) 가
+      // admin SDK 로 본인성 검증 후 처리한다 (익명 인증자의 임의 학생 마킹 DoS 차단).
       match /students/{studentId} {
         allow read: if isAuthenticated();
-        allow create, delete: if isAdmin();
-        allow update: if isAdmin()
-          || (isAuthenticated()
-              && (
-                (changedKeysOnly(['completed', 'completedAt'])
-                  && request.resource.data.completed == true)
-                || (changedKeysOnly(['completedRounds', 'completedAt'])
-                  && request.resource.data.completedRounds is list)
-              ));
+        allow create, update, delete: if isAdmin();
       }
 
-      // 설문 응답: 관리자만 read/delete, 익명 교육생은 검증된 형식으로만 create
+      // 설문 응답: 관리자만 read/write. 학생 응답 제출은 Cloud Function
+      // (submitSurveyResponse) 가 admin SDK 로 본인성 검증 + 트랜잭션 처리.
+      // (익명 인증자의 임의 응답 위조 차단)
       match /responses/{responseId} {
-        allow read, update, delete: if isAdmin();
-        allow create: if isAdmin() || (
-          isAuthenticated()
-          && request.resource.data.keys().hasAll([
-              'name','empNo','course',
-              'q1','q2','q3','q4','q5','q6','q7','q8','q9',
-              'q11','q12','q13','q14','q15','q16',
-              'instructors','submittedAt'
-            ])
-          && request.resource.data.name is string
-          && request.resource.data.name.size() > 0
-          && request.resource.data.name.size() <= 50
-          && request.resource.data.empNo is string
-          && request.resource.data.empNo.size() <= 20
-          && request.resource.data.course is string
-          && request.resource.data.course.size() <= 200
-          && request.resource.data.q1 is int && request.resource.data.q1 >= 1 && request.resource.data.q1 <= 5
-          && request.resource.data.q2 is int && request.resource.data.q2 >= 1 && request.resource.data.q2 <= 5
-          && request.resource.data.q3 is int && request.resource.data.q3 >= 1 && request.resource.data.q3 <= 5
-          && request.resource.data.q4 is int && request.resource.data.q4 >= 1 && request.resource.data.q4 <= 5
-          && request.resource.data.q5 is int && request.resource.data.q5 >= 1 && request.resource.data.q5 <= 5
-          && request.resource.data.q6 is int && request.resource.data.q6 >= 1 && request.resource.data.q6 <= 5
-          && request.resource.data.q7 is int && request.resource.data.q7 >= 1 && request.resource.data.q7 <= 5
-          && request.resource.data.q8 is int && request.resource.data.q8 >= 1 && request.resource.data.q8 <= 5
-          && request.resource.data.q9 is int && request.resource.data.q9 >= 1 && request.resource.data.q9 <= 5
-          && request.resource.data.q11 is string && request.resource.data.q11.size() <= 50
-          && request.resource.data.q12 is string && request.resource.data.q12.size() <= 50
-          && request.resource.data.q13 is string && request.resource.data.q13.size() <= 50
-          && request.resource.data.q14 is string && request.resource.data.q14.size() <= 50
-          && request.resource.data.q15 is string && request.resource.data.q15.size() <= 50
-          && request.resource.data.q16 is string && request.resource.data.q16.size() <= 50
-          && request.resource.data.instructors is map
-          && (!('q10_comment' in request.resource.data)
-              || (request.resource.data.q10_comment is string
-                  && request.resource.data.q10_comment.size() <= 1000))
-          && (!('comment1' in request.resource.data)
-              || (request.resource.data.comment1 is string
-                  && request.resource.data.comment1.size() <= 2000))
-          && (!('comment2' in request.resource.data)
-              || (request.resource.data.comment2 is string
-                  && request.resource.data.comment2.size() <= 2000))
-          && (!('comment3' in request.resource.data)
-              || (request.resource.data.comment3 is string
-                  && request.resource.data.comment3.size() <= 2000))
-        );
+        allow read, create, update, delete: if isAdmin();
       }
 
       // 출석 설정: 관리자만 쓰기. reset_* 마커는 본인 empNo 의 문서만 학생이 소비 후 삭제 가능.
@@ -142,62 +92,9 @@ service cloud.firestore {
           allow write: if isAdmin();
         }
 
-        // 회차별 응답: 관리자만 read/update/delete, 익명 교육생은 검증된 형식으로만 create
-        // 단기 응답과 동일 검증 + roundNumber/roundName 박제
+        // 회차별 응답: 관리자만 read/write. 학생 응답 제출은 Cloud Function 처리 (위와 동일).
         match /responses/{responseId} {
-          allow read, update, delete: if isAdmin();
-          allow create: if isAdmin() || (
-            isAuthenticated()
-            && request.resource.data.keys().hasAll([
-                'name','empNo','course','roundNumber','roundName',
-                'q1','q2','q3','q4','q5','q6','q7','q8','q9',
-                'q11','q12','q13','q14','q15','q16',
-                'instructors','submittedAt'
-              ])
-            && request.resource.data.name is string
-            && request.resource.data.name.size() > 0
-            && request.resource.data.name.size() <= 50
-            && request.resource.data.empNo is string
-            && request.resource.data.empNo.size() <= 20
-            && request.resource.data.course is string
-            && request.resource.data.course.size() <= 200
-            && request.resource.data.roundNumber is int
-            && request.resource.data.roundNumber >= 1
-            && request.resource.data.roundNumber <= 99
-            && request.resource.data.roundName is string
-            && request.resource.data.roundName.size() <= 100
-            && request.resource.data.q1 is int && request.resource.data.q1 >= 1 && request.resource.data.q1 <= 5
-            && request.resource.data.q2 is int && request.resource.data.q2 >= 1 && request.resource.data.q2 <= 5
-            && request.resource.data.q3 is int && request.resource.data.q3 >= 1 && request.resource.data.q3 <= 5
-            && request.resource.data.q4 is int && request.resource.data.q4 >= 1 && request.resource.data.q4 <= 5
-            && request.resource.data.q5 is int && request.resource.data.q5 >= 1 && request.resource.data.q5 <= 5
-            && request.resource.data.q6 is int && request.resource.data.q6 >= 1 && request.resource.data.q6 <= 5
-            && request.resource.data.q7 is int && request.resource.data.q7 >= 1 && request.resource.data.q7 <= 5
-            && request.resource.data.q8 is int && request.resource.data.q8 >= 1 && request.resource.data.q8 <= 5
-            && request.resource.data.q9 is int && request.resource.data.q9 >= 1 && request.resource.data.q9 <= 5
-            && request.resource.data.q11 is string && request.resource.data.q11.size() <= 50
-            && request.resource.data.q12 is string && request.resource.data.q12.size() <= 50
-            && request.resource.data.q13 is string && request.resource.data.q13.size() <= 50
-            && request.resource.data.q14 is string && request.resource.data.q14.size() <= 50
-            && request.resource.data.q15 is string && request.resource.data.q15.size() <= 50
-            && request.resource.data.q16 is string && request.resource.data.q16.size() <= 50
-            && request.resource.data.instructors is map
-            && (!('q10_comment' in request.resource.data)
-                || (request.resource.data.q10_comment is string
-                    && request.resource.data.q10_comment.size() <= 1000))
-            && (!('comment1' in request.resource.data)
-                || (request.resource.data.comment1 is string
-                    && request.resource.data.comment1.size() <= 2000))
-            && (!('comment2' in request.resource.data)
-                || (request.resource.data.comment2 is string
-                    && request.resource.data.comment2.size() <= 2000))
-            && (!('comment3' in request.resource.data)
-                || (request.resource.data.comment3 is string
-                    && request.resource.data.comment3.size() <= 2000))
-            && (!('groupName' in request.resource.data)
-                || (request.resource.data.groupName is string
-                    && request.resource.data.groupName.size() <= 50))
-          );
+          allow read, create, update, delete: if isAdmin();
         }
       }
 
