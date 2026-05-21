@@ -23,9 +23,27 @@
   })();
   </script>
 
+  <!-- 옵티미스틱 즉시 렌더에 쓸 Firebase 모듈 미리 다운로드 시작
+       (모듈 파싱 시점까지 기다리지 않게 함 — 백그라운드 검증 지연 단축) -->
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js">
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js">
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js">
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.10.0/firebase-functions.js">
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.10.0/firebase-app-check.js">
+
   <link rel="stylesheet" href="attendance.css?v=2">
   <style>
     body { background: #f0f4f8; }
+    /* 자동 로그인 중 스피너 — '빈 로그인 폼' 노출 방지 용도 */
+    .auto-spinner {
+      width: 48px; height: 48px;
+      border: 4px solid #e2e8f0;
+      border-top-color: #0066cc;
+      border-radius: 50%;
+      animation: auto-spin 0.9s linear infinite;
+      margin: 0 auto 0.8rem;
+    }
+    @keyframes auto-spin { to { transform: rotate(360deg); } }
     .page-wrap { max-width: 480px; margin: 0 auto; min-height: 100vh; }
     .qr-img-wrap { position: relative; }
     canvas#qr-canvas { display: block; margin: 0 auto; max-width: 100%; }
@@ -67,6 +85,17 @@
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.35rem;">
       <button id="logout-btn" onclick="doLogout()" style="display:none;background:rgba(255,255,255,0.18);color:#fff;border:none;padding:0.3rem 0.7rem;border-radius:8px;font-size:0.78rem;cursor:pointer;">로그아웃</button>
       <div id="today-date" style="font-size:0.82rem;opacity:0.85;"></div>
+    </div>
+  </div>
+
+  <!-- 스크린 0: 자동 로그인 대기 (옵티미스틱 인라인 스크립트가 활성화) -->
+  <div id="screen-resuming" class="screen">
+    <div class="card">
+      <div class="status-msg">
+        <div class="auto-spinner"></div>
+        <div class="status-title">자동 로그인 중…</div>
+        <div class="status-desc">잠시만 기다려 주세요.</div>
+      </div>
     </div>
   </div>
 
@@ -199,6 +228,149 @@
 
 <!-- qrious: canvas 기반 QR 라이브러리 -->
 <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
+
+<!--
+  옵티미스틱 즉시 렌더 — Firebase 모듈 로드 전에 동기 실행.
+  localStorage 의 'att_last_state_v1' 스냅샷을 읽어 어제·오늘·세션 시간·QR 만료를 판단해
+  로그인 폼 대신 QR/이미출석/스피너 화면을 첫 페인트에 즉시 표시한다.
+  스냅샷이 없거나 손상되면 조용히 빠져나가 기존 로그인 폼이 그대로 노출된다.
+  checkin.js 가 이후 백그라운드에서 서버 검증을 수행해 결과가 다르면 화면을 갱신한다.
+-->
+<script>
+(function () {
+  try {
+    var SNAPSHOT_KEY = 'att_last_state_v1';
+    var raw = localStorage.getItem(SNAPSHOT_KEY);
+    if (!raw) return;
+    var s = JSON.parse(raw);
+    if (!s || s.v !== 1 || !s.name || !s.config) return;
+
+    function todayStr() {
+      var d = new Date();
+      return d.getFullYear() + '-' +
+        String(d.getMonth() + 1).padStart(2, '0') + '-' +
+        String(d.getDate()).padStart(2, '0');
+    }
+    var TODAY = todayStr();
+
+    function show(id) {
+      var screens = document.querySelectorAll('.screen');
+      for (var i = 0; i < screens.length; i++) screens[i].classList.remove('active');
+      var target = document.getElementById(id);
+      if (target) target.classList.add('active');
+      var lo = document.getElementById('logout-btn');
+      if (lo) {
+        var isLogin = (id === 'screen-login' || id === 'screen-login-empno');
+        lo.style.display = isLogin ? 'none' : 'inline-block';
+      }
+    }
+
+    // 다른 날 스냅샷이면 일단 스피너로 — 빈 로그인 폼은 보이지 않게 한다.
+    // 진짜 결과(휴강/오늘 첫 QR/세션외)는 checkin.js 가 결정해 갱신.
+    if (s.date !== TODAY) {
+      show('screen-resuming');
+      window.__optimisticState = { kind: 'resuming' };
+      return;
+    }
+
+    // 현재 세션 계산 — checkin.js 의 getCurrentSession 과 동일 규칙
+    function currentSession(config) {
+      if (!config) return null;
+      if (config.dailySessions === 1) return 'single';
+      var parts = (config.afternoonStart || '13:00').split(':');
+      var afMin = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+      var now = new Date();
+      var curMin = now.getHours() * 60 + now.getMinutes();
+      return curMin < afMin ? 'morning' : 'afternoon';
+    }
+    var session = currentSession(s.config);
+    var nowMs = Date.now();
+
+    // 케이스 A: 이미 오늘 이 세션 출석 완료
+    if (s.lastAttended && session && s.lastAttended.session === session) {
+      show('screen-already');
+      var titleEl = document.querySelector('#screen-already .status-title');
+      if (titleEl) titleEl.textContent = s.name + '님, 이미 출석 처리되었습니다';
+      var descEl = document.getElementById('already-desc');
+      if (descEl) {
+        var sLabel = ({ single: '출석', morning: '오전 출석', afternoon: '오후 출석' })[session] || '출석';
+        var t = s.lastAttended.checkedAtMs ? new Date(s.lastAttended.checkedAtMs) : null;
+        var timeStr = t
+          ? (String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0'))
+          : '';
+        descEl.textContent = sLabel + ' 출석이 이미 처리되었습니다.' + (timeStr ? ' (' + timeStr + ')' : '');
+      }
+      window.__optimisticState = { kind: 'already', session: session };
+      return;
+    }
+
+    // 케이스 B: 현재 세션용 유효 QR 캐시 존재 → 즉시 QR 화면
+    if (session && s.lastQr && s.lastQr.session === session && s.lastQr.expiresAtMs > nowMs && s.empNo) {
+      show('screen-qr');
+
+      var nameEl = document.getElementById('qr-student-name');
+      if (nameEl) nameEl.textContent = s.name + ' 님';
+
+      var badge = document.getElementById('qr-session-badge');
+      if (badge) {
+        var info = ({
+          single: ['단일 출석', 'badge-single'],
+          morning: ['오전 출석', 'badge-morning'],
+          afternoon: ['오후 출석', 'badge-afternoon']
+        })[session] || ['출석', 'badge-single'];
+        badge.textContent = info[0];
+        badge.className = 'qr-session-badge ' + info[1];
+      }
+
+      // QR 그리기 (qrious 는 이 스크립트 직전 동기 로드)
+      if (typeof QRious !== 'undefined') {
+        var canvas = document.getElementById('qr-canvas');
+        if (canvas) {
+          var payload = JSON.stringify({ t: s.lastQr.tokenId, e: s.empNo, s: session, d: TODAY });
+          new QRious({
+            element: canvas, value: payload,
+            size: 280, foreground: '#0a0a0a', background: '#ffffff', level: 'M'
+          });
+        }
+      }
+
+      // 카운트다운 시작 — checkin.js 가 showQrScreen 호출 시 인계받음
+      var expiresAt = s.lastQr.expiresAtMs;
+      var cdEl = document.getElementById('countdown');
+      function tick() {
+        var left = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
+        var m = Math.floor(left / 60), sec = left % 60;
+        if (cdEl) {
+          cdEl.textContent = m + ':' + String(sec).padStart(2, '0');
+          cdEl.classList.toggle('urgent', left <= 60);
+        }
+        if (left <= 0) {
+          clearInterval(window.__optTimer);
+          window.__optTimer = null;
+          var ov = document.getElementById('expired-overlay');
+          if (ov) ov.style.display = 'flex';
+        }
+      }
+      tick();
+      window.__optTimer = setInterval(tick, 1000);
+
+      window.__optimisticState = {
+        kind: 'qr', session: session,
+        tokenId: s.lastQr.tokenId, expiresAtMs: s.lastQr.expiresAtMs
+      };
+      return;
+    }
+
+    // 케이스 C: 그 외 (세션 외 시간 / QR 만료 / 첫 QR 필요) → 스피너
+    show('screen-resuming');
+    window.__optimisticState = { kind: 'resuming' };
+  } catch (e) {
+    // 스냅샷 손상 — 기존 로그인 폼 그대로
+    try { console.warn('[optimistic] fallback to login form', e); } catch (_) {}
+  }
+})();
+</script>
+
 <script type="module" src="checkin.js"></script>
 </body>
 </html>

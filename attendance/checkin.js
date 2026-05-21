@@ -41,6 +41,9 @@ document.getElementById('today-date').textContent = formatDisplayDate(today);
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
+  // 옵티미스틱 인라인 렌더에서 띄운 카운트다운/상태 정리 (있다면 인계)
+  if (window.__optTimer) { clearInterval(window.__optTimer); window.__optTimer = null; }
+  window.__optimisticState = null;
   // 로그인 화면 외에선 로그아웃 버튼 표시
   const logoutBtn = document.getElementById('logout-btn');
   if (logoutBtn) {
@@ -53,6 +56,7 @@ function showScreen(id) {
 window.doLogout = async function() {
   if (!confirm('로그아웃 하시겠습니까?')) return;
   clearSessionCache();
+  clearSnapshot();
   try { await signOut(auth); } catch(_) {}
   ['input-name', 'input-email', 'input-name-empno', 'input-empno'].forEach(id => {
     const el = document.getElementById(id);
@@ -80,6 +84,45 @@ function showEmpNoError(msg) {
 const SESSION_NAME_KEY = 'att_login_name';
 const SESSION_CANDS_KEY = 'att_login_candidates';
 const SESSION_TS_KEY = 'att_login_ts';
+
+// ── 옵티미스틱 즉시 렌더용 스냅샷 ──
+// checkin.html 의 인라인 스크립트가 이 키를 읽어 첫 페인트에 QR/이미출석 화면을 그린다.
+// 이 모듈은 화면 전환마다 최신 상태를 여기에 기록한다.
+const SNAPSHOT_KEY = 'att_last_state_v1';
+
+function readSnapshot() {
+  try {
+    const raw = localStorage.getItem(SNAPSHOT_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw);
+    if (!s || s.v !== 1) return null;
+    return s;
+  } catch (_) { return null; }
+}
+
+function writeSnapshot(patch) {
+  try {
+    const base = readSnapshot() || {};
+    const next = Object.assign({}, base, patch, { v: 1 });
+    localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(next));
+  } catch (_) {}
+}
+
+function clearSnapshot() {
+  try { localStorage.removeItem(SNAPSHOT_KEY); } catch (_) {}
+}
+
+// 인라인 스크립트가 필요로 하는 최소 필드만 (스냅샷 크기 / 민감정보 최소화)
+function pickConfigForSnapshot(config) {
+  if (!config) return null;
+  return {
+    dailySessions: config.dailySessions,
+    morningStart: config.morningStart,
+    morningEnd: config.morningEnd,
+    afternoonStart: config.afternoonStart,
+    afternoonEnd: config.afternoonEnd,
+  };
+}
 
 function clearSessionCache() {
   localStorage.removeItem(SESSION_NAME_KEY);
@@ -194,24 +237,26 @@ window.doLoginEmpNo = async function() {
 
 // 후보 → 오늘 수업일 필터 → 단일/다수 화면 분기
 async function proceedWithCandidates(name, rawCandidates) {
-  const candidates = [];
-  for (const c of rawCandidates) {
-    const configRef = doc(db, 'courses', c.courseId, 'attendanceConfig', 'config');
-    const configSnap = await getDoc(configRef);
-    if (!configSnap.exists()) continue;
-
+  // 후보별로 attendanceConfig + course 문서를 병렬 조회.
+  // 모바일 환경에서 round-trip 누적이 자동 로그인 체감 지연의 주범이라
+  // 후보 수와 무관하게 한 번의 latency 안에 끝나도록 묶는다.
+  const settled = await Promise.all(rawCandidates.map(async (c) => {
+    const [configSnap, courseSnap] = await Promise.all([
+      getDoc(doc(db, 'courses', c.courseId, 'attendanceConfig', 'config')),
+      getDoc(doc(db, 'courses', c.courseId)),
+    ]);
+    if (!configSnap.exists()) return null;
     const config = configSnap.data();
-    if (!(config.scheduleDates || []).includes(today)) continue;
-
-    const courseDocSnap = await getDoc(doc(db, 'courses', c.courseId));
-    candidates.push({
+    if (!(config.scheduleDates || []).includes(today)) return null;
+    return {
       courseId: c.courseId,
-      courseName: courseDocSnap.data()?.name || c.courseId,
+      courseName: courseSnap.data()?.name || c.courseId,
       config,
       studentDocId: c.studentDocId,
       empNo: c.empNo,
-    });
-  }
+    };
+  }));
+  const candidates = settled.filter(Boolean);
 
   if (!candidates.length) {
     showScreen('screen-no-class');
@@ -338,6 +383,14 @@ async function proceedWithCourse(name, candidate) {
     document.querySelector('#screen-already .status-title').textContent = `${name}님, 이미 출석 처리되었습니다`;
     document.getElementById('already-desc').textContent =
       `${sessionLabel} 출석이 이미 처리되었습니다.${checkedTime ? ` (${checkedTime})` : ''}`;
+
+    // 다음 진입 시 옵티미스틱 첫 페인트에 '이미 출석' 화면을 바로 그리기 위한 스냅샷
+    const checkedAtMs = rec.checkedAt?.toMillis ? rec.checkedAt.toMillis() : Date.now();
+    writeSnapshot({
+      name, empNo, courseId, courseName, date: today,
+      config: pickConfigForSnapshot(config),
+      lastAttended: { session, checkedAtMs },
+    });
     return;
   }
 
@@ -356,6 +409,12 @@ async function proceedWithCourse(name, candidate) {
       if (!token.used && expiresAt > now) {
         // 기존 QR 재표시
         showQrScreen(name, empNo, session, cachedTokenId, expiresAt);
+        // 옵티미스틱 즉시 렌더용 스냅샷 갱신 (다음 진입 시 첫 페인트에 같은 QR)
+        writeSnapshot({
+          name, empNo, courseId, courseName, date: today,
+          config: pickConfigForSnapshot(config),
+          lastQr: { session, tokenId: cachedTokenId, expiresAtMs: expiresAt },
+        });
         return;
       }
     }
@@ -419,12 +478,32 @@ async function issueNewQr(name, empNo, courseId, courseName, session, cacheKey, 
   // 기기 잠금 저장 (과정+날짜 기준, 다른 교육생 로그인 방지)
   localStorage.setItem(`device_locked_${courseId}_${today}`, JSON.stringify({ empNo, name }));
 
+  // 옵티미스틱 즉시 렌더용 스냅샷 — 다음 진입 시 첫 페인트에 이 QR 이 바로 그려진다
+  writeSnapshot({
+    name, empNo, courseId, courseName, date: today,
+    config: pickConfigForSnapshot(config),
+    lastQr: { session, tokenId, expiresAtMs: expiresAt.getTime() },
+  });
+
   showQrScreen(name, empNo, session, tokenId, expiresAt.getTime());
 }
 
 window.reissueQr = async function() {
-  if (!currentUser) return;
-  const { name, empNo, courseId, courseName, config } = currentUser;
+  // 옵티미스틱 QR 이 5분 만료 후 백그라운드 검증이 끝나기 전에 버튼이 눌리는 드문 케이스를 위한 fallback.
+  // 정상 흐름에서는 proceedWithCourse 가 이미 currentUser 를 채운 상태.
+  let cu = currentUser;
+  if (!cu) {
+    const snap = readSnapshot();
+    if (snap?.name && snap.empNo && snap.courseId && snap.config) {
+      cu = {
+        name: snap.name, empNo: snap.empNo,
+        courseId: snap.courseId, courseName: snap.courseName,
+        config: snap.config,
+      };
+    }
+  }
+  if (!cu) return;
+  const { name, empNo, courseId, courseName, config } = cu;
   const session = getCurrentSession(config);
   const cacheKey = `qr_token_${empNo}_${today}_${session}`;
   localStorage.removeItem(cacheKey);
