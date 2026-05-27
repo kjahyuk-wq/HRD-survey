@@ -3,11 +3,11 @@ import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.10.0/f
 
 import { checkLogin, logout } from './admin-auth.js';
 import { loadCourseList, addCourse, toggleCourseActive, deleteCourse, togglePanel, toggleClosedCourses, saveEditCourse, cancelEditCourse, addInstructor, deleteInstructor, handleInstExcelUpload, uploadExcelInstructors, toggleInstSelectAll, updateInstBulkDeleteBtn, deleteSelectedInstructors, moveInstructor, startEditInstructor, saveEditInstructor, cancelEditInstructor } from './admin-courses.js';
-import { loadStudents, addStudent, deleteStudent, toggleSelectAll, updateBulkDeleteBtn, deleteSelectedStudents, handleExcelUpload, uploadExcelStudents, startEditStudent, saveEditStudent, cancelEditStudent } from './admin-students.js';
+import { loadStudents, addStudent, deleteStudent, toggleSelectAll, updateBulkDeleteBtn, deleteSelectedStudents, handleExcelUpload, uploadExcelStudents, startEditStudent, saveEditStudent, cancelEditStudent, resetStudentElectives } from './admin-students.js';
 import { populateStatsSelect, loadStats } from './admin-stats.js';
 import { exportStatsExcel, exportResultsExcel } from './admin-excel.js';
 import { populatePreviewSelect, loadPreviewInstructors } from './admin-preview.js';
-import { addRound, startEditRound, saveEditRound, cancelEditRound, toggleRoundActive, deleteRound, toggleRoundInstructors, addRoundInstructor, deleteRoundInstructor, moveRoundInstructor, startEditRoundInstructor, saveEditRoundInstructor, cancelEditRoundInstructor, handleRoundInstExcelUpload, uploadRoundExcelInstructors, toggleRoundInstSelectAll, updateRoundInstBulkDeleteBtn, deleteSelectedRoundInstructors, addRoundGroup, renameRoundGroup, deleteRoundGroup } from './admin-rounds.js';
+import { addRound, startEditRound, saveEditRound, cancelEditRound, toggleRoundActive, deleteRound, toggleRoundInstructors, addRoundInstructor, deleteRoundInstructor, moveRoundInstructor, startEditRoundInstructor, saveEditRoundInstructor, cancelEditRoundInstructor, handleRoundInstExcelUpload, uploadRoundExcelInstructors, toggleRoundInstSelectAll, updateRoundInstBulkDeleteBtn, deleteSelectedRoundInstructors } from './admin-rounds.js';
 
 // ── 탭 전환 ──────────────────────────────
 function setActiveTab(tab) {
@@ -111,6 +111,7 @@ window.uploadExcelStudents = uploadExcelStudents;
 window.startEditStudent = startEditStudent;
 window.saveEditStudent = saveEditStudent;
 window.cancelEditStudent = cancelEditStudent;
+window.resetStudentElectives = resetStudentElectives;
 window.handleInstExcelUpload = handleInstExcelUpload;
 window.uploadExcelInstructors = uploadExcelInstructors;
 window.toggleInstSelectAll = toggleInstSelectAll;
@@ -142,6 +143,3 @@ window.uploadRoundExcelInstructors = uploadRoundExcelInstructors;
 window.toggleRoundInstSelectAll = toggleRoundInstSelectAll;
 window.updateRoundInstBulkDeleteBtn = updateRoundInstBulkDeleteBtn;
 window.deleteSelectedRoundInstructors = deleteSelectedRoundInstructors;
-window.addRoundGroup = addRoundGroup;
-window.renameRoundGroup = renameRoundGroup;
-window.deleteRoundGroup = deleteRoundGroup;

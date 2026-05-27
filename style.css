@@ -241,6 +241,60 @@ body {
   line-height: 1.6;
 }
 
+/* 선택활동 (electives) 화면 */
+.electives-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin: 0.6rem 0 0.4rem;
+  text-align: left;
+}
+.electives-cat {
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+}
+.electives-cat-title {
+  margin: 0 0 0.6rem;
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+.electives-cat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.elect-choice {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.7rem;
+  background: #fff;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.elect-choice:hover {
+  border-color: #0066cc;
+  background: #f0f7ff;
+}
+.elect-choice input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #0066cc;
+  flex-shrink: 0;
+}
+.elect-choice-label {
+  font-size: 0.92rem;
+  color: #1f2937;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  line-height: 1.4;
+}
+
 /* 설문 안내 */
 .sv-guide {
   font-size: 0.88rem;

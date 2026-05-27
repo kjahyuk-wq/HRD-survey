@@ -3,6 +3,7 @@ import { computeStats } from './admin-stats.js';
 
 // ── 라벨 헬퍼 ──────────────────────────────
 // state.lastRoundLabel/lastGroupLabel은 중견리더 과정에서만 채워짐. 단기는 빈 문자열.
+// lastGroupLabel 은 카테고리 필터 (예: '체련활동') — 미선택 시 빈 문자열.
 function getExportCourseLabel() {
   return state.lastCourseLabel || state.lastCourseName || '';
 }
@@ -27,13 +28,20 @@ export async function loadXLSX() {
   });
 }
 
+// 단기는 응답 있는 강사만(기존 동작 유지), 중견리더는 회차 강사 전체(0응답 포함) 고정 순서.
+// state.lastRoundLabel 이 비어있지 않으면 중견리더 모드 (loadStats 가 채움).
+function pickExportInstKeys(stats) {
+  const isLeadership = !!(state.lastRoundLabel);
+  return isLeadership ? stats.instKeysFullOrder : stats.instKeys;
+}
+
 // ── 엑셀 내보내기 (업로드용) ──────────────────────────────
 export async function exportStatsExcel() {
   if (!state.lastResponses.length) return;
   await loadXLSX();
 
   const stats = state.lastComputedStats || computeStats(state.lastResponses, state.lastOrderedInstructorKeys);
-  const { instKeys } = stats;
+  const instKeys = pickExportInstKeys(stats);
   const responses = state.lastResponses;
 
   const wb = XLSX.utils.book_new();
@@ -104,7 +112,8 @@ export async function exportResultsExcel() {
   const responses = state.lastResponses;
   const n = responses.length;
   const stats = state.lastComputedStats || computeStats(responses, state.lastOrderedInstructorKeys);
-  const { avgs, dists, hasData, instRaw, instKeys, demoRaw } = stats;
+  const { avgs, dists, hasData, instRaw, demoRaw } = stats;
+  const instKeys = pickExportInstKeys(stats);
   const wb = XLSX.utils.book_new();
 
   // ── 시트1: 만족도 통계 ──
@@ -123,11 +132,11 @@ export async function exportResultsExcel() {
 
   const courseLabelForCell = getExportCourseLabel();
   const roundLabelForCell  = state.lastRoundLabel || '';
-  const groupLabelForCell  = state.lastGroupLabel || '';
+  const categoryLabelForCell = state.lastGroupLabel || '';
   const statsData = [
     ['교육과정', courseLabelForCell, '', '', '', '', '', ''],
     ...(roundLabelForCell ? [['회차', roundLabelForCell, '', '', '', '', '', '']] : []),
-    ...(groupLabelForCell ? [['분반', groupLabelForCell, '', '', '', '', '', '']] : []),
+    ...(categoryLabelForCell ? [['카테고리', categoryLabelForCell, '', '', '', '', '', '']] : []),
     ['응답자 수', n + '명', '', '', '', '', '', ''],
     ['작성일', new Date().toLocaleDateString('ko-KR'), '', '', '', '', '', ''],
     ['전체 평균 (Q1~Q9 + 강사)', Number(overallAvg.toFixed(2)), '', '', '', '', '', ''],
@@ -149,16 +158,21 @@ export async function exportResultsExcel() {
     statsData.push(['── 강사별 만족도 ──', '', '', '', '', '', '', '']);
     const instTotalSum = instKeys.reduce((a, k) => a + instRaw[k].sum, 0);
     const instTotalCount = instKeys.reduce((a, k) => a + instRaw[k].count, 0);
-    const instTotalAvg = instTotalSum / instTotalCount;
+    const instTotalAvg = instTotalCount > 0 ? instTotalSum / instTotalCount : 0;
     const instTotalSatisfy = instKeys.reduce((a, k) => a + instRaw[k].dist[3] + instRaw[k].dist[4], 0);
     const instTotalSatisfyPct = instTotalCount > 0 ? instTotalSatisfy / instTotalCount * 100 : 0;
     statsData.push(['강사 전체 평균', Number(instTotalAvg.toFixed(2)), Number(instTotalSatisfyPct.toFixed(1)), '', '', '', '', '']);
+    // 0응답 강사는 응답자 수 0 으로 한 줄 유지 (인재개발원 서식 강사 열 고정 순서 보장)
     instKeys.forEach(key => {
       const { sum, count, dist } = instRaw[key];
-      const avg = sum / count;
-      const satisfyPct = count > 0 ? (dist[3] + dist[4]) / count * 100 : 0;
       const parts = key.split('__');
       const label = parts.length === 2 ? `[${parts[0]}] ${parts[1]} 강사` : `${key} 강사`;
+      if (count === 0) {
+        statsData.push([label, '', '', '', '', '', '', '']);
+        return;
+      }
+      const avg = sum / count;
+      const satisfyPct = (dist[3] + dist[4]) / count * 100;
       statsData.push([label, Number(avg.toFixed(2)), Number(satisfyPct.toFixed(1)), dist[0], dist[1], dist[2], dist[3], dist[4]]);
     });
   }
@@ -171,7 +185,7 @@ export async function exportResultsExcel() {
   const demoData = [
     ['교육과정', courseLabelForCell],
     ...(roundLabelForCell ? [['회차', roundLabelForCell]] : []),
-    ...(groupLabelForCell ? [['분반', groupLabelForCell]] : []),
+    ...(categoryLabelForCell ? [['카테고리', categoryLabelForCell]] : []),
     ['응답자 수', n + '명'],
     []
   ];
@@ -194,7 +208,7 @@ export async function exportResultsExcel() {
   const commentData = [
     ['교육과정', courseLabelForCell],
     ...(roundLabelForCell ? [['회차', roundLabelForCell]] : []),
-    ...(groupLabelForCell ? [['분반', groupLabelForCell]] : []),
+    ...(categoryLabelForCell ? [['카테고리', categoryLabelForCell]] : []),
     ['응답자 수', n + '명'],
     [],
     ['순번', 'Q10. 기타 편의시설 건의사항', '소감 및 건의사항', '만족도 평가 개선 필요 부분', '전반적인 과목 및 강사 건의'],

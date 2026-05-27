@@ -96,6 +96,19 @@
         </div>
       </div>
 
+      <!-- 선택활동 선택 (중견리더 양성과정, electives 최초 1회만) -->
+      <div id="screen-electives" style="display:none;">
+        <div class="confirm-card">
+          <div class="icon">✅</div>
+          <div class="greet" id="electives-greeting"></div>
+          <div class="clabel">수강 중인 선택활동을 모두 골라 주세요</div>
+          <p class="cnote" style="margin:.6rem 0 1rem;">선택한 항목의 강사만 만족도 평가에 표시됩니다.<br>이번 한 번만 골라 두면 다음 회차부터 자동 적용됩니다.</p>
+          <div id="electives-sections" class="electives-sections"></div>
+          <div id="electives-error" class="sv-error" style="display:none; margin-top:1rem;"></div>
+          <button id="electives-next-btn" onclick="confirmElectives()">다음 →</button>
+        </div>
+      </div>
+
       <!-- 과정 확인 -->
       <div id="screen-confirm" style="display:none;">
         <div class="confirm-card">

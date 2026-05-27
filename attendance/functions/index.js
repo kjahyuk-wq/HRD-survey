@@ -319,6 +319,9 @@ exports.submitSurveyResponse = onCall(
     const courseId = String(data.courseId || '').trim();
     const roundId = data.roundId ? String(data.roundId).trim() : '';
     const response = data.response;
+    // electives: 중견리더 모드에서 학생이 처음 선택활동을 고른 경우에만 본문에 포함됨.
+    // 트랜잭션 안에서 학생 doc 의 electives 가 비어있을 때만 set 한다 (기존 값 덮어쓰기 금지).
+    const electivesInput = data.electives;
 
     if (!name || name.length > 50) {
       throw new HttpsError('invalid-argument', '이름이 올바르지 않습니다.');
@@ -371,6 +374,29 @@ exports.submitSurveyResponse = onCall(
     checkLen('comment1', 2000);
     checkLen('comment2', 2000);
     checkLen('comment3', 2000);
+
+    // electives 검증 (옵셔널) — 배열, 최대 50개, 각 문자열 100자 이하
+    let validatedElectives = null;
+    if (electivesInput !== undefined && electivesInput !== null) {
+      if (!Array.isArray(electivesInput)) {
+        throw new HttpsError('invalid-argument', 'electives는 배열이어야 합니다.');
+      }
+      if (electivesInput.length > 50) {
+        throw new HttpsError('invalid-argument', 'electives 개수가 너무 많습니다.');
+      }
+      validatedElectives = [];
+      const seen = new Set();
+      for (const v of electivesInput) {
+        if (typeof v !== 'string') {
+          throw new HttpsError('invalid-argument', 'electives 항목은 문자열이어야 합니다.');
+        }
+        const s = v.trim();
+        if (!s || s.length > 100) continue;
+        if (seen.has(s)) continue;
+        seen.add(s);
+        validatedElectives.push(s);
+      }
+    }
 
     // 과정 검증
     const courseRef = db.collection('courses').doc(courseId);
@@ -439,10 +465,6 @@ exports.submitSurveyResponse = onCall(
     if (isLeadership) {
       respBase.roundNumber = roundData.number;
       respBase.roundName = roundData.name || '';
-      if (typeof response.groupName === 'string' && response.groupName.length > 0
-          && response.groupName.length <= 50) {
-        respBase.groupName = response.groupName;
-      }
     }
 
     // 트랜잭션: 학생 doc 최신 상태 확인 후 응답 생성 + 완료 마킹
@@ -465,10 +487,16 @@ exports.submitSurveyResponse = onCall(
           throw new HttpsError('already-exists', '이미 응답하신 회차입니다.');
         }
         tx.set(newResponseRef, respBase);
-        tx.update(studentRef, {
+        const updatePayload = {
           completedRounds: FieldValue.arrayUnion(roundId),
           completedAt: FieldValue.serverTimestamp(),
-        });
+        };
+        // 학생 electives 영속화: 기존 값 있으면 보존, 없을 때만 client 가 보낸 값으로 set.
+        // (재선택은 관리자 [선택 초기화] 후 학생이 다시 고르는 경로로만 가능)
+        if (validatedElectives !== null && !Array.isArray(freshData.electives)) {
+          updatePayload.electives = validatedElectives;
+        }
+        tx.update(studentRef, updatePayload);
       } else {
         if (freshData.completed === true) {
           throw new HttpsError('already-exists', '이미 응답하셨습니다.');

@@ -4,6 +4,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { state, escapeHtml, escapeAttr } from './admin-utils.js';
 import { lsRead, lsWrite } from './admin-courses.js';
+import { getInstructorCategory, COMMON_CATEGORY } from './admin-rounds.js';
 
 // 강사 정렬 — admin 측이 박은 order 필드 우선, 없으면 createdAt fallback.
 // (학생 설문 main.js 의 sortInstructors 와 동일 정책)
@@ -75,9 +76,7 @@ export async function populatePreviewSelect() {
 }
 
 // 미리보기용 회차 셀렉트 — stats 모듈과 동일 패턴 (캐시 키로 같은 과정 재선택 시 재요청 회피)
-// 회차 데이터(특히 groups)도 캐시해 분반 셀렉트 갱신 시 추가 fetch 없이 처리.
 let lastPopulatedPreviewRoundCourseId = null;
-const previewRoundsByCourse = {};
 
 async function populatePreviewRoundSelect(courseId) {
   const sel = document.getElementById('preview-round-select');
@@ -87,7 +86,6 @@ async function populatePreviewRoundSelect(courseId) {
     const snap = await getDocs(collection(db, 'courses', courseId, 'rounds'));
     const rounds = snap.docs.map(d => ({ ...d.data(), _id: d.id }));
     rounds.sort((a, b) => (a.number ?? 0) - (b.number ?? 0));
-    previewRoundsByCourse[courseId] = rounds;
     if (rounds.length === 0) {
       sel.innerHTML = '<option value="">등록된 회차 없음</option>';
       sel.disabled = true;
@@ -104,12 +102,20 @@ async function populatePreviewRoundSelect(courseId) {
   }
 }
 
-function populatePreviewGroupSelect(courseId, roundId) {
+// 카테고리 셀렉트 — 회차 강사 union 에서 추출 ('공통' 외). 없으면 숨김.
+function populatePreviewCategorySelect(instructors) {
   const sel = document.getElementById('preview-group-select');
   if (!sel) return;
-  const round = (previewRoundsByCourse[courseId] || []).find(r => r._id === roundId);
-  const groups = Array.isArray(round?.groups) ? round.groups : [];
-  if (groups.length === 0) {
+  const seen = new Set();
+  const cats = [];
+  instructors.forEach(inst => {
+    const c = getInstructorCategory(inst);
+    if (c !== COMMON_CATEGORY && !seen.has(c)) {
+      seen.add(c);
+      cats.push(c);
+    }
+  });
+  if (cats.length === 0) {
     sel.style.display = 'none';
     sel.value = '';
     sel.innerHTML = '<option value="">(전체)</option>';
@@ -118,8 +124,9 @@ function populatePreviewGroupSelect(courseId, roundId) {
   const prev = sel.value;
   sel.style.display = 'inline-block';
   sel.innerHTML = '<option value="">(전체)</option>' +
-    groups.map(g => `<option value="${escapeAttr(g)}">${escapeHtml(g)}</option>`).join('');
-  if (prev && groups.includes(prev)) sel.value = prev;
+    `<option value="${COMMON_CATEGORY}">${escapeHtml(COMMON_CATEGORY)}</option>` +
+    cats.map(c => `<option value="${escapeAttr(c)}">${escapeHtml(c)}</option>`).join('');
+  if (prev && (prev === COMMON_CATEGORY || cats.includes(prev))) sel.value = prev;
 }
 
 export async function loadPreviewInstructors() {
@@ -163,37 +170,35 @@ export async function loadPreviewInstructors() {
     return;
   }
 
-  // 회차 선택됐으면 분반 셀렉트 갱신
-  if (courseType === 'leadership') {
-    populatePreviewGroupSelect(courseId, roundId);
-  }
-  const groupName = (courseType === 'leadership' && groupSel?.style.display !== 'none') ? (groupSel?.value || '') : '';
-
-  // 라벨 갱신 (중견리더는 회차 + 분반)
-  let displayLabel = courseLabel;
-  if (courseType === 'leadership') {
-    const rOpt = roundSel.options[roundSel.selectedIndex];
-    displayLabel = `${courseLabel} · ${rOpt?.textContent || ''}`;
-    if (groupName) displayLabel += ` · ${groupName}`;
-  }
-  badge.textContent = displayLabel;
-
   container.innerHTML = '<div class="loading" style="text-align:center;padding:1rem;">강사 정보 불러오는 중...</div>';
   try {
     const instructorsRef = courseType === 'leadership'
       ? collection(db, 'courses', courseId, 'rounds', roundId, 'instructors')
       : collection(db, 'courses', courseId, 'instructors');
     const instSnap = await getDocs(instructorsRef);
-    let instructors = sortInstructors(instSnap.docs.map(d => d.data()));
+    const allInstructors = sortInstructors(instSnap.docs.map(d => d.data()));
 
-    // 분반 선택 시 강사 필터 (학생 흐름 selectRound와 동일 로직)
-    if (groupName) {
-      instructors = instructors.filter(inst => {
-        const igs = Array.isArray(inst.groups) ? inst.groups : [];
-        if (igs.length === 0) return true;  // 구 데이터 호환
-        return igs.includes(groupName) || igs.includes('common');
-      });
+    // 카테고리 셀렉트는 회차 강사 fetch 후에 갱신 (중견리더만)
+    if (courseType === 'leadership') {
+      populatePreviewCategorySelect(allInstructors);
     }
+    const categoryFilter = (courseType === 'leadership' && groupSel?.style.display !== 'none')
+      ? (groupSel?.value || '')
+      : '';
+
+    // 라벨 갱신 (중견리더는 회차 + 카테고리)
+    let displayLabel = courseLabel;
+    if (courseType === 'leadership') {
+      const rOpt = roundSel.options[roundSel.selectedIndex];
+      displayLabel = `${courseLabel} · ${rOpt?.textContent || ''}`;
+      if (categoryFilter) displayLabel += ` · ${categoryFilter}`;
+    }
+    badge.textContent = displayLabel;
+
+    // 카테고리 필터 적용 (학생 흐름과 다름 — 미리보기는 한 카테고리만 골라 보는 용도)
+    const instructors = categoryFilter
+      ? allInstructors.filter(inst => getInstructorCategory(inst) === categoryFilter)
+      : allInstructors;
 
     if (instructors.length === 0) {
       container.innerHTML = '<div class="no-data" style="margin:0.5rem 0;">등록된 강사가 없습니다.</div>';
@@ -202,6 +207,14 @@ export async function loadPreviewInstructors() {
 
     container.innerHTML = instructors.map((inst, i) => {
       const qNum = 17 + i;
+      // 카테고리 칩은 중견리더에서만 노출 — 단기는 기존 그대로 강사명만.
+      let catTag = '';
+      if (courseType === 'leadership') {
+        const cat = getInstructorCategory(inst);
+        catTag = cat === COMMON_CATEGORY
+          ? '<span class="rg-tag common" style="margin-right:.4rem;">공통</span>'
+          : `<span class="rg-tag" style="margin-right:.4rem;">${escapeHtml(cat)}</span>`;
+      }
       const nameLabel = inst.education ? `${escapeHtml(inst.education)} · ${escapeHtml(inst.name)}` : escapeHtml(inst.name);
       const ratingHtml = [1,2,3,4,5].map((v, vi) => {
         const labels = ['매우 불만족','불만족','보통','만족','매우 만족'];
@@ -210,7 +223,7 @@ export async function loadPreviewInstructors() {
       return `<div class="q-card">
         <div class="q-num">Q${qNum}</div>
         <div class="q-txt">
-          <div style="font-size:.8rem;color:#888;margin-bottom:.3rem;">강사 만족도 · ${nameLabel}</div>
+          <div style="font-size:.8rem;color:#888;margin-bottom:.3rem;">${catTag}강사 만족도 · ${nameLabel}</div>
           강사의 전반적인 강의 만족도는?
         </div>
         <div class="rating-group">${ratingHtml}</div>

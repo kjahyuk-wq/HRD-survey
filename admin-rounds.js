@@ -9,6 +9,22 @@ import { loadXLSX } from './admin-excel.js';
 // 패널별 회차 캐시 — 편집 시 원본 복원·중복 번호 검증·삭제 라벨 표시에 활용
 const panelRounds = {};
 
+// 카테고리 모델 호환: 강사 doc 의 category 우선, 없으면 legacy groups 에서 추론.
+// groups 가 비었거나 ['common'] 이면 '공통', 그 외는 첫 값(또는 join)을 카테고리로 본다.
+// (legacy 데이터를 화면에 표시할 때만 사용. 저장 시점엔 category 만 기록.)
+export const COMMON_CATEGORY = '공통';
+export function getInstructorCategory(inst) {
+  if (inst && typeof inst.category === 'string') {
+    const c = inst.category.trim();
+    return c || COMMON_CATEGORY;
+  }
+  const igs = Array.isArray(inst?.groups) ? inst.groups : null;
+  if (!igs || igs.length === 0) return COMMON_CATEGORY;
+  if (igs.length === 1 && (igs[0] === 'common' || igs[0] === COMMON_CATEGORY)) return COMMON_CATEGORY;
+  // 다중 분반 강사였던 legacy 는 '공통' 으로 흡수 (회차 분반 모델 폐기)
+  return COMMON_CATEGORY;
+}
+
 export async function loadRounds(courseId, panelIdx) {
   const panel = document.getElementById(`round-panel-${panelIdx}`);
   if (!panel) return;
@@ -259,8 +275,9 @@ export async function deleteRound(courseId, panelIdx, idx) {
   }
 }
 
-// ── 회차별 강사 관리 (Phase 3) ──────────────────────────────
+// ── 회차별 강사 관리 (공통/선택 카테고리 모델) ─────────────
 // 데이터 경로: courses/{cid}/rounds/{rid}/instructors/{iid}
+// 강사 doc 의 category 필드 — '공통' 또는 선택 카테고리명. 빈/누락은 '공통' 으로 처리.
 // 캐시 키: `${panelIdx}-${roundIdx}` — 한 과정 카드 안에서도 회차별로 분리
 
 const roundInstructorsCache = {};
@@ -332,58 +349,32 @@ async function loadRoundInstructors(courseId, roundId, panelIdx, roundIdx) {
   }
 }
 
+// 강사 union 에서 추출한 현재 회차 카테고리 목록 (공통 제외)
+function collectCategories(instructors) {
+  const set = new Set();
+  instructors.forEach(inst => {
+    const c = getInstructorCategory(inst);
+    if (c && c !== COMMON_CATEGORY) set.add(c);
+  });
+  return Array.from(set).sort();
+}
+
 function renderRoundInstructorsPanel(courseId, roundId, panelIdx, roundIdx, instructors) {
   const panel = document.getElementById(`round-inst-panel-${panelIdx}-${roundIdx}`);
   const cid = escapeAttr(courseId);
   const rid = escapeAttr(roundId);
   const total = instructors.length;
   const k = `${panelIdx}-${roundIdx}`;
-  const round = panelRounds[panelIdx]?.[roundIdx];
-  const definedGroups = (round && Array.isArray(round.groups)) ? round.groups : [];
-  const hasGroups = definedGroups.length > 0;
 
-  // 분반 정의 영역 (분반 0개여도 추가 입력은 항상 노출)
-  const groupChipsHtml = hasGroups
-    ? definedGroups.map(g => `
-        <span class="round-group-chip">
-          <span class="rg-name">${escapeHtml(g)}</span>
-          <button class="rg-rename" onclick="renameRoundGroup('${cid}', ${panelIdx}, ${roundIdx}, '${escapeAttr(g)}')" title="이름 변경">✏️</button>
-          <button class="rg-delete" onclick="deleteRoundGroup('${cid}', ${panelIdx}, ${roundIdx}, '${escapeAttr(g)}')" title="삭제">✕</button>
-        </span>`).join('')
-    : '<span class="round-groups-empty">아직 분반이 정의되지 않았습니다. 분반 없이 운영하면 모든 강사가 모든 학생에게 노출됩니다.</span>';
+  const cats = collectCategories(instructors);
+  const datalistHtml = `<datalist id="round-cat-list-${k}">${cats.map(c => `<option value="${escapeAttr(c)}"></option>`).join('')}</datalist>`;
 
-  const groupsSectionHtml = `
-    <div class="round-groups-section">
-      <div class="round-groups-header">분반 정의 <span class="rg-count">${definedGroups.length}개</span></div>
-      <div class="round-groups-add-row">
-        <input type="text" id="round-group-name-${k}" placeholder="예: 1조" maxlength="20"
-          onkeydown="if(event.key==='Enter')addRoundGroup('${cid}', ${panelIdx}, ${roundIdx})">
-        <button class="add-btn" onclick="addRoundGroup('${cid}', ${panelIdx}, ${roundIdx})">+ 분반 추가</button>
-      </div>
-      <div class="round-groups-list">${groupChipsHtml}</div>
-    </div>`;
-
-  // 강사 추가 폼 위 분반 멀티 체크박스 — 단일 추가/엑셀 일괄등록 모두 이 상태 사용.
-  // 기본값은 모든 분반 체크 (대부분 공통 강사). 특정 조 전용이면 다른 분반 체크 해제.
-  const addGroupsCheckHtml = hasGroups
-    ? `<div class="round-inst-add-groups" id="round-inst-add-groups-${k}">
-         <span class="rg-pick-label">분반:</span>
-         ${definedGroups.map(g =>
-           `<label class="round-inst-group-chk"><input type="checkbox" data-group="${escapeAttr(g)}" checked><span>${escapeHtml(g)}</span></label>`
-         ).join('')}
-       </div>`
-    : '';
-
-  // 강사 테이블 분반 컬럼 (분반 정의된 경우만)
-  const groupsCol = hasGroups ? '<th>분반</th>' : '';
-  const groupsCellFn = inst => {
-    if (!hasGroups) return '';
-    const igs = Array.isArray(inst.groups) ? inst.groups : [];
-    if (igs.length === 0) return '<td><span class="rg-empty">미지정</span></td>';
-    const chips = igs.map(g => g === 'common'
-      ? '<span class="rg-tag common">공통</span>'
-      : `<span class="rg-tag">${escapeHtml(g)}</span>`).join(' ');
-    return `<td>${chips}</td>`;
+  const categoryCellFn = inst => {
+    const c = getInstructorCategory(inst);
+    if (c === COMMON_CATEGORY) {
+      return `<td><span class="rg-tag common">공통</span></td>`;
+    }
+    return `<td><span class="rg-tag">${escapeHtml(c)}</span></td>`;
   };
 
   const listHtml = total === 0
@@ -394,7 +385,7 @@ function renderRoundInstructorsPanel(courseId, roundId, panelIdx, roundIdx, inst
        <table class="student-table">
         <thead><tr>
           <th style="width:36px"><input type="checkbox" id="round-inst-select-all-${k}" onclick="toggleRoundInstSelectAll(${panelIdx}, ${roundIdx}, this)"></th>
-          <th>강의명</th><th>강사명</th>${groupsCol}<th style="width:160px">순서 / 관리</th>
+          <th>강의명</th><th>강사명</th><th>구분</th><th style="width:160px">순서 / 관리</th>
         </tr></thead>
         <tbody>
           ${instructors.map((inst, i) => {
@@ -404,7 +395,7 @@ function renderRoundInstructorsPanel(courseId, roundId, panelIdx, roundIdx, inst
               <td><input type="checkbox" class="round-inst-checkbox-${k}" data-id="${eid}" data-name="${en}" onchange="updateRoundInstBulkDeleteBtn(${panelIdx}, ${roundIdx})"></td>
               <td style="text-align:left">${escapeHtml(inst.education || '')}</td>
               <td style="text-align:left">${escapeHtml(inst.name || '')}</td>
-              ${groupsCellFn(inst)}
+              ${categoryCellFn(inst)}
               <td>
                 <div class="inst-action-btns">
                   <button class="inst-move-btn" onclick="moveRoundInstructor('${cid}', '${rid}', ${panelIdx}, ${roundIdx}, ${i}, 'up')" ${i === 0 ? 'disabled' : ''} title="위로">▲</button>
@@ -419,15 +410,16 @@ function renderRoundInstructorsPanel(courseId, roundId, panelIdx, roundIdx, inst
       </table>`;
 
   panel.innerHTML = `
-    ${groupsSectionHtml}
+    ${datalistHtml}
     <div class="inst-add-row">
       <input type="text" id="round-inst-edu-${k}" placeholder="강의명 (예: 리더십 1교시)" maxlength="50">
       <input type="text" id="round-inst-name-${k}" placeholder="강사명 (예: 홍길동)" maxlength="20">
+      <input type="text" id="round-inst-cat-${k}" placeholder="구분 (비우면 공통)" maxlength="30"
+        list="round-cat-list-${k}" class="round-inst-cat-input">
       <button class="add-btn round-inst-add-btn" onclick="addRoundInstructor('${cid}', '${rid}', ${panelIdx}, ${roundIdx})">+ 추가</button>
     </div>
-    ${addGroupsCheckHtml}
     <div class="excel-upload-area" style="margin-top:.5rem;">
-      <div class="excel-upload-label">엑셀 일괄 등록 <span class="excel-tip">A열: 강의명 / B열: 강사명 / 2행부터 데이터${hasGroups ? ' · 분반은 위 체크박스 상태가 일괄 적용됨' : ''}</span></div>
+      <div class="excel-upload-label">엑셀 일괄 등록 <span class="excel-tip">A열: 강의명 / B열: 강사명 / C열: 구분 (비우면 공통, 예: 체련활동 · 외국어) / 2행부터 데이터</span></div>
       <div class="excel-upload-row">
         <label class="excel-file-btn" for="round-inst-excel-input-${k}">파일 선택</label>
         <input type="file" id="round-inst-excel-input-${k}" accept=".xlsx,.xls" style="display:none" onchange="handleRoundInstExcelUpload(${panelIdx}, ${roundIdx}, this)">
@@ -441,32 +433,24 @@ function renderRoundInstructorsPanel(courseId, roundId, panelIdx, roundIdx, inst
   `;
 }
 
-// 분반 멀티 체크박스에서 선택된 그룹 배열 추출 (강사 추가 폼 / 편집 행 모두 사용)
-function readGroupsFromCheckboxes(containerEl) {
-  if (!containerEl) return [];
-  return Array.from(containerEl.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.dataset.group);
+// 입력 카테고리를 표준화: 공백 트림 / 빈값·'공통'·'common' → '공통' (canonical)
+function normalizeCategory(raw) {
+  const c = String(raw || '').trim();
+  if (!c) return COMMON_CATEGORY;
+  if (c === 'common' || c.toLowerCase() === 'common' || c === COMMON_CATEGORY) return COMMON_CATEGORY;
+  return c;
 }
 
 export async function addRoundInstructor(courseId, roundId, panelIdx, roundIdx) {
   const k = `${panelIdx}-${roundIdx}`;
   const eduEl  = document.getElementById(`round-inst-edu-${k}`);
   const nameEl = document.getElementById(`round-inst-name-${k}`);
+  const catEl  = document.getElementById(`round-inst-cat-${k}`);
   const edu  = eduEl?.value.trim();
   const name = nameEl?.value.trim();
+  const category = normalizeCategory(catEl?.value);
   if (!edu)  { eduEl?.focus(); return; }
   if (!name) { nameEl?.focus(); return; }
-
-  // 분반 정의된 회차에서는 groups 배열이 비면 차단
-  const round = panelRounds[panelIdx]?.[roundIdx];
-  const definedGroups = (round && Array.isArray(round.groups)) ? round.groups : [];
-  let groups = null;
-  if (definedGroups.length > 0) {
-    groups = readGroupsFromCheckboxes(document.getElementById(`round-inst-add-groups-${k}`));
-    if (groups.length === 0) {
-      alert('이 강사가 속할 분반을 선택해 주세요. (공통 또는 하나 이상의 분반)');
-      return;
-    }
-  }
 
   const cur = roundInstructorsCache[k] || [];
   const maxOrder = cur.length > 0 ? Math.max(...cur.map(i => i.order ?? 0)) : -10;
@@ -474,11 +458,14 @@ export async function addRoundInstructor(courseId, roundId, panelIdx, roundIdx) 
   const btn = document.querySelector(`#round-inst-panel-${panelIdx}-${roundIdx} .round-inst-add-btn`);
   if (btn) { btn.disabled = true; btn.textContent = '추가 중...'; }
   try {
-    const data = { name, education: edu, createdAt: serverTimestamp(), order: maxOrder + 10 };
-    if (groups) data.groups = groups;
-    await addDoc(collection(db, 'courses', courseId, 'rounds', roundId, 'instructors'), data);
+    await addDoc(collection(db, 'courses', courseId, 'rounds', roundId, 'instructors'), {
+      name, education: edu, category,
+      createdAt: serverTimestamp(),
+      order: maxOrder + 10,
+    });
     if (eduEl)  eduEl.value = '';
     if (nameEl) nameEl.value = '';
+    if (catEl)  catEl.value = '';
     await loadRoundInstructors(courseId, roundId, panelIdx, roundIdx);
   } catch (e) {
     alert('강사 추가 중 오류가 발생했습니다.');
@@ -527,26 +514,15 @@ export function startEditRoundInstructor(courseId, roundId, panelIdx, roundIdx, 
   if (!row) return;
   const cid = escapeAttr(courseId);
   const rid = escapeAttr(roundId);
-  const round = panelRounds[panelIdx]?.[roundIdx];
-  const definedGroups = (round && Array.isArray(round.groups)) ? round.groups : [];
-  const hasGroups = definedGroups.length > 0;
-  const igs = Array.isArray(inst.groups) ? inst.groups : [];
-
-  // 기존 'common' 키워드 강사는 모든 분반 체크된 상태로 시작 (저장하면 명시 분반 배열로 마이그레이션)
-  const isLegacyCommon = igs.includes('common');
-  const groupsTd = hasGroups
-    ? `<td><div class="round-inst-edit-groups" id="round-inst-edit-groups-${k}-${idx}">
-        ${definedGroups.map(g =>
-          `<label class="round-inst-group-chk"><input type="checkbox" data-group="${escapeAttr(g)}"${(isLegacyCommon || igs.includes(g)) ? ' checked' : ''}><span>${escapeHtml(g)}</span></label>`
-        ).join('')}
-      </div></td>`
-    : '';
+  const curCat = getInstructorCategory(inst);
+  // 편집 폼의 datalist 는 같은 회차의 카테고리 union 재사용
+  const catEditVal = curCat === COMMON_CATEGORY ? '' : curCat;
 
   row.innerHTML = `
     <td><input type="checkbox" disabled></td>
     <td><input type="text" id="edit-rinst-edu-${k}-${idx}" value="${escapeAttr(inst.education || '')}" maxlength="50" style="width:100%;padding:.4rem .6rem;border:2px solid #0066cc;border-radius:7px;font-size:.88rem;"></td>
     <td><input type="text" id="edit-rinst-name-${k}-${idx}" value="${escapeAttr(inst.name || '')}" maxlength="20" style="width:100%;padding:.4rem .6rem;border:2px solid #0066cc;border-radius:7px;font-size:.88rem;"></td>
-    ${groupsTd}
+    <td><input type="text" id="edit-rinst-cat-${k}-${idx}" value="${escapeAttr(catEditVal)}" maxlength="30" placeholder="비우면 공통" list="round-cat-list-${k}" style="width:100%;padding:.4rem .6rem;border:2px solid #0066cc;border-radius:7px;font-size:.88rem;"></td>
     <td>
       <div class="inst-action-btns">
         <button class="inst-save-btn" onclick="saveEditRoundInstructor('${cid}', '${rid}', ${panelIdx}, ${roundIdx}, ${idx})">저장</button>
@@ -562,29 +538,19 @@ export async function saveEditRoundInstructor(courseId, roundId, panelIdx, round
   if (!inst) return;
   const eduEl  = document.getElementById(`edit-rinst-edu-${k}-${idx}`);
   const nameEl = document.getElementById(`edit-rinst-name-${k}-${idx}`);
+  const catEl  = document.getElementById(`edit-rinst-cat-${k}-${idx}`);
   const edu  = eduEl?.value.trim();
   const name = nameEl?.value.trim();
+  const category = normalizeCategory(catEl?.value);
   if (!edu)  { eduEl?.focus(); return; }
   if (!name) { nameEl?.focus(); return; }
-
-  // 분반 정의된 회차에서는 groups 비면 차단
-  const round = panelRounds[panelIdx]?.[roundIdx];
-  const definedGroups = (round && Array.isArray(round.groups)) ? round.groups : [];
-  let groups = null;
-  if (definedGroups.length > 0) {
-    groups = readGroupsFromCheckboxes(document.getElementById(`round-inst-edit-groups-${k}-${idx}`));
-    if (groups.length === 0) {
-      alert('이 강사가 속할 분반을 선택해 주세요. (공통 또는 하나 이상의 분반)');
-      return;
-    }
-  }
 
   const saveBtn = document.querySelector(`#round-inst-row-${k}-${idx} .inst-save-btn`);
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '저장 중...'; }
   try {
-    const updateData = { name, education: edu };
-    if (groups) updateData.groups = groups;
-    await updateDoc(doc(db, 'courses', courseId, 'rounds', roundId, 'instructors', inst._id), updateData);
+    await updateDoc(doc(db, 'courses', courseId, 'rounds', roundId, 'instructors', inst._id), {
+      name, education: edu, category,
+    });
     await loadRoundInstructors(courseId, roundId, panelIdx, roundIdx);
   } catch (e) {
     alert('수정 중 오류가 발생했습니다.');
@@ -596,8 +562,7 @@ export async function cancelEditRoundInstructor(courseId, roundId, panelIdx, rou
   await loadRoundInstructors(courseId, roundId, panelIdx, roundIdx);
 }
 
-// ── 회차 강사 일괄선택 삭제 + 엑셀 일괄등록 (Phase 3 보완) ──────────────────────────────
-// 단기과정 강사관리(admin-courses.js)의 패턴을 회차별로 복제.
+// ── 회차 강사 일괄선택 삭제 + 엑셀 일괄등록 ─────────────
 // 엑셀 파싱 결과는 패널-회차 키별로 보관해 다른 회차의 미리보기와 충돌하지 않게 한다.
 
 const roundInstExcelData = {};
@@ -628,10 +593,12 @@ async function parseRoundInstExcelFile(panelIdx, roundIdx, file) {
       for (let i = 1; i < rows.length; i++) {
         const edu  = String(rows[i][0] || '').trim();
         const name = String(rows[i][1] || '').trim();
-        if (!edu && !name) continue;
+        const rawCat = String(rows[i][2] || '').trim();
+        if (!edu && !name && !rawCat) continue;
         if (!edu)  { errors.push(`${i+1}행: 강의명이 없습니다.`); continue; }
         if (!name) { errors.push(`${i+1}행: 강사명이 없습니다.`); continue; }
-        parsed.push({ edu, name });
+        const category = normalizeCategory(rawCat);
+        parsed.push({ edu, name, category });
       }
 
       const preview = document.getElementById(`round-inst-excel-preview-${k}`);
@@ -646,9 +613,12 @@ async function parseRoundInstExcelFile(panelIdx, roundIdx, file) {
       if (errors.length > 0) {
         html += errors.map(err => `<div class="excel-preview-error">${escapeHtml(err)}</div>`).join('');
       }
-      html += parsed.map((s, i) =>
-        `<div class="excel-preview-row">${i+1}. [${escapeHtml(s.edu)}] ${escapeHtml(s.name)}</div>`
-      ).join('');
+      html += parsed.map((s, i) => {
+        const catTag = s.category === COMMON_CATEGORY
+          ? '<span class="rg-tag common">공통</span>'
+          : `<span class="rg-tag">${escapeHtml(s.category)}</span>`;
+        return `<div class="excel-preview-row">${i+1}. [${escapeHtml(s.edu)}] ${escapeHtml(s.name)} · ${catTag}</div>`;
+      }).join('');
       preview.innerHTML = html;
 
       if (parsed.length > 0) {
@@ -669,18 +639,6 @@ export async function uploadRoundExcelInstructors(courseId, roundId, panelIdx, r
   const data = roundInstExcelData[k];
   if (!data || data.length === 0) return;
 
-  // 분반 정의된 회차면 추가 폼의 분반 체크박스 상태를 일괄 적용 — 비면 차단
-  const round = panelRounds[panelIdx]?.[roundIdx];
-  const definedGroups = (round && Array.isArray(round.groups)) ? round.groups : [];
-  let groups = null;
-  if (definedGroups.length > 0) {
-    groups = readGroupsFromCheckboxes(document.getElementById(`round-inst-add-groups-${k}`));
-    if (groups.length === 0) {
-      alert('이 강사들이 속할 분반을 선택해 주세요. (공통 또는 하나 이상의 분반)');
-      return;
-    }
-  }
-
   const btn = document.getElementById(`round-inst-excel-btn-${k}`);
   btn.disabled = true;
   const progress = document.getElementById(`round-inst-excel-progress-${k}`);
@@ -698,14 +656,12 @@ export async function uploadRoundExcelInstructors(courseId, roundId, panelIdx, r
     const slice = data.slice(start, start + CHUNK);
     progress.textContent = `등록 중... (${start + slice.length}/${total})`;
     const batch = writeBatch(db);
-    slice.forEach(({ edu, name }, j) => {
-      const docData = {
-        name, education: edu,
+    slice.forEach(({ edu, name, category }, j) => {
+      batch.set(doc(instRef), {
+        name, education: edu, category,
         createdAt: serverTimestamp(),
         order: maxOrder + (start + j + 1) * 10
-      };
-      if (groups) docData.groups = groups;
-      batch.set(doc(instRef), docData);
+      });
     });
     try {
       await batch.commit();
@@ -762,97 +718,5 @@ export async function deleteSelectedRoundInstructors(courseId, roundId, panelIdx
   } catch (e) {
     alert('삭제 중 오류가 발생했습니다.');
     btn.disabled = false; btn.textContent = `선택 삭제 (${count}명)`;
-  }
-}
-
-// ── 분반 CRUD (Phase 5-α) ──────────────────────────────
-// 분반은 회차 문서의 groups: string[] 에 저장. 분반 이름이 곧 식별자.
-// 강사 문서의 groups: string[] 는 'common' 키워드 또는 분반 이름들.
-// 분반 미정의(groups 빈 배열) 회차는 모든 강사가 모든 학생에게 노출 (호환).
-
-const RESERVED_GROUP_NAMES = new Set(['common', 'COMMON', 'Common']);
-
-export async function addRoundGroup(courseId, panelIdx, roundIdx) {
-  const k = `${panelIdx}-${roundIdx}`;
-  const round = panelRounds[panelIdx]?.[roundIdx];
-  if (!round) return;
-  const input = document.getElementById(`round-group-name-${k}`);
-  const name = (input?.value || '').trim();
-  if (!name) { input?.focus(); return; }
-  if (name.length > 20) { alert('분반 이름은 20자 이하로 입력해 주세요.'); return; }
-  if (RESERVED_GROUP_NAMES.has(name)) { alert('"common"은 예약어입니다. 다른 이름을 사용해 주세요.'); return; }
-
-  const groups = Array.isArray(round.groups) ? round.groups : [];
-  if (groups.includes(name)) { alert(`이미 "${name}" 분반이 존재합니다.`); return; }
-
-  try {
-    const newGroups = [...groups, name];
-    await updateDoc(doc(db, 'courses', courseId, 'rounds', round._id), { groups: newGroups });
-    round.groups = newGroups;
-    if (input) input.value = '';
-    await loadRoundInstructors(courseId, round._id, panelIdx, roundIdx);
-  } catch (e) {
-    alert('분반 추가 중 오류가 발생했습니다.');
-  }
-}
-
-export async function renameRoundGroup(courseId, panelIdx, roundIdx, oldName) {
-  const k = `${panelIdx}-${roundIdx}`;
-  const round = panelRounds[panelIdx]?.[roundIdx];
-  if (!round) return;
-  const newName = (prompt(`"${oldName}" 분반의 새 이름을 입력해 주세요.`, oldName) || '').trim();
-  if (!newName || newName === oldName) return;
-  if (newName.length > 20) { alert('분반 이름은 20자 이하로 입력해 주세요.'); return; }
-  if (RESERVED_GROUP_NAMES.has(newName)) { alert('"common"은 예약어입니다.'); return; }
-
-  const groups = Array.isArray(round.groups) ? round.groups : [];
-  if (groups.includes(newName)) { alert(`이미 "${newName}" 분반이 존재합니다.`); return; }
-
-  try {
-    const newGroups = groups.map(g => g === oldName ? newName : g);
-    const insts = roundInstructorsCache[k] || [];
-    const affectedInsts = insts.filter(i => Array.isArray(i.groups) && i.groups.includes(oldName));
-
-    const batch = writeBatch(db);
-    batch.update(doc(db, 'courses', courseId, 'rounds', round._id), { groups: newGroups });
-    affectedInsts.forEach(inst => {
-      const newIgs = inst.groups.map(g => g === oldName ? newName : g);
-      batch.update(doc(db, 'courses', courseId, 'rounds', round._id, 'instructors', inst._id), { groups: newIgs });
-    });
-    await batch.commit();
-    round.groups = newGroups;
-    await loadRoundInstructors(courseId, round._id, panelIdx, roundIdx);
-  } catch (e) {
-    alert('분반 이름 변경 중 오류가 발생했습니다.');
-  }
-}
-
-export async function deleteRoundGroup(courseId, panelIdx, roundIdx, name) {
-  const k = `${panelIdx}-${roundIdx}`;
-  const round = panelRounds[panelIdx]?.[roundIdx];
-  if (!round) return;
-  const insts = roundInstructorsCache[k] || [];
-  const affected = insts.filter(i => Array.isArray(i.groups) && i.groups.includes(name));
-
-  let msg = `"${name}" 분반을 삭제하시겠습니까?`;
-  if (affected.length > 0) {
-    msg += `\n\n${affected.length}명의 강사 분반 지정에서 "${name}" 이(가) 자동 제거됩니다.`;
-  }
-  if (!confirm(msg)) return;
-
-  try {
-    const groups = Array.isArray(round.groups) ? round.groups : [];
-    const newGroups = groups.filter(g => g !== name);
-    const batch = writeBatch(db);
-    batch.update(doc(db, 'courses', courseId, 'rounds', round._id), { groups: newGroups });
-    affected.forEach(inst => {
-      const newIgs = inst.groups.filter(g => g !== name);
-      batch.update(doc(db, 'courses', courseId, 'rounds', round._id, 'instructors', inst._id), { groups: newIgs });
-    });
-    await batch.commit();
-    round.groups = newGroups;
-    await loadRoundInstructors(courseId, round._id, panelIdx, roundIdx);
-  } catch (e) {
-    alert('분반 삭제 중 오류가 발생했습니다.');
   }
 }

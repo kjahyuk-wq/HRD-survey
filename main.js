@@ -5,15 +5,35 @@ import {
 import { signInAnonymously } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-functions.js";
 
-// type === 'leadership' 일 때 roundId/roundNumber/roundName이 채워지고 instructors는 회차별 강사로 교체됨.
-// group은 중견리더 분반 운영 시 사용 (학생.group). 분반 미운영이면 빈 문자열.
+// 강사 카테고리 캐논. 빈 값/'common'/'공통' 은 모두 공통.
+const COMMON_CATEGORY = '공통';
+
+// 중견리더 모드는 roundId/roundNumber/roundName 채워지고 instructors는 (공통 + 학생 선택 강사) 로 구성.
+// allRoundInstructors 는 선택활동 화면에서 카테고리 그루핑용 원본 보관.
+// electives 는 학생이 고른 강사 키 배열 (정규화된 강의명 = inst.education).
 let currentUser = {
   name: '', empNo: '', course: '', courseId: '', studentRef: null,
   type: 'standard', instructors: [],
   roundId: '', roundNumber: 0, roundName: '',
   completedRounds: [],
-  group: ''
+  allRoundInstructors: [],
+  electives: null,
+  electivesPersisted: false,
 };
+
+function getCategory(inst) {
+  if (inst && typeof inst.category === 'string') {
+    const c = inst.category.trim();
+    return c || COMMON_CATEGORY;
+  }
+  // legacy 호환: groups 비었거나 'common' 단일이면 공통, 그 외 (분반) 도 일단 공통으로 흡수
+  return COMMON_CATEGORY;
+}
+
+function instructorElectiveKey(inst) {
+  // 학생 electives 배열의 키 — 강의명 기준. 강의명이 비면 강사명으로 fallback.
+  return (inst.education || inst.name || '').trim();
+}
 
 async function doLogin() {
   const name = document.getElementById('input-name').value.trim();
@@ -79,6 +99,8 @@ async function doLogin() {
     document.getElementById('page-survey').style.display = 'block';
 
     if (courseType === 'leadership') {
+      // electives 존재 여부로 선택활동 화면 노출 결정 (배열 자체가 있으면 이미 한번 골랐다는 뜻)
+      const persistedElectives = Array.isArray(studentData.electives) ? studentData.electives.slice() : null;
       currentUser = {
         name, empNo,
         course: matchCourseName,
@@ -88,7 +110,9 @@ async function doLogin() {
         instructors: [],
         roundId: '', roundNumber: 0, roundName: '',
         completedRounds: Array.isArray(studentData.completedRounds) ? studentData.completedRounds : [],
-        group: typeof studentData.group === 'string' ? studentData.group.trim() : ''
+        allRoundInstructors: [],
+        electives: persistedElectives,
+        electivesPersisted: persistedElectives !== null,
       };
       await showRoundSelect();
     } else {
@@ -104,7 +128,9 @@ async function doLogin() {
         instructors,
         roundId: '', roundNumber: 0, roundName: '',
         completedRounds: [],
-        group: ''
+        allRoundInstructors: [],
+        electives: null,
+        electivesPersisted: false,
       };
       document.getElementById('confirm-greeting').textContent = `${name}님, 안녕하세요!`;
       document.getElementById('confirm-course-name').textContent = matchCourseName;
@@ -180,7 +206,7 @@ async function showRoundSelect() {
   }
 }
 
-// 회차 선택 시: 회차 강사를 fetch + 분반 검증 + 강사 필터링 후 confirm 화면으로 진입.
+// 회차 선택 시: 회차 강사를 fetch + (electives 미저장이면) 선택활동 화면, 아니면 바로 confirm.
 async function selectRound(roundId) {
   const list = document.getElementById('round-select-list');
   const buttons = list.querySelectorAll('button');
@@ -203,51 +229,112 @@ async function selectRound(roundId) {
     const allInstructors = instSnap.docs.map(d => d.data());
     sortInstructors(allInstructors);
 
-    // 분반 검증 + 강사 필터링
-    const definedGroups = Array.isArray(roundData.groups) ? roundData.groups : [];
-    let instructors = allInstructors;
-    if (definedGroups.length > 0) {
-      // 분반 정의된 회차 — 학생.group이 비거나 회차에 정의 안 된 분반이면 차단
-      if (!currentUser.group) {
-        alert('이 회차는 분반 운영 중입니다. 분반이 배정되지 않아 응답할 수 없습니다.\n담당자에게 문의해 주세요.');
-        reenable();
-        return;
-      }
-      if (!definedGroups.includes(currentUser.group)) {
-        alert(`이 회차에는 "${currentUser.group}" 분반이 정의되지 않았습니다.\n담당자에게 문의해 주세요.`);
-        reenable();
-        return;
-      }
-      // 강사 필터: groups에 학생 분반 포함 OR 'common'(구 데이터 호환) OR groups 미정의(구 데이터 호환)
-      instructors = allInstructors.filter(inst => {
-        const igs = Array.isArray(inst.groups) ? inst.groups : [];
-        if (igs.length === 0) return true;
-        return igs.includes(currentUser.group) || igs.includes('common');
-      });
-    }
-
     currentUser.roundId = roundId;
     currentUser.roundNumber = roundData.number;
     currentUser.roundName = roundData.name || '';
-    currentUser.instructors = instructors;
+    currentUser.allRoundInstructors = allInstructors;
+
+    // 카테고리 추출: 공통 외 카테고리만 모음 (선택활동 화면 노출 여부 판단)
+    const electiveCategories = collectElectiveCategories(allInstructors);
 
     document.getElementById('screen-round-select').style.display = 'none';
-    document.getElementById('confirm-greeting').textContent = `${currentUser.name}님, 안녕하세요!`;
-    document.getElementById('confirm-course-name').textContent = currentUser.course;
-    const roundLine = document.getElementById('confirm-round-line');
-    const baseLabel = currentUser.roundName
-      ? `${currentUser.roundNumber}회차 · ${currentUser.roundName}`
-      : `${currentUser.roundNumber}회차`;
-    roundLine.textContent = currentUser.group ? `${baseLabel} · ${currentUser.group}` : baseLabel;
-    roundLine.style.display = 'block';
-    updateSurveyMeta(instructors.length);
-    document.getElementById('screen-confirm').style.display = 'block';
+
+    if (electiveCategories.length > 0 && !currentUser.electivesPersisted) {
+      // 선택활동 화면으로 진입
+      showElectivesScreen(electiveCategories, allInstructors);
+    } else {
+      // 카테고리 없음 또는 이미 저장된 선택분 사용 → 바로 응답 화면
+      enterConfirmWithFilteredInstructors(allInstructors);
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   } catch (e) {
     console.error(e);
     alert('회차 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.');
     reenable();
   }
+}
+
+// 강사 목록에서 공통 외 카테고리 union (강의 순서 기준으로 처음 등장한 순서 보존)
+function collectElectiveCategories(instructors) {
+  const seen = new Set();
+  const out = [];
+  instructors.forEach(inst => {
+    const c = getCategory(inst);
+    if (c !== COMMON_CATEGORY && !seen.has(c)) {
+      seen.add(c);
+      out.push(c);
+    }
+  });
+  return out;
+}
+
+function showElectivesScreen(categories, instructors) {
+  document.getElementById('electives-greeting').textContent = `${currentUser.name}님, 안녕하세요!`;
+
+  // 카테고리별 강사 그루핑 (강사 순서 보존)
+  const byCat = {};
+  categories.forEach(c => { byCat[c] = []; });
+  instructors.forEach(inst => {
+    const c = getCategory(inst);
+    if (c !== COMMON_CATEGORY && byCat[c]) byCat[c].push(inst);
+  });
+
+  const sections = categories.map(c => {
+    const items = byCat[c].map((inst, i) => {
+      const key = instructorElectiveKey(inst);
+      if (!key) return '';
+      const label = inst.name
+        ? `${escapeHtml(inst.education || '')} · ${escapeHtml(inst.name)}`
+        : escapeHtml(inst.education || '');
+      const id = `elect-${escapeAttr(c)}-${i}`;
+      return `<label class="elect-choice" for="${id}">
+        <input type="checkbox" id="${id}" data-key="${escapeAttr(key)}" data-cat="${escapeAttr(c)}">
+        <span class="elect-choice-label">${label}</span>
+      </label>`;
+    }).join('');
+    return `<section class="electives-cat">
+      <h3 class="electives-cat-title">${escapeHtml(c)}</h3>
+      <div class="electives-cat-list">${items}</div>
+    </section>`;
+  }).join('');
+
+  document.getElementById('electives-sections').innerHTML = sections;
+  document.getElementById('electives-error').style.display = 'none';
+  document.getElementById('screen-electives').style.display = 'block';
+}
+
+function confirmElectives() {
+  const checks = document.querySelectorAll('#electives-sections input[type="checkbox"]');
+  const selected = Array.from(checks).filter(cb => cb.checked).map(cb => cb.dataset.key);
+  // 빈 선택도 허용 — "아무 선택활동 안 들음" 케이스를 인정 (공통 강사만 평가).
+  currentUser.electives = selected;
+
+  document.getElementById('screen-electives').style.display = 'none';
+  enterConfirmWithFilteredInstructors(currentUser.allRoundInstructors);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// allRoundInstructors 와 currentUser.electives 기반으로 노출할 강사를 결정하고 confirm 화면 진입.
+function enterConfirmWithFilteredInstructors(allInstructors) {
+  const electiveSet = new Set(Array.isArray(currentUser.electives) ? currentUser.electives : []);
+  const instructors = allInstructors.filter(inst => {
+    const c = getCategory(inst);
+    if (c === COMMON_CATEGORY) return true;
+    const key = instructorElectiveKey(inst);
+    return key && electiveSet.has(key);
+  });
+  currentUser.instructors = instructors;
+
+  document.getElementById('confirm-greeting').textContent = `${currentUser.name}님, 안녕하세요!`;
+  document.getElementById('confirm-course-name').textContent = currentUser.course;
+  const roundLine = document.getElementById('confirm-round-line');
+  const baseLabel = currentUser.roundName
+    ? `${currentUser.roundNumber}회차 · ${currentUser.roundName}`
+    : `${currentUser.roundNumber}회차`;
+  roundLine.textContent = baseLabel;
+  roundLine.style.display = 'block';
+  updateSurveyMeta(instructors.length);
+  document.getElementById('screen-confirm').style.display = 'block';
 }
 
 function updateSurveyMeta(instructorCount) {
@@ -366,19 +453,24 @@ async function submitSurvey() {
       instructors: instructorScores,
       comment1, comment2, comment3,
     };
-    if (currentUser.type === 'leadership' && currentUser.group) {
-      response.groupName = currentUser.group;
-    }
 
-    // 서버에서 본인성 검증 + 트랜잭션으로 응답 + completed 갱신
-    const submit = httpsCallable(functions, 'submitSurveyResponse');
-    await submit({
+    const payload = {
       name: currentUser.name,
       empNo: currentUser.empNo,
       courseId: currentUser.courseId,
       roundId: currentUser.type === 'leadership' ? currentUser.roundId : null,
       response,
-    });
+    };
+    // 중견리더 모드 + 미저장된 선택분이 있으면 서버 트랜잭션에 함께 넣어 학생 doc 에 영속.
+    if (currentUser.type === 'leadership'
+        && !currentUser.electivesPersisted
+        && Array.isArray(currentUser.electives)) {
+      payload.electives = currentUser.electives;
+    }
+
+    // 서버에서 본인성 검증 + 트랜잭션으로 응답 + completed + (필요시) electives 갱신
+    const submit = httpsCallable(functions, 'submitSurveyResponse');
+    await submit(payload);
 
     document.getElementById('screen-survey').style.display = 'none';
     document.getElementById('screen-result').style.display = 'block';
@@ -444,3 +536,4 @@ window.doLogin = doLogin;
 window.startSurvey = startSurvey;
 window.submitSurvey = submitSurvey;
 window.selectRound = selectRound;
+window.confirmElectives = confirmElectives;

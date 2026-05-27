@@ -4,6 +4,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { state, Q_LABELS, QUESTION_CATEGORIES, DEMO_QUESTIONS, escapeHtml, escapeAttr, formatDate } from './admin-utils.js';
 import { lsRead, lsWrite } from './admin-courses.js';
+import { getInstructorCategory, COMMON_CATEGORY } from './admin-rounds.js';
 
 // 강사 정렬 — admin 측 order 우선, 없으면 createdAt fallback (main.js / admin-preview 와 동일 정책).
 function sortInstructors(arr) {
@@ -61,11 +62,24 @@ export function computeStats(responses, orderedInstructorKeys) {
   const avgs = sums.map((s, i) => n > 0 ? s / n : 0);
   const hasData = dists.map(d => d.some(c => c > 0));
 
+  // instKeys (legacy, 단기 호환 유지): 응답 있는 강사만 + 응답에만 있는 orphan.
+  // 단기과정 export 는 이 키만 본다 — 0응답 강사가 export 에 새로 끼는 회귀 방지.
   const allInstKeys = Object.keys(instRaw);
   const instKeys = orderedInstructorKeys.filter(k => instRaw[k])
     .concat(allInstKeys.filter(k => !orderedInstructorKeys.includes(k)));
 
-  return { n, keys, avgs, dists, hasData, instRaw, instKeys, demoRaw };
+  // instKeysFullOrder (중견리더 전용): 회차 강사 등록 순서 고정 + 0응답 슬롯 유지.
+  // 인재개발원 서식의 강사 열 고정 순서와 정합 → export 시 응답 0명도 빈칸 자리 유지.
+  const instKeysFullOrder = orderedInstructorKeys.slice();
+  const orderedSet = new Set(orderedInstructorKeys);
+  Object.keys(instRaw).forEach(k => {
+    if (!orderedSet.has(k)) instKeysFullOrder.push(k);
+  });
+  instKeysFullOrder.forEach(k => {
+    if (!instRaw[k]) instRaw[k] = { sum: 0, count: 0, dist: [0, 0, 0, 0, 0] };
+  });
+
+  return { n, keys, avgs, dists, hasData, instRaw, instKeys, instKeysFullOrder, demoRaw };
 }
 
 // ── 통계 탭 ──────────────────────────────
@@ -124,9 +138,7 @@ export async function populateStatsSelect() {
 }
 
 // 회차 셀렉트 — 중견리더 과정 선택 시에만 채움/노출. 캐시 키로 같은 과정 재호출 시 재요청 회피.
-// 회차 데이터(특히 groups)를 캐시해두면 분반 셀렉트 갱신 시 추가 fetch 없이 처리 가능.
 let lastPopulatedRoundCourseId = null;
-const roundsByCourse = {};  // courseId → [{...round, _id}]
 
 async function populateRoundSelect(courseId) {
   const sel = document.getElementById('stats-round-select');
@@ -136,7 +148,6 @@ async function populateRoundSelect(courseId) {
     const snap = await getDocs(collection(db, 'courses', courseId, 'rounds'));
     const rounds = snap.docs.map(d => ({ ...d.data(), _id: d.id }));
     rounds.sort((a, b) => (a.number ?? 0) - (b.number ?? 0));
-    roundsByCourse[courseId] = rounds;
     if (rounds.length === 0) {
       sel.innerHTML = '<option value="">등록된 회차 없음</option>';
       sel.disabled = true;
@@ -153,24 +164,32 @@ async function populateRoundSelect(courseId) {
   }
 }
 
-// 분반 셀렉트 채움 — 회차 데이터의 groups 기반. 분반 0개면 셀렉트 숨김.
-function populateGroupSelect(courseId, roundId) {
+// 카테고리 셀렉트 채움 — 회차 강사 union 에서 추출. '공통' 외 카테고리 0개면 숨김.
+// (회차 강사 fetch 후에 호출 — loadStats 흐름에서 instructors 인자로 받는다)
+function populateCategorySelect(instructors) {
   const sel = document.getElementById('stats-group-select');
   if (!sel) return;
-  const round = (roundsByCourse[courseId] || []).find(r => r._id === roundId);
-  const groups = Array.isArray(round?.groups) ? round.groups : [];
-  if (groups.length === 0) {
+  const seen = new Set();
+  const cats = [];
+  instructors.forEach(inst => {
+    const c = getInstructorCategory(inst);
+    if (c !== COMMON_CATEGORY && !seen.has(c)) {
+      seen.add(c);
+      cats.push(c);
+    }
+  });
+  if (cats.length === 0) {
     sel.style.display = 'none';
     sel.value = '';
     sel.innerHTML = '<option value="">(전체)</option>';
     return;
   }
-  // 기존 선택값 보존 (회차 변경해도 같은 분반 이름이면 유지)
   const prev = sel.value;
   sel.style.display = 'inline-block';
   sel.innerHTML = '<option value="">(전체)</option>' +
-    groups.map(g => `<option value="${escapeAttr(g)}">${escapeHtml(g)}</option>`).join('');
-  if (prev && groups.includes(prev)) sel.value = prev;
+    `<option value="${COMMON_CATEGORY}">${escapeHtml(COMMON_CATEGORY)}</option>` +
+    cats.map(c => `<option value="${escapeAttr(c)}">${escapeHtml(c)}</option>`).join('');
+  if (prev && (prev === COMMON_CATEGORY || cats.includes(prev))) sel.value = prev;
 }
 
 export async function loadStats() {
@@ -226,41 +245,13 @@ export async function loadStats() {
     return;
   }
 
-  // 회차 선택됐으면 분반 셀렉트 갱신
-  if (courseType === 'leadership') {
-    populateGroupSelect(courseId, roundId);
-  }
-  const groupName = (courseType === 'leadership' && groupSel?.style.display !== 'none') ? (groupSel?.value || '') : '';
-
-  // 라벨 갱신 (분반까지 포함)
-  let displayLabel = courseLabel;
-  if (courseType === 'leadership') {
-    const rOpt = roundSel.options[roundSel.selectedIndex];
-    const rLabel = rOpt?.textContent || '';
-    state.lastRoundId = roundId;
-    state.lastRoundLabel = rLabel;
-    state.lastRoundNumber = parseInt(rOpt?.dataset.num) || 0;
-    state.lastRoundName = rOpt?.dataset.name || '';
-    displayLabel = `${courseLabel} · ${rLabel}`;
-    if (groupName) {
-      displayLabel += ` · ${groupName}`;
-      state.lastGroupName = groupName;
-      state.lastGroupLabel = groupName;
-    } else {
-      state.lastGroupName = '';
-      state.lastGroupLabel = '';
-    }
-  }
-  const nameEl = document.getElementById('stats-course-name');
-  if (nameEl) nameEl.textContent = displayLabel;
-
   document.getElementById('stats-placeholder').style.display = 'none';
   document.getElementById('stats-loading').style.display = 'block';
   document.getElementById('stats-area').style.display = 'none';
   document.getElementById('stats-no-data').style.display = 'none';
 
   try {
-    // 데이터 경로 분기 — 학생 컬렉션은 과정 단위 그대로(C 모델)
+    // 데이터 경로 분기 — 학생 컬렉션은 과정 단위 그대로
     const responsesRef = courseType === 'leadership'
       ? collection(db, 'courses', courseId, 'rounds', roundId, 'responses')
       : collection(db, 'courses', courseId, 'responses');
@@ -274,18 +265,45 @@ export async function loadStats() {
       getDocs(instructorsRef)
     ]);
 
-    let responses = responsesSnap.docs.map(d => ({
+    const allInstructors = sortInstructors(instructorsSnap.docs.map(d => d.data()));
+
+    // 카테고리 셀렉트는 회차 강사 fetch 후에 갱신 (중견리더만)
+    if (courseType === 'leadership') {
+      populateCategorySelect(allInstructors);
+    }
+    const categoryFilter = (courseType === 'leadership' && groupSel?.style.display !== 'none')
+      ? (groupSel?.value || '')
+      : '';
+
+    // 라벨 갱신 (카테고리까지 포함)
+    let displayLabel = courseLabel;
+    if (courseType === 'leadership') {
+      const rOpt = roundSel.options[roundSel.selectedIndex];
+      const rLabel = rOpt?.textContent || '';
+      state.lastRoundId = roundId;
+      state.lastRoundLabel = rLabel;
+      state.lastRoundNumber = parseInt(rOpt?.dataset.num) || 0;
+      state.lastRoundName = rOpt?.dataset.name || '';
+      displayLabel = `${courseLabel} · ${rLabel}`;
+      if (categoryFilter) {
+        displayLabel += ` · ${categoryFilter}`;
+        state.lastGroupName = categoryFilter;
+        state.lastGroupLabel = categoryFilter;
+      } else {
+        state.lastGroupName = '';
+        state.lastGroupLabel = '';
+      }
+    }
+    const nameEl = document.getElementById('stats-course-name');
+    if (nameEl) nameEl.textContent = displayLabel;
+
+    const responses = responsesSnap.docs.map(d => ({
       ...d.data(),
       submittedAt: d.data().submittedAt?.toDate?.()?.toISOString() ?? null
     }));
-    // 분반 선택 시 응답 필터: response.groupName이 일치하는 것만
-    if (groupName) {
-      responses = responses.filter(r => (r.groupName || '') === groupName);
-    }
 
-    // renderStats는 학생.completed 필드를 본다 — 회차 모드에서는 completedRounds.includes(roundId)로 매핑.
-    // 분반 선택 시: 분모 학생도 그 분반 학생으로 좁힘.
-    let students = studentsSnap.docs.map(d => {
+    // 학생: 회차 모드에서는 completedRounds.includes(roundId) 로 완료 매핑
+    const students = studentsSnap.docs.map(d => {
       const data = d.data();
       const isComplete = courseType === 'leadership'
         ? Array.isArray(data.completedRounds) && data.completedRounds.includes(roundId)
@@ -296,18 +314,10 @@ export async function loadStats() {
         completedAt: data.completedAt?.toDate?.()?.toISOString() ?? null
       };
     });
-    if (groupName) {
-      students = students.filter(s => (s.group || '') === groupName);
-    }
 
-    // 강사 키 순서: 분반 선택 시 그 분반에 노출되는 강사로 좁힘 (학생 흐름과 동일 로직)
-    const allInstructors = sortInstructors(instructorsSnap.docs.map(d => d.data()));
-    const visibleInstructors = groupName
-      ? allInstructors.filter(inst => {
-          const igs = Array.isArray(inst.groups) ? inst.groups : [];
-          if (igs.length === 0) return true;  // 구 데이터 호환
-          return igs.includes(groupName) || igs.includes('common');
-        })
+    // 강사 키 순서: 카테고리 필터 적용 시 해당 카테고리 강사만, 미선택 시 전체 (응답 0명도 포함)
+    const visibleInstructors = categoryFilter
+      ? allInstructors.filter(inst => getInstructorCategory(inst) === categoryFilter)
       : allInstructors;
     const orderedInstructorKeys = visibleInstructors.map(({ name, education }) =>
       education ? `${education}__${name}` : name

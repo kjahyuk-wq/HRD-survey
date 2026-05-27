@@ -8,25 +8,8 @@ import { loadXLSX } from './admin-excel.js';
 import { lsInvalidate } from './admin-courses.js';
 
 // ── 패널 단위 상태 ──────────────────────────────
-// panelIdx → 학생 배열 / 엑셀 파싱 결과 / 분반 union 캐시
 export const studentsCache = {};
 const excelStudentData = {};
-const panelGroupsUnion = {};  // panelIdx → ['1조','2조',...] (회차들에 정의된 분반 union)
-
-// 그 과정의 모든 회차에 정의된 분반 이름의 union을 계산
-async function fetchRoundGroupsUnion(courseId) {
-  try {
-    const snap = await getDocs(collection(db, 'courses', courseId, 'rounds'));
-    const set = new Set();
-    snap.docs.forEach(d => {
-      const groups = Array.isArray(d.data().groups) ? d.data().groups : [];
-      groups.forEach(g => set.add(g));
-    });
-    return Array.from(set).sort();
-  } catch (_) {
-    return [];
-  }
-}
 
 // ── 수강생 관리 ──────────────────────────────
 export async function loadStudents(courseId, panelIdx) {
@@ -44,22 +27,16 @@ export async function loadStudents(courseId, panelIdx) {
   if (emptyEl)  emptyEl.style.display = 'none';
   if (statsEl)  statsEl.innerHTML = '';
 
+  const isLeadership = state.courseTypeById[courseId] === 'leadership';
+
   try {
-    // 학생 + (중견리더 과정에 한해) 회차 분반 union 동시 fetch.
-    // 단기과정은 분반 운영이 없어 rounds 컬렉션 풀스캔이 항상 빈 결과 → 행정망 1 RTT 낭비.
-    const isLeadership = state.courseTypeById[courseId] === 'leadership';
-    const [snap, groupsUnion] = await Promise.all([
-      getDocs(collection(db, 'courses', courseId, 'students')),
-      isLeadership ? fetchRoundGroupsUnion(courseId) : Promise.resolve([])
-    ]);
+    const snap = await getDocs(collection(db, 'courses', courseId, 'students'));
     const students = snap.docs.map(d => ({
       ...d.data(),
       _id: d.id,
       completedAt: d.data().completedAt?.toDate?.()?.toISOString() ?? null
     })).sort((a, b) => Number(a.empNo) - Number(b.empNo));
     studentsCache[panelIdx] = students;
-    panelGroupsUnion[panelIdx] = groupsUnion;
-    syncStudentGroupSelect(panelIdx, groupsUnion);
     if (loadingEl) loadingEl.style.display = 'none';
 
     const total = students.length;
@@ -82,14 +59,18 @@ export async function loadStudents(courseId, panelIdx) {
       return;
     }
 
-    const hasGroups = groupsUnion.length > 0;
-    const groupCol = hasGroups ? '<th>분반</th>' : '';
-    const groupCellFn = s => {
-      if (!hasGroups) return '';
-      const g = (s.group || '').trim();
-      return g
-        ? `<td><span class="rg-tag">${escapeHtml(g)}</span></td>`
-        : '<td><span class="rg-empty">미배정</span></td>';
+    // 중견리더 과정에서만 '선택활동' 컬럼 노출
+    const electivesCol = isLeadership ? '<th>선택활동</th>' : '';
+    const electivesCellFn = s => {
+      if (!isLeadership) return '';
+      if (!Array.isArray(s.electives)) {
+        return '<td><span class="rg-empty">미선택</span></td>';
+      }
+      if (s.electives.length === 0) {
+        return '<td><span class="rg-empty">선택 없음</span></td>';
+      }
+      const chips = s.electives.map(e => `<span class="rg-tag">${escapeHtml(e)}</span>`).join(' ');
+      return `<td>${chips}</td>`;
     };
 
     const cid = escapeAttr(courseId);
@@ -101,15 +82,19 @@ export async function loadStudents(courseId, panelIdx) {
         <table class="student-table">
           <thead><tr>
             <th style="width:36px"><input type="checkbox" id="stu-select-all-${panelIdx}" onclick="toggleSelectAll(${panelIdx}, this)"></th>
-            <th>이름</th><th>교번</th>${groupCol}<th>상태</th><th></th>
+            <th>이름</th><th>교번</th>${electivesCol}<th>상태</th><th></th>
           </tr></thead>
           <tbody>
-            ${students.map((s, idx) => `
+            ${students.map((s, idx) => {
+              const resetBtn = isLeadership && Array.isArray(s.electives)
+                ? `<button class="inst-edit-btn" onclick="resetStudentElectives('${cid}', ${panelIdx}, '${escapeAttr(s._id)}', '${escapeAttr(s.name)}')" title="다음 회차에서 선택활동 다시 고름">선택 초기화</button>`
+                : '';
+              return `
               <tr id="stu-row-${panelIdx}-${idx}">
                 <td><input type="checkbox" class="stu-checkbox-${panelIdx}" data-id="${escapeAttr(s._id)}" data-name="${escapeAttr(s.name)}" data-empno="${escapeAttr(s.empNo)}" onchange="updateBulkDeleteBtn(${panelIdx})"></td>
                 <td>${escapeHtml(s.name)}</td>
                 <td>${escapeHtml(s.empNo)}</td>
-                ${groupCellFn(s)}
+                ${electivesCellFn(s)}
                 <td>${s.completed
                   ? `<span class="status-done">완료</span>${s.completedAt ? `<br><small class="completed-at">${formatDateTime(s.completedAt)}</small>` : ''}`
                   : `<span class="status-pending">미완료</span>`}
@@ -117,10 +102,12 @@ export async function loadStudents(courseId, panelIdx) {
                 <td>
                   <div class="inst-action-btns">
                     <button class="inst-edit-btn" onclick="startEditStudent('${cid}', ${panelIdx}, ${idx})">수정</button>
+                    ${resetBtn}
                     <button class="delete-btn" onclick="deleteStudent('${cid}', ${panelIdx}, '${escapeAttr(s.name)}','${escapeAttr(s.empNo)}','${escapeAttr(s._id)}',this)">삭제</button>
                   </div>
                 </td>
-              </tr>`).join('')}
+              </tr>`;
+            }).join('')}
           </tbody>
         </table>
       </div>`;
@@ -129,32 +116,11 @@ export async function loadStudents(courseId, panelIdx) {
   }
 }
 
-// 분반 union이 있으면 추가 폼의 분반 셀렉트와 엑셀 안내문 C열을 노출, 없으면 숨김
-function syncStudentGroupSelect(panelIdx, groupsUnion) {
-  const sel = document.getElementById(`new-stu-group-${panelIdx}`);
-  const cHint = document.getElementById(`stu-excel-c-hint-${panelIdx}`);
-  if (!sel) return;
-  if (groupsUnion.length === 0) {
-    sel.style.display = 'none';
-    sel.innerHTML = '<option value="">-- 분반 --</option>';
-    if (cHint) cHint.style.display = 'none';
-    return;
-  }
-  sel.style.display = '';
-  sel.innerHTML = '<option value="">-- 분반 --</option>' +
-    groupsUnion.map(g => `<option value="${escapeAttr(g)}">${escapeHtml(g)}</option>`).join('');
-  if (cHint) cHint.style.display = '';
-}
-
 export async function addStudent(courseId, panelIdx) {
   const nameEl  = document.getElementById(`new-stu-name-${panelIdx}`);
   const empNoEl = document.getElementById(`new-stu-empno-${panelIdx}`);
-  const groupEl = document.getElementById(`new-stu-group-${panelIdx}`);
   const name = nameEl?.value.trim() || '';
   const empNo = empNoEl?.value.trim() || '';
-  // 분반 union 있으면 셀렉트 값 사용, 없으면 group 미저장
-  const hasGroups = (panelGroupsUnion[panelIdx] || []).length > 0;
-  const group = (hasGroups && groupEl) ? (groupEl.value || '').trim() : '';
 
   if (!name) { nameEl?.focus(); return; }
   if (!/^\d+$/.test(empNo) || parseInt(empNo) < 1) { alert('교번을 올바르게 입력해 주세요. (1 이상의 숫자)'); return; }
@@ -163,13 +129,12 @@ export async function addStudent(courseId, panelIdx) {
   if (btn) { btn.disabled = true; btn.textContent = '등록 중...'; }
 
   try {
-    const data = { name, empNo, completed: false, completedAt: null };
-    if (group) data.group = group;
-    await addDoc(collection(db, 'courses', courseId, 'students'), data);
+    await addDoc(collection(db, 'courses', courseId, 'students'), {
+      name, empNo, completed: false, completedAt: null
+    });
     lsInvalidate(`counts:${courseId}`);
     if (nameEl) nameEl.value = '';
     if (empNoEl) empNoEl.value = '';
-    if (groupEl) groupEl.value = '';
     await loadStudents(courseId, panelIdx);
   } catch (e) {
     console.error('addStudent 실패:', e);
@@ -251,6 +216,20 @@ export async function deleteStudent(courseId, panelIdx, name, empNo, studentId, 
   } catch (e) { alert('삭제 중 오류가 발생했습니다.'); btnEl.disabled = false; btnEl.textContent = '삭제'; }
 }
 
+// 선택활동 초기화 — Firestore 의 electives 필드를 제거해 다음 로그인 시 선택 화면 재노출
+export async function resetStudentElectives(courseId, panelIdx, studentId, name) {
+  if (!confirm(`"${name}" 수강생의 선택활동을 초기화하시겠습니까?\n다음 로그인 시 선택 화면이 다시 표시됩니다.`)) return;
+  try {
+    const { deleteField } = await import("https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js");
+    await updateDoc(doc(db, 'courses', courseId, 'students', studentId), {
+      electives: deleteField()
+    });
+    await loadStudents(courseId, panelIdx);
+  } catch (e) {
+    alert('초기화 중 오류가 발생했습니다.');
+  }
+}
+
 // ── 수강생 수정 ──────────────────────────────
 export function startEditStudent(courseId, panelIdx, idx) {
   const s = studentsCache[panelIdx]?.[idx];
@@ -258,24 +237,16 @@ export function startEditStudent(courseId, panelIdx, idx) {
   const row = document.getElementById(`stu-row-${panelIdx}-${idx}`);
   if (!row) return;
   const cid = escapeAttr(courseId);
-  const groupsUnion = panelGroupsUnion[panelIdx] || [];
-  const hasGroups = groupsUnion.length > 0;
+  const isLeadership = state.courseTypeById[courseId] === 'leadership';
 
-  // 분반 정의된 과정에서만 분반 td 노출 (테이블 컬럼 정렬 유지)
-  const groupTd = hasGroups
-    ? `<td>
-        <select id="edit-stu-group-${panelIdx}-${idx}" class="stu-group-select-edit">
-          <option value="">미배정</option>
-          ${groupsUnion.map(g => `<option value="${escapeAttr(g)}"${(s.group || '') === g ? ' selected' : ''}>${escapeHtml(g)}</option>`).join('')}
-        </select>
-      </td>`
-    : '';
+  // 선택활동 컬럼은 편집하지 않음 (자기선택 모델 — 초기화 버튼으로만 관여)
+  const electivesTd = isLeadership ? '<td></td>' : '';
 
   row.innerHTML = `
     <td><input type="checkbox" disabled></td>
     <td><input type="text" id="edit-stu-name-${panelIdx}-${idx}" value="${escapeAttr(s.name)}" maxlength="20" style="width:100%;padding:.4rem .6rem;border:2px solid #0066cc;border-radius:7px;font-size:.88rem;"></td>
     <td><input type="number" id="edit-stu-empno-${panelIdx}-${idx}" value="${escapeAttr(s.empNo)}" min="1" style="width:100%;padding:.4rem .6rem;border:2px solid #0066cc;border-radius:7px;font-size:.88rem;"></td>
-    ${groupTd}
+    ${electivesTd}
     <td></td>
     <td>
       <div class="inst-action-btns">
@@ -291,7 +262,6 @@ export async function saveEditStudent(courseId, panelIdx, idx) {
   if (!s) return;
   const nameEl  = document.getElementById(`edit-stu-name-${panelIdx}-${idx}`);
   const empNoEl = document.getElementById(`edit-stu-empno-${panelIdx}-${idx}`);
-  const groupEl = document.getElementById(`edit-stu-group-${panelIdx}-${idx}`);
   const name  = nameEl?.value.trim();
   const empNo = empNoEl?.value.trim();
   if (!name)  { nameEl?.focus(); return; }
@@ -299,16 +269,11 @@ export async function saveEditStudent(courseId, panelIdx, idx) {
     alert('교번을 올바르게 입력해 주세요. (1 이상의 숫자)');
     empNoEl?.focus(); return;
   }
-  const hasGroups = (panelGroupsUnion[panelIdx] || []).length > 0;
 
   const saveBtn = document.querySelector(`#stu-row-${panelIdx}-${idx} .inst-save-btn`);
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '저장 중...'; }
   try {
-    const updateData = { name, empNo };
-    if (hasGroups && groupEl) {
-      updateData.group = (groupEl.value || '').trim();  // 빈 문자열이면 '미배정'
-    }
-    await updateDoc(doc(db, 'courses', courseId, 'students', s._id), updateData);
+    await updateDoc(doc(db, 'courses', courseId, 'students', s._id), { name, empNo });
     await loadStudents(courseId, panelIdx);
   } catch (e) {
     alert('수정 중 오류가 발생했습니다.');
@@ -404,15 +369,11 @@ function parseExcelFile(panelIdx, file) {
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
 
-      const groupsUnion = panelGroupsUnion[panelIdx] || [];
-      const groupsSet = new Set(groupsUnion);  // 빠른 검증
-
       const parsed = [], errors = [];
       for (let i = 1; i < rows.length; i++) {
         const empNo = String(rows[i][0] || '').trim();
         const name  = String(rows[i][1] || '').trim();
-        const group = String(rows[i][2] || '').trim();  // C열 분반 (선택)
-        if (!empNo && !name && !group) continue;
+        if (!empNo && !name) continue;
         if (!empNo || !/^\d+$/.test(empNo) || parseInt(empNo) < 1) {
           errors.push(`${i+1}행: 교번이 올바르지 않습니다. (값: "${empNo}")`);
           continue;
@@ -421,11 +382,7 @@ function parseExcelFile(panelIdx, file) {
           errors.push(`${i+1}행: 이름이 없습니다.`);
           continue;
         }
-        // 분반이 입력됐는데 회차에 정의되지 않은 이름이면 경고 (저장은 진행)
-        if (group && groupsUnion.length > 0 && !groupsSet.has(group)) {
-          errors.push(`${i+1}행: 분반 "${group}"이(가) 어느 회차에도 정의되지 않았습니다. (그대로 저장됨)`);
-        }
-        parsed.push({ empNo, name, group });
+        parsed.push({ empNo, name });
       }
 
       if (!previewEl) return;
@@ -440,10 +397,9 @@ function parseExcelFile(panelIdx, file) {
       if (errors.length > 0) {
         html += errors.map(err => `<div class="excel-preview-error">${escapeHtml(err)}</div>`).join('');
       }
-      html += parsed.map((s, i) => {
-        const groupTag = s.group ? ` · <span class="rg-tag">${escapeHtml(s.group)}</span>` : '';
-        return `<div class="excel-preview-row">${i+1}. 교번 ${escapeHtml(s.empNo)} · ${escapeHtml(s.name)}${groupTag}</div>`;
-      }).join('');
+      html += parsed.map((s, i) =>
+        `<div class="excel-preview-row">${i+1}. 교번 ${escapeHtml(s.empNo)} · ${escapeHtml(s.name)}</div>`
+      ).join('');
       previewEl.innerHTML = html;
 
       if (parsed.length > 0) {
@@ -478,10 +434,8 @@ export async function uploadExcelStudents(courseId, panelIdx) {
     const slice = data.slice(start, start + CHUNK);
     if (progress) progress.textContent = `등록 중... (${start + slice.length}/${total})`;
     const batch = writeBatch(db);
-    for (const { empNo, name, group } of slice) {
-      const docData = { name, empNo, completed: false, completedAt: null };
-      if (group) docData.group = group;
-      batch.set(doc(studentsRef), docData);
+    for (const { empNo, name } of slice) {
+      batch.set(doc(studentsRef), { name, empNo, completed: false, completedAt: null });
     }
     try {
       await batch.commit();
