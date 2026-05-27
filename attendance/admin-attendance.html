@@ -186,8 +186,10 @@
   </div>
 </div>
 
-<!-- SheetJS for Excel -->
-<script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+<!-- xlsx-js-style: SheetJS Community 의 드롭인 대체 (셀 스타일 지원 추가, XLSX 글로벌 동일) -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<!-- fflate: xlsx 후처리(pageSetup 주입) 용 — xlsx-js-style 가 인쇄 설정을 안 써줘서 직접 zip 편집 -->
+<script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js"></script>
 <script type="module" src="admin-attendance.js"></script>
 </body>
 </html>

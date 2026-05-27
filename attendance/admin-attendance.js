@@ -12,6 +12,7 @@ import { httpsCallable } from "https://www.gstatic.com/firebasejs/12.10.0/fireba
 import {
   escapeHtml, escapeAttr, formatTime, formatFullDate, formatShortDate, getBuiltinHolidays, toDateStr
 } from './utils.js';
+import { exportAttendanceWorkbook } from './admin-attendance-excel.js';
 
 // 관리자 세션은 탭이 닫히면 로그아웃되도록 SESSION persistence 사용
 setPersistence(auth, browserSessionPersistence).catch(() => {});
@@ -978,11 +979,11 @@ function updateSummary() {
 }
 
 // ── 엑셀 다운로드 ──────────────────────────────
+// 출석부 = 요약 시트 + 주차별 상세 시트 (admin-attendance-excel.js)
 window.exportExcel = function() {
   const holidays = getAllHolidays();
   const dates = scheduleDates.filter(d => !holidays.includes(d)).sort();
-  const sessions = dailySessions === 2 ? ['morning', 'afternoon'] : ['single'];
-
+  const sessionKeys = dailySessions === 2 ? ['morning', 'afternoon'] : ['single'];
   const students = [...allStudents].sort((a, b) =>
     String(a.empNo).localeCompare(String(b.empNo), undefined, { numeric: true })
   );
@@ -990,167 +991,20 @@ window.exportExcel = function() {
   if (!students.length) { alert('등록된 교육생이 없습니다.'); return; }
   if (!dates.length) { alert('수업일이 등록되어 있지 않습니다.'); return; }
 
-  const courseName = currentCourseName || '과정명';
-  const team = currentConfig?.team || '';
-  const handler = currentConfig?.handlerName || '';
-  const manager = currentConfig?.managerName || '';
-
-  const STATUS_KO = { present: '출석', late: '지각', leave: '조퇴', absent: '미출석' };
-  const SESS_HDR = dailySessions === 2
-    ? { morning: ['오전 상태', '오전 시각'], afternoon: ['오후 상태', '오후 시각'] }
-    : { single: ['출석 상태', '출석 시각'] };
-
-  const slotsPerDate = sessions.length * 2;
-  const totalCols = 2 + dates.length * slotsPerDate;
-
-  let totalPresent = 0, totalAbsent = 0;
-  const studentRows = students.map(stu => {
-    const row = [String(stu.empNo), stu.name];
-    for (const d of dates) {
-      for (const sess of sessions) {
-        const rec = attendanceIndex.get(`${stu.empNo}_${d}_${sess}`);
-        let statusKo = '미출석', timeStr = '';
-        if (rec) {
-          const st = rec.status || (rec.manual ? 'absent' : 'present');
-          statusKo = STATUS_KO[st] || '미출석';
-          if (st !== 'absent') {
-            timeStr = rec.manual ? (rec.manualTime || '') : (rec.checkedAt ? formatTime(rec.checkedAt) : '');
-            totalPresent++;
-          } else {
-            totalAbsent++;
-          }
-        } else {
-          totalAbsent++;
-        }
-        row.push(statusKo, timeStr);
-      }
-    }
-    return row;
-  });
-
-  const totalSlots = students.length * dates.length * sessions.length;
-  const pct = totalSlots > 0 ? Math.round((totalPresent / totalSlots) * 100) : 0;
-  const periodStr = dates.length ? `${formatFullDate(dates[0])} ~ ${formatFullDate(dates[dates.length - 1])}` : '-';
-
-  const wsData = [];
-  const merges = [];
-  const rowHeights = [];
-  let r = 0;
-
-  const push = (data, h) => {
-    const row = [...data];
-    while (row.length < totalCols) row.push('');
-    wsData.push(row);
-    rowHeights.push(h || 18);
-    return r++;
-  };
-
-  const R_TITLE    = push([courseName], 46);
-  merges.push({ s: { r: R_TITLE, c: 0 }, e: { r: R_TITLE, c: totalCols - 1 } });
-  const R_SUBTITLE = push(['출  석  부'], 28);
-  merges.push({ s: { r: R_SUBTITLE, c: 0 }, e: { r: R_SUBTITLE, c: totalCols - 1 } });
-  push([], 8);
-  const R_SUMMARY  = push([
-    '전체 교육생', `${students.length}명`,
-    '출석', `${totalPresent}건`,
-    '미출석', `${totalAbsent}건`,
-    '출석률', `${pct}%`
-  ], 22);
-  const R_PERIOD   = push(['교육기간', periodStr], 20);
-  merges.push({ s: { r: R_PERIOD, c: 1 }, e: { r: R_PERIOD, c: totalCols - 1 } });
-  push([], 10);
-
-  const R_HDR1 = push(['교번', '이름'], 22);
-  merges.push({ s: { r: R_HDR1, c: 0 }, e: { r: R_HDR1 + 1, c: 0 } });
-  merges.push({ s: { r: R_HDR1, c: 1 }, e: { r: R_HDR1 + 1, c: 1 } });
-  {
-    let c = 2;
-    for (const d of dates) {
-      wsData[R_HDR1][c] = formatFullDate(d);
-      merges.push({ s: { r: R_HDR1, c }, e: { r: R_HDR1, c: c + slotsPerDate - 1 } });
-      c += slotsPerDate;
-    }
+  try {
+    exportAttendanceWorkbook({
+      courseName: currentCourseName || '과정명',
+      students,
+      dates,
+      sessionKeys,
+      attendanceIndex,
+      handlerName: currentConfig?.handlerName || '',
+      managerName: currentConfig?.managerName || '',
+    });
+  } catch (e) {
+    console.error('[exportExcel]', e);
+    alert('엑셀 생성 실패: ' + e.message);
   }
-  const R_HDR2 = push(['', ''], 20);
-  {
-    let c = 2;
-    for (const d of dates) {
-      for (const sess of sessions) {
-        const [lbl1, lbl2] = SESS_HDR[sess];
-        wsData[R_HDR2][c] = lbl1;
-        wsData[R_HDR2][c + 1] = lbl2;
-        c += 2;
-      }
-    }
-  }
-
-  const R_DATA_START = r;
-  for (const row of studentRows) push(row, 18);
-  const R_DATA_END = r - 1;
-
-  push([], 14);
-  const R_WRITER = push(['작 성 자', handler ? `${handler}  (인)` : ''], 28);
-  const R_APPROVER = push(['결 재 자', manager ? `${manager}  (인)` : ''], 28);
-  if (totalCols > 2) {
-    merges.push({ s: { r: R_WRITER,   c: 1 }, e: { r: R_WRITER,   c: totalCols - 1 } });
-    merges.push({ s: { r: R_APPROVER, c: 1 }, e: { r: R_APPROVER, c: totalCols - 1 } });
-  }
-
-  const ws = XLSX.utils.aoa_to_sheet(wsData);
-  ws['!merges'] = merges;
-  const colWidths = [{ wch: 10 }, { wch: 14 }];
-  for (let i = 0; i < dates.length * sessions.length; i++) colWidths.push({ wch: 9 }, { wch: 9 });
-  ws['!cols'] = colWidths;
-  ws['!rows'] = rowHeights.map(h => ({ hpt: h }));
-  ws['!pageSetup'] = { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
-  ws['!margins']   = { left: 0.4, right: 0.4, top: 0.7, bottom: 0.7, header: 0.2, footer: 0.2 };
-
-  const bdr = (rgb = 'C8D4E0', style = 'thin') => {
-    const b = { style, color: { rgb } };
-    return { top: b, bottom: b, left: b, right: b };
-  };
-  const S = {
-    title:       { font: { bold: true, sz: 20, color: { rgb: 'FFFFFF' }, name: '맑은 고딕' }, fill: { patternType: 'solid', fgColor: { rgb: '1F3864' } }, alignment: { horizontal: 'center', vertical: 'center' }, border: bdr('0F2040', 'medium') },
-    subtitle:    { font: { bold: true, sz: 13, color: { rgb: '1F3864' }, name: '맑은 고딕' }, fill: { patternType: 'solid', fgColor: { rgb: 'DDEEFF' } }, alignment: { horizontal: 'center', vertical: 'center' }, border: bdr('A0C0D8') },
-    summLabel:   { font: { bold: true, sz: 9, color: { rgb: '374151' }, name: '맑은 고딕' }, fill: { patternType: 'solid', fgColor: { rgb: 'E0ECFF' } }, alignment: { horizontal: 'center', vertical: 'center' }, border: bdr('A0B8CC') },
-    summValue:   { font: { bold: true, sz: 12, color: { rgb: '1F3864' }, name: '맑은 고딕' }, fill: { patternType: 'solid', fgColor: { rgb: 'F4F8FF' } }, alignment: { horizontal: 'center', vertical: 'center' }, border: bdr('A0B8CC') },
-    summEmpty:   { fill: { patternType: 'solid', fgColor: { rgb: 'FAFCFF' } }, border: bdr('D8E4F0') },
-    periodLabel: { font: { bold: true, sz: 9, color: { rgb: '374151' }, name: '맑은 고딕' }, fill: { patternType: 'solid', fgColor: { rgb: 'F0F4FA' } }, alignment: { horizontal: 'center', vertical: 'center' }, border: bdr('B8C8D8') },
-    periodValue: { font: { sz: 9, color: { rgb: '374151' }, name: '맑은 고딕' }, fill: { patternType: 'solid', fgColor: { rgb: 'FAFCFF' } }, alignment: { horizontal: 'left', vertical: 'center' }, border: bdr('B8C8D8') },
-    hdrFixed:    { font: { bold: true, sz: 10, color: { rgb: 'FFFFFF' }, name: '맑은 고딕' }, fill: { patternType: 'solid', fgColor: { rgb: '1F3864' } }, alignment: { horizontal: 'center', vertical: 'center' }, border: bdr('1A4F8A') },
-    hdrDate:     { font: { bold: true, sz: 9, color: { rgb: 'FFFFFF' }, name: '맑은 고딕' }, fill: { patternType: 'solid', fgColor: { rgb: '2E75B6' } }, alignment: { horizontal: 'center', vertical: 'center' }, border: bdr('1A4F8A') },
-    hdrSub:      { font: { bold: true, sz: 8, color: { rgb: 'FFFFFF' }, name: '맑은 고딕' }, fill: { patternType: 'solid', fgColor: { rgb: '4472C4' } }, alignment: { horizontal: 'center', vertical: 'center' }, border: bdr('1A4F8A') },
-    dataEven:    { font: { sz: 10, name: '맑은 고딕' }, fill: { patternType: 'solid', fgColor: { rgb: 'FFFFFF' } }, alignment: { horizontal: 'center', vertical: 'center' }, border: bdr('D0D8E4') },
-    dataOdd:     { font: { sz: 10, name: '맑은 고딕' }, fill: { patternType: 'solid', fgColor: { rgb: 'EEF4FF' } }, alignment: { horizontal: 'center', vertical: 'center' }, border: bdr('D0D8E4') },
-    absent:      { font: { sz: 10, color: { rgb: 'CC0000' }, name: '맑은 고딕' }, fill: { patternType: 'solid', fgColor: { rgb: 'FFF0F0' } }, alignment: { horizontal: 'center', vertical: 'center' }, border: bdr('E0B0B0') },
-    apprLabel:   { font: { bold: true, sz: 10, name: '맑은 고딕' }, fill: { patternType: 'solid', fgColor: { rgb: 'EEF2F8' } }, alignment: { horizontal: 'center', vertical: 'center' }, border: bdr('888888', 'medium') },
-    apprValue:   { font: { sz: 10, name: '맑은 고딕' }, fill: { patternType: 'solid', fgColor: { rgb: 'FFFFFF' } }, alignment: { horizontal: 'center', vertical: 'center' }, border: bdr('888888', 'medium') },
-    blank:       {}
-  };
-
-  for (let rowR = 0; rowR < wsData.length; rowR++) {
-    for (let colC = 0; colC < totalCols; colC++) {
-      const addr = XLSX.utils.encode_cell({ r: rowR, c: colC });
-      if (!ws[addr]) ws[addr] = { v: '', t: 's' };
-      let s = S.blank;
-      if (rowR === R_TITLE) s = S.title;
-      else if (rowR === R_SUBTITLE) s = S.subtitle;
-      else if (rowR === R_SUMMARY) s = colC < 8 ? (colC % 2 === 0 ? S.summLabel : S.summValue) : S.summEmpty;
-      else if (rowR === R_PERIOD) s = colC === 0 ? S.periodLabel : S.periodValue;
-      else if (rowR === R_HDR1) s = colC <= 1 ? S.hdrFixed : S.hdrDate;
-      else if (rowR === R_HDR2) s = colC <= 1 ? S.hdrFixed : S.hdrSub;
-      else if (rowR >= R_DATA_START && rowR <= R_DATA_END) {
-        const cellVal = wsData[rowR][colC];
-        const isEven = (rowR - R_DATA_START) % 2 === 0;
-        s = cellVal === '미출석' ? S.absent : (isEven ? S.dataEven : S.dataOdd);
-      } else if (rowR === R_WRITER || rowR === R_APPROVER) s = colC === 0 ? S.apprLabel : S.apprValue;
-      ws[addr].s = s;
-    }
-  }
-
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, '출석부');
-  XLSX.writeFile(wb, `출석부_${courseName}_${toDateStr(new Date())}.xlsx`);
 };
 
 // ── 기기 잠금 초기화 ──────────────────────────────
