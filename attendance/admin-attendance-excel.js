@@ -541,6 +541,9 @@ function buildWeekSheet(ctx, weekIdx, weekDates) {
 // ── pageSetup 후처리 (xlsx-js-style 미지원 우회) ─────────
 // xlsx-js-style 은 sheetPr/pageSetup/printOptions 를 출력 XML 에 쓰지 않음.
 // 출력 zip 을 fflate 로 풀어 워크시트 XML 에 직접 주입.
+// OOXML schema 순서를 엄격히 지켜야 Excel 이 거부하지 않음:
+//   sheetPr → dimension → sheetViews → sheetFormatPr → cols → sheetData → ...
+//   → mergeCells → printOptions → pageMargins → pageSetup → headerFooter → ignoredErrors
 function patchPageSetup(arrayBuffer, sheetOrientations) {
   if (typeof fflate === 'undefined') {
     console.warn('[excel] fflate 미로드 — pageSetup 주입 생략. 인쇄 시 가로/맞춤 수동 설정 필요.');
@@ -553,15 +556,33 @@ function patchPageSetup(arrayBuffer, sheetOrientations) {
     const sheetPath = `xl/worksheets/sheet${i + 1}.xml`;
     if (!files[sheetPath]) continue;
     let xml = dec.decode(files[sheetPath]);
+
+    // 1) sheetPr (fitToPage="1") — <worksheet ...> 직후, dimension 앞에 삽입
     if (!/<sheetPr[\s>]/.test(xml)) {
       xml = xml.replace(
         /(<worksheet\b[^>]*>)/,
         '$1<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>'
       );
     }
+
+    // 2) printOptions — <pageMargins/> 앞에 삽입
+    if (!/<printOptions[\s/>]/.test(xml)) {
+      xml = xml.replace(
+        /<pageMargins\b/,
+        '<printOptions horizontalCentered="1"/><pageMargins'
+      );
+    }
+
+    // 3) pageSetup — <pageMargins .../> 바로 뒤에 삽입
     const orient = sheetOrientations[i];
-    const setupXml = `<printOptions horizontalCentered="1"/><pageSetup orientation="${orient}" paperSize="9" fitToHeight="1" fitToWidth="1"/>`;
-    xml = xml.replace('</worksheet>', `${setupXml}</worksheet>`);
+    const pageSetupXml = `<pageSetup orientation="${orient}" paperSize="9" fitToHeight="1" fitToWidth="1"/>`;
+    if (!/<pageSetup[\s/>]/.test(xml)) {
+      xml = xml.replace(
+        /(<pageMargins\b[^/]*\/>)/,
+        `$1${pageSetupXml}`
+      );
+    }
+
     files[sheetPath] = enc.encode(xml);
   }
   return fflate.zipSync(files);
