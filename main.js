@@ -31,8 +31,11 @@ function getCategory(inst) {
 }
 
 function instructorElectiveKey(inst) {
-  // 학생 electives 배열의 키 — 강의명 기준. 강의명이 비면 강사명으로 fallback.
-  return (inst.education || inst.name || '').trim();
+  // 학생 electives 배열의 키 — 강사 단위 고유키 (강의명 + 강사명 합성).
+  const edu = (inst.education || '').trim();
+  const nm = (inst.name || '').trim();
+  if (!edu && !nm) return '';
+  return `${edu}|||${nm}`;
 }
 
 async function doLogin() {
@@ -239,9 +242,9 @@ async function selectRound(roundId) {
 
     document.getElementById('screen-round-select').style.display = 'none';
 
-    if (electiveCategories.length > 0 && !currentUser.electivesPersisted) {
+    if (electiveCategories.length > 0) {
       // 선택활동 화면으로 진입
-      showElectivesScreen(electiveCategories, allInstructors);
+      showElectivesScreen(allInstructors);
     } else {
       // 카테고리 없음 또는 이미 저장된 선택분 사용 → 바로 응답 화면
       enterConfirmWithFilteredInstructors(allInstructors);
@@ -268,37 +271,30 @@ function collectElectiveCategories(instructors) {
   return out;
 }
 
-function showElectivesScreen(categories, instructors) {
+function showElectivesScreen(instructors) {
   document.getElementById('electives-greeting').textContent = `${currentUser.name}님, 안녕하세요!`;
 
-  // 카테고리별 강사 그루핑 (강사 순서 보존)
-  const byCat = {};
-  categories.forEach(c => { byCat[c] = []; });
-  instructors.forEach(inst => {
-    const c = getCategory(inst);
-    if (c !== COMMON_CATEGORY && byCat[c]) byCat[c].push(inst);
-  });
+  // 카테고리 구분 없이, 공통이 아닌 선택활동 강사를 한 목록으로 나열한다 (강사 순서 보존).
+  // 학생은 본인이 들은 강사 이름만 직접 골라 그 강사만 평가한다 (복수 선택 가능).
+  const persistedSet = new Set(Array.isArray(currentUser.electives) ? currentUser.electives : []);
+  const electiveInstructors = instructors.filter(inst => getCategory(inst) !== COMMON_CATEGORY);
 
-  const sections = categories.map(c => {
-    const items = byCat[c].map((inst, i) => {
-      const key = instructorElectiveKey(inst);
-      if (!key) return '';
-      const label = inst.name
-        ? `${escapeHtml(inst.education || '')} · ${escapeHtml(inst.name)}`
-        : escapeHtml(inst.education || '');
-      const id = `elect-${escapeAttr(c)}-${i}`;
-      return `<label class="elect-choice" for="${id}">
-        <input type="checkbox" id="${id}" data-key="${escapeAttr(key)}" data-cat="${escapeAttr(c)}">
-        <span class="elect-choice-label">${label}</span>
-      </label>`;
-    }).join('');
-    return `<section class="electives-cat">
-      <h3 class="electives-cat-title">${escapeHtml(c)}</h3>
-      <div class="electives-cat-list">${items}</div>
-    </section>`;
+  const items = electiveInstructors.map((inst, i) => {
+    const key = instructorElectiveKey(inst);
+    if (!key) return '';
+    const nm = escapeHtml(inst.name || '');
+    const edu = (inst.education || '').trim();
+    const sub = edu ? `<span class="elect-choice-sub">${escapeHtml(edu)}</span>` : '';
+    const id = `elect-${i}`;
+    const checked = persistedSet.has(key) ? ' checked' : '';
+    return `<label class="elect-choice" for="${id}">
+      <input type="checkbox" id="${id}" data-key="${escapeAttr(key)}"${checked}>
+      <span class="elect-choice-label">${nm}${sub}</span>
+    </label>`;
   }).join('');
 
-  document.getElementById('electives-sections').innerHTML = sections;
+  document.getElementById('electives-sections').innerHTML =
+    `<div class="electives-flat">${items}</div>`;
   document.getElementById('electives-error').style.display = 'none';
   document.getElementById('screen-electives').style.display = 'block';
 }
@@ -463,7 +459,6 @@ async function submitSurvey() {
     };
     // 중견리더 모드 + 미저장된 선택분이 있으면 서버 트랜잭션에 함께 넣어 학생 doc 에 영속.
     if (currentUser.type === 'leadership'
-        && !currentUser.electivesPersisted
         && Array.isArray(currentUser.electives)) {
       payload.electives = currentUser.electives;
     }

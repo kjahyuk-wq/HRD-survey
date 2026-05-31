@@ -507,3 +507,7 @@ button:disabled { opacity: 0.65; cursor: not-allowed; transform: none; }
   margin: .8rem 0 0;
 }
 .cat-header-avg { margin-left: auto; font-size: .85rem; font-weight: 600; }
+
+/* 선택활동 강사 선택 — 카테고리 구분 없는 단일 목록 */
+.electives-flat { display: flex; flex-direction: column; gap: .55rem; margin-top: 1rem; }
+.elect-choice-sub { display: block; font-size: .8rem; color: #8a8f98; margin-top: .15rem; font-weight: 400; }
