@@ -274,27 +274,42 @@ function collectElectiveCategories(instructors) {
 function showElectivesScreen(instructors) {
   document.getElementById('electives-greeting').textContent = `${currentUser.name}님, 안녕하세요!`;
 
-  // 카테고리 구분 없이, 공통이 아닌 선택활동 강사를 한 목록으로 나열한다 (강사 순서 보존).
-  // 학생은 본인이 들은 강사 이름만 직접 골라 그 강사만 평가한다 (복수 선택 가능).
+  // 공통이 아닌 선택활동 강사를 카테고리별로 묶어 보여준다 (카테고리·강사 등장 순서 보존).
+  // 학생은 본인이 들은 강사 이름을 직접 골라 그 강사만 평가한다 (복수 선택 가능).
   const persistedSet = new Set(Array.isArray(currentUser.electives) ? currentUser.electives : []);
   const electiveInstructors = instructors.filter(inst => getCategory(inst) !== COMMON_CATEGORY);
 
-  const items = electiveInstructors.map((inst, i) => {
-    const key = instructorElectiveKey(inst);
-    if (!key) return '';
-    const nm = escapeHtml(inst.name || '');
-    const edu = (inst.education || '').trim();
-    const sub = edu ? `<span class="elect-choice-sub">${escapeHtml(edu)}</span>` : '';
-    const id = `elect-${i}`;
-    const checked = persistedSet.has(key) ? ' checked' : '';
-    return `<label class="elect-choice" for="${id}">
-      <input type="checkbox" id="${id}" data-key="${escapeAttr(key)}"${checked}>
-      <span class="elect-choice-label">${nm}${sub}</span>
-    </label>`;
+  // 카테고리 등장 순서를 보존하며 그루핑
+  const order = [];
+  const byCat = {};
+  electiveInstructors.forEach(inst => {
+    const c = getCategory(inst);
+    if (!byCat[c]) { byCat[c] = []; order.push(c); }
+    byCat[c].push(inst);
+  });
+
+  let idx = 0;
+  const sections = order.map(c => {
+    const choices = byCat[c].map(inst => {
+      const key = instructorElectiveKey(inst);
+      if (!key) return '';
+      const nm = escapeHtml(inst.name || '');
+      const edu = (inst.education || '').trim();
+      const sub = edu ? `<span class="elect-choice-sub">${escapeHtml(edu)}</span>` : '';
+      const id = `elect-${idx++}`;
+      const checked = persistedSet.has(key) ? ' checked' : '';
+      return `<label class="elect-choice" for="${id}">
+        <input type="checkbox" id="${id}" data-key="${escapeAttr(key)}"${checked}>
+        <span class="elect-choice-label">${nm}${sub}</span>
+      </label>`;
+    }).join('');
+    return `<section class="electives-cat">
+      <h3 class="electives-cat-title">${escapeHtml(c)}</h3>
+      <div class="electives-cat-list">${choices}</div>
+    </section>`;
   }).join('');
 
-  document.getElementById('electives-sections').innerHTML =
-    `<div class="electives-flat">${items}</div>`;
+  document.getElementById('electives-sections').innerHTML = sections;
   document.getElementById('electives-error').style.display = 'none';
   document.getElementById('screen-electives').style.display = 'block';
 }
