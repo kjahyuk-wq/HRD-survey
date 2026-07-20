@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>관리자 - 대전광역시 인재개발원</title>
   <link href="style.css?v=32" rel="stylesheet">
-  <link href="admin.css?v=32" rel="stylesheet">
+  <link href="admin.css?v=33" rel="stylesheet">
   <script>
     // 폐기된 Cloudflare Pages 배포 접근 차단 (index.html 과 동일 정책).
     (function () {
@@ -87,6 +87,11 @@
               <span>중견리더 양성과정</span>
               <em class="course-type-hint">회차별 공통/선택 강사 운영</em>
             </label>
+            <label class="course-type-option">
+              <input type="radio" name="new-course-type" value="newcomer">
+              <span>지방공공기관 신규자</span>
+              <em class="course-type-hint">신규자 전용 설문 + 반별 강사 운영</em>
+            </label>
           </div>
         </div>
 
@@ -111,7 +116,7 @@
           <select id="stats-round-select" class="round-select-inline" style="display:none;" onchange="loadStats()" title="회차 선택 (중견리더 양성과정)">
             <option value="">-- 회차 선택 --</option>
           </select>
-          <select id="stats-group-select" class="round-select-inline" style="display:none;" onchange="loadStats()" title="강사 카테고리 필터 (중견리더 양성과정)">
+          <select id="stats-group-select" class="round-select-inline" style="display:none;" onchange="loadStats()" title="강사 카테고리 필터 (중견리더) / 반 필터 (신규자)">
             <option value="">(전체)</option>
           </select>
           <button class="icon-refresh-btn" onclick="loadStats()" title="새로고침">새로고침</button>
@@ -151,7 +156,7 @@
           </div>
 
           <div id="demographics-stats-section">
-            <div class="section-title">응답자 특성 (Q11~Q16)</div>
+            <div class="section-title">응답자 특성·선택형 문항</div>
             <div class="question-stats" id="demographics-stats"></div>
           </div>
 
@@ -171,7 +176,7 @@
             <select id="preview-round-select" class="round-select-inline" style="display:none;" onchange="loadPreviewInstructors()" title="회차 선택 (중견리더 양성과정)">
               <option value="">-- 회차 선택 --</option>
             </select>
-            <select id="preview-group-select" class="round-select-inline" style="display:none;" onchange="loadPreviewInstructors()" title="강사 카테고리 필터 (중견리더 양성과정)">
+            <select id="preview-group-select" class="round-select-inline" style="display:none;" onchange="loadPreviewInstructors()" title="강사 카테고리 필터 (중견리더) / 반 필터 (신규자)">
               <option value="">(전체)</option>
             </select>
             <button class="icon-refresh-btn" onclick="loadPreviewInstructors()" title="새로고침">새로고침</button>
@@ -195,6 +200,9 @@
             </div>
 
             <p class="sv-guide">각 문항에 대해 1(매우 불만족) ~ 5(매우 만족)으로 응답해 주세요.</p>
+
+            <!-- 표준(단기/중견리더) 고정 문항 -->
+            <div id="preview-standard-questions">
 
             <!-- 교육기간 -->
             <div class="cat-header" style="margin-top:0;">교육기간</div>
@@ -382,6 +390,11 @@
               </div>
             </div>
 
+            </div><!-- /preview-standard-questions -->
+
+            <!-- 지방공공기관 신규자 과정 고정 문항 (동적 생성) -->
+            <div id="preview-newcomer-questions" style="display:none;"></div>
+
             <!-- 강사별 만족도 (동적 생성) -->
             <div id="preview-instructor-questions"></div>
 
@@ -412,6 +425,6 @@
     </div>
   </div>
 
-  <script type="module" src="admin.js?v=35"></script>
+  <script type="module" src="admin.js?v=36"></script>
 </body>
 </html>

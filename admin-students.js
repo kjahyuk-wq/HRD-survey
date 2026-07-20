@@ -14,7 +14,7 @@ const excelStudentData = {};
 // ── 수강생 관리 ──────────────────────────────
 export async function loadStudents(courseId, panelIdx) {
   if (!courseId || panelIdx === undefined) return;
-  initExcelDragDrop(panelIdx);
+  initExcelDragDrop(courseId, panelIdx);
 
   const loadingEl = document.getElementById(`stu-loading-${panelIdx}`);
   const listEl    = document.getElementById(`stu-list-${panelIdx}`);
@@ -28,6 +28,7 @@ export async function loadStudents(courseId, panelIdx) {
   if (statsEl)  statsEl.innerHTML = '';
 
   const isLeadership = state.courseTypeById[courseId] === 'leadership';
+  const isNewcomer   = state.courseTypeById[courseId] === 'newcomer';
 
   try {
     const snap = await getDocs(collection(db, 'courses', courseId, 'students'));
@@ -59,9 +60,15 @@ export async function loadStudents(courseId, panelIdx) {
       return;
     }
 
-    // 중견리더 과정에서만 '선택활동' 컬럼 노출
-    const electivesCol = isLeadership ? '<th>선택활동</th>' : '';
+    // 중견리더 과정에서만 '선택활동' 컬럼, 신규자 과정에서만 '반' 컬럼 노출
+    const electivesCol = isLeadership ? '<th>선택활동</th>' : (isNewcomer ? '<th>반</th>' : '');
     const electivesCellFn = s => {
+      if (isNewcomer) {
+        const g = (typeof s.group === 'string') ? s.group.trim() : '';
+        return g
+          ? `<td><span class="rg-tag">${escapeHtml(g)}</span></td>`
+          : '<td><span class="rg-empty">미지정</span></td>';
+      }
       if (!isLeadership) return '';
       if (!Array.isArray(s.electives)) {
         return '<td><span class="rg-empty">미선택</span></td>';
@@ -119,8 +126,10 @@ export async function loadStudents(courseId, panelIdx) {
 export async function addStudent(courseId, panelIdx) {
   const nameEl  = document.getElementById(`new-stu-name-${panelIdx}`);
   const empNoEl = document.getElementById(`new-stu-empno-${panelIdx}`);
+  const groupEl = document.getElementById(`new-stu-group-${panelIdx}`);  // 신규자 과정에만 존재
   const name = nameEl?.value.trim() || '';
   const empNo = empNoEl?.value.trim() || '';
+  const group = groupEl?.value.trim() || '';
 
   if (!name) { nameEl?.focus(); return; }
   if (!/^\d+$/.test(empNo) || parseInt(empNo) < 1) { alert('교번을 올바르게 입력해 주세요. (1 이상의 숫자)'); return; }
@@ -129,12 +138,13 @@ export async function addStudent(courseId, panelIdx) {
   if (btn) { btn.disabled = true; btn.textContent = '등록 중...'; }
 
   try {
-    await addDoc(collection(db, 'courses', courseId, 'students'), {
-      name, empNo, completed: false, completedAt: null
-    });
+    const docData = { name, empNo, completed: false, completedAt: null };
+    if (group) docData.group = group;
+    await addDoc(collection(db, 'courses', courseId, 'students'), docData);
     lsInvalidate(`counts:${courseId}`);
     if (nameEl) nameEl.value = '';
     if (empNoEl) empNoEl.value = '';
+    if (groupEl) groupEl.value = '';
     await loadStudents(courseId, panelIdx);
   } catch (e) {
     console.error('addStudent 실패:', e);
@@ -238,9 +248,13 @@ export function startEditStudent(courseId, panelIdx, idx) {
   if (!row) return;
   const cid = escapeAttr(courseId);
   const isLeadership = state.courseTypeById[courseId] === 'leadership';
+  const isNewcomer   = state.courseTypeById[courseId] === 'newcomer';
 
   // 선택활동 컬럼은 편집하지 않음 (자기선택 모델 — 초기화 버튼으로만 관여)
-  const electivesTd = isLeadership ? '<td></td>' : '';
+  // 신규자 과정의 반 컬럼은 관리자 지정 모델이므로 여기서 직접 편집
+  const electivesTd = isNewcomer
+    ? `<td><input type="text" id="edit-stu-group-${panelIdx}-${idx}" value="${escapeAttr(s.group || '')}" maxlength="20" placeholder="미지정" style="width:100%;padding:.4rem .6rem;border:2px solid #0066cc;border-radius:7px;font-size:.88rem;"></td>`
+    : (isLeadership ? '<td></td>' : '');
 
   row.innerHTML = `
     <td><input type="checkbox" disabled></td>
@@ -262,6 +276,7 @@ export async function saveEditStudent(courseId, panelIdx, idx) {
   if (!s) return;
   const nameEl  = document.getElementById(`edit-stu-name-${panelIdx}-${idx}`);
   const empNoEl = document.getElementById(`edit-stu-empno-${panelIdx}-${idx}`);
+  const groupEl = document.getElementById(`edit-stu-group-${panelIdx}-${idx}`);  // 신규자 과정에만 존재
   const name  = nameEl?.value.trim();
   const empNo = empNoEl?.value.trim();
   if (!name)  { nameEl?.focus(); return; }
@@ -273,7 +288,9 @@ export async function saveEditStudent(courseId, panelIdx, idx) {
   const saveBtn = document.querySelector(`#stu-row-${panelIdx}-${idx} .inst-save-btn`);
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '저장 중...'; }
   try {
-    await updateDoc(doc(db, 'courses', courseId, 'students', s._id), { name, empNo });
+    const updatePayload = { name, empNo };
+    if (groupEl) updatePayload.group = groupEl.value.trim();  // 빈 값 = 미지정(공통만 평가)
+    await updateDoc(doc(db, 'courses', courseId, 'students', s._id), updatePayload);
     await loadStudents(courseId, panelIdx);
   } catch (e) {
     alert('수정 중 오류가 발생했습니다.');
@@ -301,7 +318,7 @@ function initDocDragGuard() {
   });
 }
 
-function initExcelDragDrop(panelIdx) {
+function initExcelDragDrop(courseId, panelIdx) {
   initDocDragGuard();
   const area = document.getElementById(`stu-panel-${panelIdx}`)?.querySelector('.stu-excel-area');
   if (!area || area.dataset.dragInit) return;
@@ -340,20 +357,20 @@ function initExcelDragDrop(panelIdx) {
     }
     const nameEl = document.getElementById(`stu-excel-name-${panelIdx}`);
     if (nameEl) nameEl.textContent = file.name;
-    parseExcelFile(panelIdx, file);
+    parseExcelFile(courseId, panelIdx, file);
   });
 }
 
-export async function handleExcelUpload(panelIdx, input) {
+export async function handleExcelUpload(courseId, panelIdx, input) {
   const file = input.files[0];
   if (!file) return;
   await loadXLSX();
   const nameEl = document.getElementById(`stu-excel-name-${panelIdx}`);
   if (nameEl) nameEl.textContent = file.name;
-  parseExcelFile(panelIdx, file);
+  parseExcelFile(courseId, panelIdx, file);
 }
 
-function parseExcelFile(panelIdx, file) {
+function parseExcelFile(courseId, panelIdx, file) {
   const previewEl  = document.getElementById(`stu-excel-preview-${panelIdx}`);
   const progressEl = document.getElementById(`stu-excel-progress-${panelIdx}`);
   const btn        = document.getElementById(`stu-excel-btn-${panelIdx}`);
@@ -362,6 +379,7 @@ function parseExcelFile(panelIdx, file) {
   if (btn) btn.disabled = true;
   excelStudentData[panelIdx] = [];
 
+  const isNewcomer = state.courseTypeById[courseId] === 'newcomer';
   const reader = new FileReader();
   reader.onload = function(e) {
     try {
@@ -373,6 +391,8 @@ function parseExcelFile(panelIdx, file) {
       for (let i = 1; i < rows.length; i++) {
         const empNo = String(rows[i][0] || '').trim();
         const name  = String(rows[i][1] || '').trim();
+        // 신규자 과정만 C열 = 반 (비움 = 미지정 → 공통 강사만 평가)
+        const group = isNewcomer ? String(rows[i][2] || '').trim() : '';
         if (!empNo && !name) continue;
         if (!empNo || !/^\d+$/.test(empNo) || parseInt(empNo) < 1) {
           errors.push(`${i+1}행: 교번이 올바르지 않습니다. (값: "${empNo}")`);
@@ -382,7 +402,7 @@ function parseExcelFile(panelIdx, file) {
           errors.push(`${i+1}행: 이름이 없습니다.`);
           continue;
         }
-        parsed.push({ empNo, name });
+        parsed.push({ empNo, name, group });
       }
 
       if (!previewEl) return;
@@ -397,9 +417,10 @@ function parseExcelFile(panelIdx, file) {
       if (errors.length > 0) {
         html += errors.map(err => `<div class="excel-preview-error">${escapeHtml(err)}</div>`).join('');
       }
-      html += parsed.map((s, i) =>
-        `<div class="excel-preview-row">${i+1}. 교번 ${escapeHtml(s.empNo)} · ${escapeHtml(s.name)}</div>`
-      ).join('');
+      html += parsed.map((s, i) => {
+        const groupTag = s.group ? ` <span class="rg-tag">${escapeHtml(s.group)}</span>` : '';
+        return `<div class="excel-preview-row">${i+1}. 교번 ${escapeHtml(s.empNo)} · ${escapeHtml(s.name)}${groupTag}</div>`;
+      }).join('');
       previewEl.innerHTML = html;
 
       if (parsed.length > 0) {
@@ -434,8 +455,10 @@ export async function uploadExcelStudents(courseId, panelIdx) {
     const slice = data.slice(start, start + CHUNK);
     if (progress) progress.textContent = `등록 중... (${start + slice.length}/${total})`;
     const batch = writeBatch(db);
-    for (const { empNo, name } of slice) {
-      batch.set(doc(studentsRef), { name, empNo, completed: false, completedAt: null });
+    for (const { empNo, name, group } of slice) {
+      const docData = { name, empNo, completed: false, completedAt: null };
+      if (group) docData.group = group;
+      batch.set(doc(studentsRef), docData);
     }
     try {
       await batch.commit();

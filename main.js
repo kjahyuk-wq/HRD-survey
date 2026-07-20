@@ -8,6 +8,33 @@ import { httpsCallable } from "https://www.gstatic.com/firebasejs/12.10.0/fireba
 // 강사 카테고리 캐논. 빈 값/'common'/'공통' 은 모두 공통.
 const COMMON_CATEGORY = '공통';
 
+// 지방공공기관 신규자 과정(type: 'newcomer') 고정 문항 — index.html 블록과 1:1.
+// scale = 5점 라디오(name=key), choice = 문자열 라디오(name=key). 순서 = 화면 순서.
+const NC_ITEMS = [
+  { key: 'nq1',  kind: 'scale' },
+  { key: 'nq2',  kind: 'choice' },
+  { key: 'nq3',  kind: 'choice' },
+  { key: 'nq4',  kind: 'scale' },
+  { key: 'nq5',  kind: 'scale' },
+  { key: 'nq6',  kind: 'scale' },
+  { key: 'nq7',  kind: 'scale' },
+  { key: 'nq8',  kind: 'scale' },
+  { key: 'nq9',  kind: 'scale' },
+  { key: 'nq10', kind: 'scale' },
+  { key: 'nq11', kind: 'scale' },
+  { key: 'nq12', kind: 'scale' },
+  { key: 'nq13', kind: 'scale' },
+  { key: 'nq14', kind: 'scale' },
+  { key: 'nq15', kind: 'choice' },
+  { key: 'nq16', kind: 'choice' },
+];
+
+function normalizeCourseType(t) {
+  if (t === 'leadership') return 'leadership';
+  if (t === 'newcomer') return 'newcomer';
+  return 'standard';
+}
+
 // 중견리더 모드는 roundId/roundNumber/roundName 채워지고 instructors는 (공통 + 학생 선택 강사) 로 구성.
 // allRoundInstructors 는 선택활동 화면에서 카테고리 그루핑용 원본 보관.
 // electives 는 학생이 고른 강사 키 배열 (정규화된 강의명 = inst.education).
@@ -19,6 +46,7 @@ let currentUser = {
   allRoundInstructors: [],
   electives: null,
   electivesPersisted: false,
+  group: '',   // 신규자 과정: 관리자가 명단에 지정한 반 (빈 값 = 미지정 → 공통 강사만 평가)
 };
 
 function getCategory(inst) {
@@ -89,11 +117,11 @@ async function doLogin() {
     const matchCourseId = found.ref.parent.parent.id;
     const matchCourseData = courseDoc.data();
     const matchCourseName = matchCourseData.name;
-    const courseType = matchCourseData.type === 'leadership' ? 'leadership' : 'standard';
+    const courseType = normalizeCourseType(matchCourseData.type);
 
-    // 단기과정: completed 플래그로 한 번만 차단
+    // 단기·신규자 과정: completed 플래그로 한 번만 차단
     // 중견리더: 회차 선택 화면에서 회차별로 disabled 처리 (모든 회차 완료 시 안내)
-    if (courseType === 'standard' && studentData.completed) {
+    if (courseType !== 'leadership' && studentData.completed) {
       showLoginError('이미 설문에 참여하셨습니다.\n감사합니다!');
       reset(); return;
     }
@@ -120,20 +148,34 @@ async function doLogin() {
       await showRoundSelect();
     } else {
       const instrSnap = await getDocs(collection(db, 'courses', matchCourseId, 'instructors'));
-      const instructors = instrSnap.docs.map(d => d.data());
+      let instructors = instrSnap.docs.map(d => d.data());
       sortInstructors(instructors);
+
+      // 신규자 과정: 분반 운영 과목은 강사 doc 에 group(반)이 있고,
+      // 학생은 공통(group 없음) + 본인 반 강사만 평가한다.
+      const studentGroup = courseType === 'newcomer'
+        ? String(studentData.group || '').trim()
+        : '';
+      if (courseType === 'newcomer') {
+        instructors = instructors.filter(inst => {
+          const g = (typeof inst.group === 'string') ? inst.group.trim() : '';
+          return !g || g === studentGroup;
+        });
+      }
+
       currentUser = {
         name, empNo,
         course: matchCourseName,
         courseId: matchCourseId,
         studentRef: found.ref,
-        type: 'standard',
+        type: courseType,
         instructors,
         roundId: '', roundNumber: 0, roundName: '',
         completedRounds: [],
         allRoundInstructors: [],
         electives: null,
         electivesPersisted: false,
+        group: studentGroup,
       };
       document.getElementById('confirm-greeting').textContent = `${name}님, 안녕하세요!`;
       document.getElementById('confirm-course-name').textContent = matchCourseName;
@@ -349,7 +391,9 @@ function enterConfirmWithFilteredInstructors(allInstructors) {
 }
 
 function updateSurveyMeta(instructorCount) {
-  const totalQ = 19 + instructorCount;
+  // 표준: 16문항 + 3주관식 / 신규자: 16문항 + 6-1·7-1 + 3주관식
+  const base = currentUser.type === 'newcomer' ? 21 : 19;
+  const totalQ = base + instructorCount;
   const mins = Math.max(3, Math.round(totalQ * 0.4));
   document.getElementById('survey-q-count').textContent = `총 ${totalQ}문항`;
   document.getElementById('survey-time').textContent = `약 ${mins}분`;
@@ -368,6 +412,11 @@ async function startSurvey() {
   const badge = document.getElementById('survey-course-badge');
   badge.textContent = currentUser.course;
   badge.style.display = 'inline-block';
+
+  // 과정 타입별 고정 문항 블록 전환 (표준 vs 신규자)
+  const isNewcomer = currentUser.type === 'newcomer';
+  document.getElementById('survey-standard-questions').style.display = isNewcomer ? 'none' : 'block';
+  document.getElementById('survey-newcomer-questions').style.display = isNewcomer ? 'block' : 'none';
 
   renderInstructorQuestions(currentUser.instructors);
   updateSurveyMeta(currentUser.instructors.length);
@@ -404,14 +453,32 @@ function renderInstructorQuestions(instructors) {
   }).join('');
 }
 
-async function submitSurvey() {
+// 신규자 과정 고정 문항 수집 — 전부 필수. 미응답 시 해당 카드로 스크롤 후 null 반환.
+function collectNewcomerAnswers() {
+  const out = {};
+  for (const { key, kind } of NC_ITEMS) {
+    const selected = document.querySelector(`input[name="${key}"]:checked`);
+    if (!selected) {
+      document.getElementById('error-msg').style.display = 'block';
+      document.querySelector(`[data-question="${key}"]`).scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return null;
+    }
+    out[key] = kind === 'scale' ? parseInt(selected.value) : selected.value;
+  }
+  out.nq6_comment = document.getElementById('nq6-comment').value.trim();
+  out.nq7_comment = document.getElementById('nq7-comment').value.trim();
+  return out;
+}
+
+// 표준(단기/중견리더) 고정 문항 수집 — 미응답 시 스크롤 후 null 반환.
+function collectStandardAnswers() {
   const answers = [];
   for (let i = 1; i <= 9; i++) {
     const selected = document.querySelector(`input[name="q${i}"]:checked`);
     if (!selected) {
       document.getElementById('error-msg').style.display = 'block';
       document.querySelector(`[data-question="${i}"]`).scrollIntoView({ behavior: 'smooth', block: 'center' });
-      return;
+      return null;
     }
     answers.push(parseInt(selected.value));
   }
@@ -424,10 +491,25 @@ async function submitSurvey() {
     if (!selected) {
       document.getElementById('error-msg').style.display = 'block';
       document.querySelector(`[data-question="${i}"]`).scrollIntoView({ behavior: 'smooth', block: 'center' });
-      return;
+      return null;
     }
     demographics[`q${i}`] = selected.value;
   }
+
+  return {
+    q1: answers[0], q2: answers[1], q3: answers[2], q4: answers[3], q5: answers[4],
+    q6: answers[5], q7: answers[6], q8: answers[7], q9: answers[8],
+    q10_comment: q10Comment,
+    q11: demographics.q11, q12: demographics.q12, q13: demographics.q13,
+    q14: demographics.q14, q15: demographics.q15, q16: demographics.q16,
+  };
+}
+
+async function submitSurvey() {
+  const fixedAnswers = currentUser.type === 'newcomer'
+    ? collectNewcomerAnswers()
+    : collectStandardAnswers();
+  if (!fixedAnswers) return;
 
   const instructorScores = {};
   for (let idx = 0; idx < currentUser.instructors.length; idx++) {
@@ -454,13 +536,9 @@ async function submitSurvey() {
   btn.disabled = true;
 
   try {
-    // 응답 본문 — name/empNo/course/submittedAt 은 서버가 신뢰 가능한 소스에서 박음 (보안)
+    // 응답 본문 — name/empNo/course/submittedAt/반 은 서버가 신뢰 가능한 소스에서 박음 (보안)
     const response = {
-      q1: answers[0], q2: answers[1], q3: answers[2], q4: answers[3], q5: answers[4],
-      q6: answers[5], q7: answers[6], q8: answers[7], q9: answers[8],
-      q10_comment: q10Comment,
-      q11: demographics.q11, q12: demographics.q12, q13: demographics.q13,
-      q14: demographics.q14, q15: demographics.q15, q16: demographics.q16,
+      ...fixedAnswers,
       instructors: instructorScores,
       comment1, comment2, comment3,
     };

@@ -303,7 +303,15 @@ exports.registerAttendanceStudents = onCall(
   }
 );
 
-// ── 만족도 응답 제출 (단기 + 회차 통합) ─────────────────
+// 지방공공기관 신규자 과정 (course.type === 'newcomer') 고정 문항 키.
+// 클라이언트 index.html / admin-utils.js 의 NC_SURVEY 와 1:1 로 유지할 것.
+const NC_SCALE_KEYS = [
+  'nq1', 'nq4', 'nq5', 'nq6', 'nq7', 'nq8', 'nq9',
+  'nq10', 'nq11', 'nq12', 'nq13', 'nq14',
+];
+const NC_CHOICE_KEYS = ['nq2', 'nq3', 'nq15', 'nq16'];
+
+// ── 만족도 응답 제출 (단기 + 회차 + 신규자 통합) ─────────────────
 // 학생 직접 쓰기를 차단하고 서버에서 본인성/중복 검증 + 트랜잭션 처리.
 // rules 의 students.update / responses.create 가 admin only 로 잠긴 뒤로 이 함수만 통과 경로.
 exports.submitSurveyResponse = onCall(
@@ -339,19 +347,6 @@ exports.submitSurveyResponse = onCall(
     const ip = request.rawRequest?.ip || 'unknown';
     await enforceRateLimit(`submit_${ip}`, { windowMs: 60_000, max: 10 });
 
-    // 응답 필드 검증
-    for (let i = 1; i <= 9; i++) {
-      const v = response[`q${i}`];
-      if (!Number.isInteger(v) || v < 1 || v > 5) {
-        throw new HttpsError('invalid-argument', `q${i} 값이 올바르지 않습니다.`);
-      }
-    }
-    for (let i = 11; i <= 16; i++) {
-      const v = response[`q${i}`];
-      if (typeof v !== 'string' || v.length > 50) {
-        throw new HttpsError('invalid-argument', `q${i} 값이 올바르지 않습니다.`);
-      }
-    }
     if (!response.instructors || typeof response.instructors !== 'object') {
       throw new HttpsError('invalid-argument', '강사 평가가 없습니다.');
     }
@@ -371,6 +366,8 @@ exports.submitSurveyResponse = onCall(
       }
     };
     checkLen('q10_comment', 1000);
+    checkLen('nq6_comment', 1000);
+    checkLen('nq7_comment', 1000);
     checkLen('comment1', 2000);
     checkLen('comment2', 2000);
     checkLen('comment3', 2000);
@@ -409,6 +406,38 @@ exports.submitSurveyResponse = onCall(
       throw new HttpsError('failed-precondition', '비활성 과정입니다.');
     }
     const isLeadership = courseData.type === 'leadership';
+    const isNewcomer = courseData.type === 'newcomer';
+
+    // 고정 문항 검증 — 과정 타입별 스키마가 다르다.
+    // 표준/중견리더: q1~q9 (1~5 정수) + q11~q16 (문자열)
+    // 신규자: nq1,nq4~nq14 (1~5 정수) + nq2,nq3,nq15,nq16 (문자열)
+    if (isNewcomer) {
+      for (const k of NC_SCALE_KEYS) {
+        const v = response[k];
+        if (!Number.isInteger(v) || v < 1 || v > 5) {
+          throw new HttpsError('invalid-argument', `${k} 값이 올바르지 않습니다.`);
+        }
+      }
+      for (const k of NC_CHOICE_KEYS) {
+        const v = response[k];
+        if (typeof v !== 'string' || v.length === 0 || v.length > 50) {
+          throw new HttpsError('invalid-argument', `${k} 값이 올바르지 않습니다.`);
+        }
+      }
+    } else {
+      for (let i = 1; i <= 9; i++) {
+        const v = response[`q${i}`];
+        if (!Number.isInteger(v) || v < 1 || v > 5) {
+          throw new HttpsError('invalid-argument', `q${i} 값이 올바르지 않습니다.`);
+        }
+      }
+      for (let i = 11; i <= 16; i++) {
+        const v = response[`q${i}`];
+        if (typeof v !== 'string' || v.length > 50) {
+          throw new HttpsError('invalid-argument', `q${i} 값이 올바르지 않습니다.`);
+        }
+      }
+    }
 
     // 학생 매칭 (해당 과정 내에서만 — collectionGroup 우회 차단)
     const studentsSnap = await courseRef
@@ -445,22 +474,34 @@ exports.submitSurveyResponse = onCall(
       throw new HttpsError('invalid-argument', '단기과정은 회차 정보가 없어야 합니다.');
     }
 
-    // 응답 본문 — 클라이언트 입력에서 받되 name/empNo/course 는 서버 신뢰 값으로 강제
+    // 응답 본문 — 클라이언트 입력에서 받되 name/empNo/course/반 은 서버 신뢰 값으로 강제
     const respBase = {
       name,
       empNo,
       course: String(courseData.name || ''),
-      q1: response.q1, q2: response.q2, q3: response.q3, q4: response.q4, q5: response.q5,
-      q6: response.q6, q7: response.q7, q8: response.q8, q9: response.q9,
-      q10_comment: typeof response.q10_comment === 'string' ? response.q10_comment : '',
-      q11: response.q11, q12: response.q12, q13: response.q13,
-      q14: response.q14, q15: response.q15, q16: response.q16,
       instructors: response.instructors,
       comment1: typeof response.comment1 === 'string' ? response.comment1 : '',
       comment2: typeof response.comment2 === 'string' ? response.comment2 : '',
       comment3: typeof response.comment3 === 'string' ? response.comment3 : '',
       submittedAt: FieldValue.serverTimestamp(),
     };
+
+    if (isNewcomer) {
+      for (const k of [...NC_SCALE_KEYS, ...NC_CHOICE_KEYS]) {
+        respBase[k] = response[k];
+      }
+      respBase.nq6_comment = typeof response.nq6_comment === 'string' ? response.nq6_comment : '';
+      respBase.nq7_comment = typeof response.nq7_comment === 'string' ? response.nq7_comment : '';
+      // 반은 관리자가 학생 명단에 지정한 값만 신뢰 (클라이언트 조작 차단)
+      respBase.groupName = String(matches[0].data().group || '').trim();
+    } else {
+      respBase.q1 = response.q1; respBase.q2 = response.q2; respBase.q3 = response.q3;
+      respBase.q4 = response.q4; respBase.q5 = response.q5; respBase.q6 = response.q6;
+      respBase.q7 = response.q7; respBase.q8 = response.q8; respBase.q9 = response.q9;
+      respBase.q10_comment = typeof response.q10_comment === 'string' ? response.q10_comment : '';
+      respBase.q11 = response.q11; respBase.q12 = response.q12; respBase.q13 = response.q13;
+      respBase.q14 = response.q14; respBase.q15 = response.q15; respBase.q16 = response.q16;
+    }
 
     if (isLeadership) {
       respBase.roundNumber = roundData.number;

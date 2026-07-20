@@ -2,7 +2,7 @@ import { db } from './firebase-config.js';
 import {
   collection, getDocs
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
-import { state, escapeHtml, escapeAttr } from './admin-utils.js';
+import { state, escapeHtml, escapeAttr, NC_SURVEY, normalizeCourseType, getInstructorGroup } from './admin-utils.js';
 import { lsRead, lsWrite } from './admin-courses.js';
 import { getInstructorCategory, COMMON_CATEGORY } from './admin-rounds.js';
 
@@ -50,7 +50,7 @@ async function refreshPreviewCoursesFresh(prevCached) {
         active: data.active !== false,
         startDate: data.startDate || null,
         endDate: data.endDate || null,
-        type: data.type === 'leadership' ? 'leadership' : 'standard',
+        type: normalizeCourseType(data.type),
       };
     });
     if (courses.length > 0) lsWrite('courses', courses);
@@ -102,6 +102,64 @@ async function populatePreviewRoundSelect(courseId) {
   }
 }
 
+// 신규자 과정 고정 문항 미리보기 — NC_SURVEY 정의로 동적 생성 (index.html 블록과 동일 구성)
+function renderNewcomerPreviewQuestions() {
+  const container = document.getElementById('preview-newcomer-questions');
+  if (!container || container.dataset.rendered) return;
+  container.dataset.rendered = '1';
+
+  const ratingHtml = (name) => [1, 2, 3, 4, 5].map((v, i) => {
+    const labels = ['매우 불만족', '불만족', '보통', '만족', '매우 만족'];
+    return `<label class="rating-label"><input type="radio" name="${name}" value="${v}"><span class="rating-btn">${v}<br><small>${labels[i]}</small></span></label>`;
+  }).join('');
+
+  let html = NC_SURVEY.map(q => {
+    const num = q.label.split('.')[0];  // 'Q1'
+    const txt = q.label.slice(q.label.indexOf('.') + 1).trim();
+    const body = q.kind === 'scale'
+      ? `<div class="rating-group">${ratingHtml(`p${q.key}`)}</div>`
+      : `<div class="choice-group">${q.options.map(o =>
+          `<label class="choice-label"><input type="radio" name="p${q.key}" value="${escapeAttr(o)}"><span class="choice-btn">${escapeHtml(o)}</span></label>`
+        ).join('')}</div>`;
+    const sub = (q.key === 'nq6' || q.key === 'nq7')
+      ? `<div class="q-card optional">
+          <div class="q-num opt">${num}-1 <em>선택</em></div>
+          <div class="q-txt">문${num.slice(1)}.에서 불만족하다면 개선해야 할 사항은? (구체적으로)</div>
+          <textarea placeholder="개선이 필요한 사항을 작성해 주세요." rows="3"></textarea>
+        </div>`
+      : '';
+    return `<div class="q-card">
+        <div class="q-num">${num}</div>
+        <div class="q-txt">${escapeHtml(txt)}</div>
+        ${body}
+      </div>${sub}`;
+  }).join('');
+  container.innerHTML = html;
+}
+
+// 신규자 과정 반 셀렉트 — 강사 group union. 반 없으면 숨김.
+function populatePreviewNcGroupSelect(instructors) {
+  const sel = document.getElementById('preview-group-select');
+  if (!sel) return;
+  const seen = new Set();
+  const groups = [];
+  instructors.forEach(inst => {
+    const g = getInstructorGroup(inst);
+    if (g && !seen.has(g)) { seen.add(g); groups.push(g); }
+  });
+  if (groups.length === 0) {
+    sel.style.display = 'none';
+    sel.value = '';
+    sel.innerHTML = '<option value="">(전체)</option>';
+    return;
+  }
+  const prev = sel.value;
+  sel.style.display = 'inline-block';
+  sel.innerHTML = '<option value="">(전체)</option>' +
+    groups.map(g => `<option value="${escapeAttr(g)}">${escapeHtml(g)}</option>`).join('');
+  if (prev && groups.includes(prev)) sel.value = prev;
+}
+
 // 카테고리 셀렉트 — 회차 강사 union 에서 추출 ('공통' 외). 없으면 숨김.
 function populatePreviewCategorySelect(instructors) {
   const sel = document.getElementById('preview-group-select');
@@ -134,11 +192,21 @@ export async function loadPreviewInstructors() {
   const courseId = sel?.value;
   const opt = sel?.options?.[sel.selectedIndex];
   const courseLabel = opt?.textContent || '';
-  const courseType = opt?.dataset.type === 'leadership' ? 'leadership' : 'standard';
+  const courseType = normalizeCourseType(opt?.dataset.type);
   const badge = document.getElementById('preview-course-badge');
   const container = document.getElementById('preview-instructor-questions');
   const roundSel = document.getElementById('preview-round-select');
   const groupSel = document.getElementById('preview-group-select');
+
+  // 과정 타입별 고정 문항 블록 전환 (표준 vs 신규자)
+  const isNewcomer = courseType === 'newcomer';
+  const stdBlock = document.getElementById('preview-standard-questions');
+  const ncBlock = document.getElementById('preview-newcomer-questions');
+  if (stdBlock) stdBlock.style.display = isNewcomer ? 'none' : 'block';
+  if (ncBlock) {
+    ncBlock.style.display = isNewcomer ? 'block' : 'none';
+    if (isNewcomer) renderNewcomerPreviewQuestions();
+  }
 
   if (!courseId) {
     badge.textContent = '교육과정을 선택하세요';
@@ -157,7 +225,8 @@ export async function loadPreviewInstructors() {
     roundSel.style.display = 'inline-block';
   } else {
     roundSel.style.display = 'none';
-    if (groupSel) { groupSel.style.display = 'none'; groupSel.value = ''; }
+    // 신규자 과정은 반 필터로 groupSel 재사용 — 강사 fetch 후 populate
+    if (groupSel && !isNewcomer) { groupSel.style.display = 'none'; groupSel.value = ''; }
   }
 
   const roundId = courseType === 'leadership' ? roundSel.value : '';
@@ -178,27 +247,40 @@ export async function loadPreviewInstructors() {
     const instSnap = await getDocs(instructorsRef);
     const allInstructors = sortInstructors(instSnap.docs.map(d => d.data()));
 
-    // 카테고리 셀렉트는 회차 강사 fetch 후에 갱신 (중견리더만)
+    // 필터 셀렉트는 강사 fetch 후에 갱신 (중견리더: 카테고리 / 신규자: 반)
     if (courseType === 'leadership') {
       populatePreviewCategorySelect(allInstructors);
+    } else if (isNewcomer) {
+      populatePreviewNcGroupSelect(allInstructors);
     }
     const categoryFilter = (courseType === 'leadership' && groupSel?.style.display !== 'none')
       ? (groupSel?.value || '')
       : '';
+    const ncGroupFilter = (isNewcomer && groupSel?.style.display !== 'none')
+      ? (groupSel?.value || '')
+      : '';
 
-    // 라벨 갱신 (중견리더는 회차 + 카테고리)
+    // 라벨 갱신 (중견리더는 회차 + 카테고리, 신규자는 반)
     let displayLabel = courseLabel;
     if (courseType === 'leadership') {
       const rOpt = roundSel.options[roundSel.selectedIndex];
       displayLabel = `${courseLabel} · ${rOpt?.textContent || ''}`;
       if (categoryFilter) displayLabel += ` · ${categoryFilter}`;
+    } else if (ncGroupFilter) {
+      displayLabel += ` · ${ncGroupFilter}`;
     }
     badge.textContent = displayLabel;
 
-    // 카테고리 필터 적용 (학생 흐름과 다름 — 미리보기는 한 카테고리만 골라 보는 용도)
-    const instructors = categoryFilter
-      ? allInstructors.filter(inst => getInstructorCategory(inst) === categoryFilter)
-      : allInstructors;
+    // 필터 적용 — 중견리더: 한 카테고리만 골라 보기 / 신규자: 그 반 학생이 보는 목록(공통 + 반)
+    let instructors = allInstructors;
+    if (categoryFilter) {
+      instructors = allInstructors.filter(inst => getInstructorCategory(inst) === categoryFilter);
+    } else if (ncGroupFilter) {
+      instructors = allInstructors.filter(inst => {
+        const g = getInstructorGroup(inst);
+        return !g || g === ncGroupFilter;
+      });
+    }
 
     if (instructors.length === 0) {
       container.innerHTML = '<div class="no-data" style="margin:0.5rem 0;">등록된 강사가 없습니다.</div>';
@@ -207,13 +289,18 @@ export async function loadPreviewInstructors() {
 
     container.innerHTML = instructors.map((inst, i) => {
       const qNum = 17 + i;
-      // 카테고리 칩은 중견리더에서만 노출 — 단기는 기존 그대로 강사명만.
+      // 칩: 중견리더 = 카테고리, 신규자 = 반. 단기는 기존 그대로 강사명만.
       let catTag = '';
       if (courseType === 'leadership') {
         const cat = getInstructorCategory(inst);
         catTag = cat === COMMON_CATEGORY
           ? '<span class="rg-tag common" style="margin-right:.4rem;">공통</span>'
           : `<span class="rg-tag" style="margin-right:.4rem;">${escapeHtml(cat)}</span>`;
+      } else if (isNewcomer) {
+        const g = getInstructorGroup(inst);
+        catTag = g
+          ? `<span class="rg-tag" style="margin-right:.4rem;">${escapeHtml(g)}</span>`
+          : '<span class="rg-tag common" style="margin-right:.4rem;">공통</span>';
       }
       const nameLabel = inst.education ? `${escapeHtml(inst.education)} · ${escapeHtml(inst.name)}` : escapeHtml(inst.name);
       const ratingHtml = [1,2,3,4,5].map((v, vi) => {

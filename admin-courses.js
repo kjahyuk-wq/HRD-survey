@@ -3,7 +3,7 @@ import {
   collection, getDocs, getCountFromServer, query, where,
   addDoc, deleteDoc, doc, serverTimestamp, updateDoc, writeBatch
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
-import { state, escapeHtml, escapeAttr } from './admin-utils.js';
+import { state, escapeHtml, escapeAttr, normalizeCourseType } from './admin-utils.js';
 import { loadXLSX } from './admin-excel.js';
 import { loadStudents, studentsCache } from './admin-students.js';
 import { loadRounds } from './admin-rounds.js';
@@ -146,7 +146,7 @@ export async function loadCourseList() {
         id: d.id, name: data.name, active: isActive,
         startDate: data.startDate || null,
         endDate: data.endDate || null,
-        type: data.type === 'leadership' ? 'leadership' : 'standard',
+        type: normalizeCourseType(data.type),
       };
     });
 
@@ -274,7 +274,9 @@ function renderCourseItem({ id, name, active, idx, startDate, endDate, type }) {
     : `<span class="course-status closed">종료</span>`;
   const typeBadge = type === 'leadership'
     ? `<span class="course-type-badge leadership" title="회차별 분반 운영">중견리더</span>`
-    : '';
+    : type === 'newcomer'
+      ? `<span class="course-type-badge newcomer" title="신규자 전용 설문 + 반별 강사 운영">신규자</span>`
+      : '';
   const dateLabel = formatDateRange(startDate, endDate);
   const dateHtml = dateLabel
     ? `<span class="course-date-range">${escapeHtml(dateLabel)}</span>`
@@ -305,7 +307,7 @@ function renderCourseItem({ id, name, active, idx, startDate, endDate, type }) {
   const panelsHtml = active
     ? `<div class="course-edit-panel" id="edit-panel-${idx}" style="display:none;">${renderEditPanelHtml(idx, name, startDate, endDate)}</div>
        ${middlePanelHtml}
-       <div class="student-panel" id="stu-panel-${idx}" style="display:none;">${renderStudentPanelHtml(cid, idx)}</div>`
+       <div class="student-panel" id="stu-panel-${idx}" style="display:none;">${renderStudentPanelHtml(cid, idx, type)}</div>`
     : '';
 
   return `
@@ -348,19 +350,27 @@ function renderEditPanelHtml(idx, name, startDate, endDate) {
     </div>`;
 }
 
-function renderStudentPanelHtml(cid, idx) {
+function renderStudentPanelHtml(cid, idx, type) {
+  const isNewcomer = type === 'newcomer';
+  const groupInput = isNewcomer
+    ? `<input type="text" id="new-stu-group-${idx}" placeholder="반 (예: 1반, 선택)" maxlength="20">`
+    : '';
+  const excelTip = isNewcomer
+    ? 'A열: 교번 / B열: 이름 / C열: 반(선택) / 2행부터 데이터'
+    : 'A열: 교번 / B열: 이름 / 2행부터 데이터';
   return `
     <div class="add-student-row">
       <input type="text" id="new-stu-name-${idx}" placeholder="이름" maxlength="20">
       <input type="number" id="new-stu-empno-${idx}" placeholder="교번 (예: 1)" min="1"
         onkeydown="if(event.key==='Enter')addStudent('${cid}', ${idx})">
+      ${groupInput}
       <button class="add-btn" id="stu-add-btn-${idx}" onclick="addStudent('${cid}', ${idx})">+ 등록</button>
     </div>
     <div class="excel-upload-area stu-excel-area">
-      <div class="excel-upload-label">엑셀 일괄 등록 <span class="excel-tip">A열: 교번 / B열: 이름 / 2행부터 데이터</span></div>
+      <div class="excel-upload-label">엑셀 일괄 등록 <span class="excel-tip">${excelTip}</span></div>
       <div class="excel-upload-row">
         <label class="excel-file-btn" for="stu-excel-input-${idx}">파일 선택</label>
-        <input type="file" id="stu-excel-input-${idx}" accept=".xlsx,.xls" style="display:none" onchange="handleExcelUpload(${idx}, this)">
+        <input type="file" id="stu-excel-input-${idx}" accept=".xlsx,.xls" style="display:none" onchange="handleExcelUpload('${cid}', ${idx}, this)">
         <span id="stu-excel-name-${idx}" class="excel-file-name">선택된 파일 없음 · 또는 파일을 이 영역으로 끌어다 놓으세요</span>
         <button class="add-btn" id="stu-excel-btn-${idx}" onclick="uploadExcelStudents('${cid}', ${idx})" disabled>일괄 등록</button>
       </div>
@@ -508,7 +518,7 @@ export async function addCourse() {
   const startDate = readDateFields('new-course-start');
   const endDate   = readDateFields('new-course-end');
   const typeInput = document.querySelector('input[name="new-course-type"]:checked');
-  const type      = typeInput?.value === 'leadership' ? 'leadership' : 'standard';
+  const type      = normalizeCourseType(typeInput?.value);
 
   if (!name) { input.focus(); return; }
   if (!startDate) {
@@ -551,7 +561,7 @@ export async function toggleCourseActive(courseId, currentActive, btnEl) {
   // 카드 헤더에서 과정명 추출 (확인 안내문에 표시)
   const item = btnEl.closest('.course-manage-item');
   const nameEl = item?.querySelector('.course-manage-name');
-  const courseLabel = nameEl ? (nameEl.textContent.replace('진행중', '').replace('종료', '').replace('중견리더', '').trim()) : '이 과정';
+  const courseLabel = nameEl ? (nameEl.textContent.replace('진행중', '').replace('종료', '').replace('중견리더', '').replace('신규자', '').trim()) : '이 과정';
   const msg = newActive
     ? `"${courseLabel}" 과정을 다시 활성 상태로 전환하시겠습니까?\n수강생들이 다시 로그인할 수 있게 됩니다.`
     : `"${courseLabel}" 과정을 종료 처리하시겠습니까?\n\n• 수강생 로그인 차단(이름·교번 중복 충돌 방지)\n• 통계·응답 데이터는 그대로 보관됨\n• 언제든 재활성 가능`;
@@ -575,7 +585,7 @@ export async function toggleCourseActive(courseId, currentActive, btnEl) {
 export async function deleteCourse(courseId, btnEl) {
   const item = btnEl.closest('.course-manage-item');
   const nameEl = item?.querySelector('.course-manage-name');
-  const courseLabel = nameEl ? nameEl.textContent.replace('종료', '').replace('중견리더', '').trim() : '이 과정';
+  const courseLabel = nameEl ? nameEl.textContent.replace('종료', '').replace('중견리더', '').replace('신규자', '').trim() : '이 과정';
   const msg = `"${courseLabel}" 과정을 영구 삭제하시겠습니까?\n\n` +
     `• 수강생·강사·설문 응답 데이터가 모두 삭제됩니다.\n` +
     `• 이 작업은 되돌릴 수 없습니다.`;
@@ -627,17 +637,18 @@ async function deleteRoundsCascade(courseId) {
 // ── 강사 엑셀 일괄 등록 ──────────────────────────────
 const instExcelData = {};
 
-export function handleInstExcelUpload(panelIdx, input) {
+export function handleInstExcelUpload(courseId, panelIdx, input) {
   const fileName = input.files[0]?.name || '선택된 파일 없음';
   document.getElementById(`inst-excel-name-${panelIdx}`).textContent = fileName;
-  if (input.files[0]) parseInstExcelFile(panelIdx, input.files[0]);
+  if (input.files[0]) parseInstExcelFile(courseId, panelIdx, input.files[0]);
 }
 
-async function parseInstExcelFile(panelIdx, file) {
+async function parseInstExcelFile(courseId, panelIdx, file) {
   document.getElementById(`inst-excel-preview-${panelIdx}`).style.display = 'none';
   document.getElementById(`inst-excel-progress-${panelIdx}`).style.display = 'none';
   document.getElementById(`inst-excel-btn-${panelIdx}`).disabled = true;
   instExcelData[panelIdx] = [];
+  const isNewcomer = state.courseTypeById[courseId] === 'newcomer';
 
   await loadXLSX();
   const reader = new FileReader();
@@ -651,10 +662,12 @@ async function parseInstExcelFile(panelIdx, file) {
       for (let i = 1; i < rows.length; i++) {
         const edu  = String(rows[i][0] || '').trim();
         const name = String(rows[i][1] || '').trim();
+        // 신규자 과정만 C열 = 반 (비움 = 공통, 전원 평가)
+        const group = isNewcomer ? String(rows[i][2] || '').trim() : '';
         if (!edu && !name) continue;
         if (!edu) { errors.push(`${i+1}행: 강의명이 없습니다.`); continue; }
         if (!name) { errors.push(`${i+1}행: 강사명이 없습니다.`); continue; }
-        parsed.push({ edu, name });
+        parsed.push({ edu, name, group });
       }
 
       const preview = document.getElementById(`inst-excel-preview-${panelIdx}`);
@@ -669,9 +682,10 @@ async function parseInstExcelFile(panelIdx, file) {
       if (errors.length > 0) {
         html += errors.map(err => `<div class="excel-preview-error">${escapeHtml(err)}</div>`).join('');
       }
-      html += parsed.map((s, i) =>
-        `<div class="excel-preview-row">${i+1}. [${escapeHtml(s.edu)}] ${escapeHtml(s.name)}</div>`
-      ).join('');
+      html += parsed.map((s, i) => {
+        const groupTag = s.group ? ` <span class="rg-tag">${escapeHtml(s.group)}</span>` : '';
+        return `<div class="excel-preview-row">${i+1}. [${escapeHtml(s.edu)}] ${escapeHtml(s.name)}${groupTag}</div>`;
+      }).join('');
       preview.innerHTML = html;
 
       if (parsed.length > 0) {
@@ -710,12 +724,14 @@ export async function uploadExcelInstructors(courseId, panelIdx) {
     const slice = data.slice(start, start + CHUNK);
     progress.textContent = `등록 중... (${start + slice.length}/${total})`;
     const batch = writeBatch(db);
-    slice.forEach(({ edu, name }, j) => {
-      batch.set(doc(instRef), {
+    slice.forEach(({ edu, name, group }, j) => {
+      const docData = {
         name, education: edu,
         createdAt: serverTimestamp(),
         order: maxOrder + (start + j + 1) * 10
-      });
+      };
+      if (group) docData.group = group;  // 신규자 과정 반 지정 (비움 = 공통)
+      batch.set(doc(instRef), docData);
     });
     try {
       await batch.commit();
@@ -798,6 +814,7 @@ async function loadInstructors(courseId, panelIdx) {
     // createdAt 같은 Timestamp 객체는 JSON 직렬화 시 손실 — seconds 만 보존
     lsWrite(cacheKey, instructors.map(i => ({
       _id: i._id, name: i.name, education: i.education, order: i.order,
+      ...(typeof i.group === 'string' ? { group: i.group } : {}),
       createdAt: i.createdAt?.seconds ? { seconds: i.createdAt.seconds } : null,
     })));
   } catch (e) {
@@ -812,7 +829,10 @@ function renderInstructorPanel(courseId, panelIdx, instructors) {
   const panel = document.getElementById(`inst-panel-${panelIdx}`);
   const cid = escapeAttr(courseId);
   const total = instructors.length;
+  // 신규자 과정: 강사에 반(선택) 지정 — 반이 있으면 그 반 학생만 평가
+  const isNewcomer = state.courseTypeById[courseId] === 'newcomer';
 
+  const groupTh = isNewcomer ? '<th style="width:90px">반</th>' : '';
   const listHtml = total === 0
     ? '<div class="inst-empty">등록된 강사가 없습니다. 강사를 추가해 주세요.</div>'
     : `<div class="student-bulk-actions">
@@ -821,17 +841,22 @@ function renderInstructorPanel(courseId, panelIdx, instructors) {
       <table class="student-table">
         <thead><tr>
           <th style="width:36px"><input type="checkbox" id="inst-select-all-${panelIdx}" onclick="toggleInstSelectAll(${panelIdx}, this)"></th>
-          <th>강의명</th><th>강사명</th><th style="width:160px">순서 / 관리</th>
+          <th>강의명</th><th>강사명</th>${groupTh}<th style="width:160px">순서 / 관리</th>
         </tr></thead>
         <tbody>
           ${instructors.map((inst, idx) => {
             const name = inst.name || '';
             const edu  = inst.education || '';
+            const group = (typeof inst.group === 'string') ? inst.group.trim() : '';
             const en = escapeAttr(name), ee = escapeAttr(edu), eid = escapeAttr(inst._id || '');
+            const groupTd = isNewcomer
+              ? `<td>${group ? `<span class="rg-tag">${escapeHtml(group)}</span>` : '<span class="rg-tag common">공통</span>'}</td>`
+              : '';
             return `<tr id="inst-row-${panelIdx}-${idx}">
               <td><input type="checkbox" class="inst-checkbox-${panelIdx}" data-id="${eid}" data-name="${en}" onchange="updateInstBulkDeleteBtn(${panelIdx})"></td>
               <td style="text-align:left">${escapeHtml(edu)}</td>
               <td style="text-align:left">${escapeHtml(name)}</td>
+              ${groupTd}
               <td>
                 <div class="inst-action-btns">
                   <button class="inst-move-btn" onclick="moveInstructor('${cid}', ${panelIdx}, ${idx}, 'up')" ${idx === 0 ? 'disabled' : ''} title="위로">▲</button>
@@ -845,17 +870,24 @@ function renderInstructorPanel(courseId, panelIdx, instructors) {
         </tbody>
       </table>`;
 
+  const groupAddInput = isNewcomer
+    ? `<input type="text" id="inst-group-${panelIdx}" placeholder="반 (예: 1반, 비우면 공통)" maxlength="20">`
+    : '';
+  const excelTip = isNewcomer
+    ? 'A열: 강의명 / B열: 강사명 / C열: 반(비우면 공통) / 2행부터 데이터'
+    : 'A열: 강의명 / B열: 강사명 / 2행부터 데이터';
   panel.innerHTML = `
     <div class="inst-add-row">
       <input type="text" id="inst-edu-${panelIdx}" placeholder="교육명 (예: AI 기초과정)" maxlength="50">
       <input type="text" id="inst-name-${panelIdx}" placeholder="강사명 (예: 홍길동)" maxlength="20">
+      ${groupAddInput}
       <button class="add-btn inst-add-btn" onclick="addInstructor('${cid}', ${panelIdx})">+ 추가</button>
     </div>
     <div class="excel-upload-area" style="margin-top:.5rem;">
-      <div class="excel-upload-label">엑셀 일괄 등록 <span class="excel-tip">A열: 강의명 / B열: 강사명 / 2행부터 데이터</span></div>
+      <div class="excel-upload-label">엑셀 일괄 등록 <span class="excel-tip">${excelTip}</span></div>
       <div class="excel-upload-row">
         <label class="excel-file-btn" for="inst-excel-input-${panelIdx}">파일 선택</label>
-        <input type="file" id="inst-excel-input-${panelIdx}" accept=".xlsx,.xls" style="display:none" onchange="handleInstExcelUpload(${panelIdx}, this)">
+        <input type="file" id="inst-excel-input-${panelIdx}" accept=".xlsx,.xls" style="display:none" onchange="handleInstExcelUpload('${cid}', ${panelIdx}, this)">
         <span id="inst-excel-name-${panelIdx}" class="excel-file-name">선택된 파일 없음</span>
         <button class="add-btn" id="inst-excel-btn-${panelIdx}" onclick="uploadExcelInstructors('${cid}', ${panelIdx})" disabled>일괄 등록</button>
       </div>
@@ -868,6 +900,8 @@ function renderInstructorPanel(courseId, panelIdx, instructors) {
 export async function addInstructor(courseId, panelIdx) {
   const edu  = document.getElementById(`inst-edu-${panelIdx}`).value.trim();
   const name = document.getElementById(`inst-name-${panelIdx}`).value.trim();
+  const groupEl = document.getElementById(`inst-group-${panelIdx}`);  // 신규자 과정에만 존재
+  const group = groupEl?.value.trim() || '';
   if (!edu)  { document.getElementById(`inst-edu-${panelIdx}`).focus(); return; }
   if (!name) { document.getElementById(`inst-name-${panelIdx}`).focus(); return; }
 
@@ -878,13 +912,16 @@ export async function addInstructor(courseId, panelIdx) {
     const maxOrder = currentInsts.length > 0
       ? Math.max(...currentInsts.map(i => i.order ?? 0))
       : -10;
-    await addDoc(collection(db, 'courses', courseId, 'instructors'), {
+    const docData = {
       name, education: edu, createdAt: serverTimestamp(), order: maxOrder + 10
-    });
+    };
+    if (group) docData.group = group;
+    await addDoc(collection(db, 'courses', courseId, 'instructors'), docData);
     lsInvalidate(`instructors:${courseId}`);
     lsInvalidate(`counts:${courseId}`);
     document.getElementById(`inst-edu-${panelIdx}`).value = '';
     document.getElementById(`inst-name-${panelIdx}`).value = '';
+    if (groupEl) groupEl.value = '';
     await loadInstructors(courseId, panelIdx);
   } catch (e) { alert('추가 중 오류가 발생했습니다.'); btn.disabled = false; btn.textContent = '+ 추가'; }
 }
@@ -937,10 +974,15 @@ export function startEditInstructor(courseId, panelIdx, idx) {
   const row = document.getElementById(`inst-row-${panelIdx}-${idx}`);
   if (!row) return;
   const cid = escapeAttr(courseId);
+  const isNewcomer = state.courseTypeById[courseId] === 'newcomer';
+  const groupTd = isNewcomer
+    ? `<td><input type="text" id="edit-group-${panelIdx}-${idx}" value="${escapeAttr(inst.group || '')}" maxlength="20" placeholder="공통" style="width:100%;padding:.4rem .6rem;border:2px solid #0066cc;border-radius:7px;font-size:.88rem;"></td>`
+    : '';
   row.innerHTML = `
     <td><input type="checkbox" disabled></td>
     <td><input type="text" id="edit-edu-${panelIdx}-${idx}" value="${escapeAttr(inst.education || '')}" maxlength="50" style="width:100%;padding:.4rem .6rem;border:2px solid #0066cc;border-radius:7px;font-size:.88rem;"></td>
     <td><input type="text" id="edit-name-${panelIdx}-${idx}" value="${escapeAttr(inst.name || '')}" maxlength="20" style="width:100%;padding:.4rem .6rem;border:2px solid #0066cc;border-radius:7px;font-size:.88rem;"></td>
+    ${groupTd}
     <td>
       <div class="inst-action-btns">
         <button class="inst-save-btn" onclick="saveEditInstructor('${cid}', ${panelIdx}, ${idx})">저장</button>
@@ -955,6 +997,7 @@ export async function saveEditInstructor(courseId, panelIdx, idx) {
   if (!inst) return;
   const eduEl  = document.getElementById(`edit-edu-${panelIdx}-${idx}`);
   const nameEl = document.getElementById(`edit-name-${panelIdx}-${idx}`);
+  const groupEl = document.getElementById(`edit-group-${panelIdx}-${idx}`);  // 신규자 과정에만 존재
   const edu  = eduEl?.value.trim();
   const name = nameEl?.value.trim();
   if (!edu)  { eduEl?.focus(); return; }
@@ -963,7 +1006,9 @@ export async function saveEditInstructor(courseId, panelIdx, idx) {
   const saveBtn = document.querySelector(`#inst-row-${panelIdx}-${idx} .inst-save-btn`);
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '저장 중...'; }
   try {
-    await updateDoc(doc(db, 'courses', courseId, 'instructors', inst._id), { name, education: edu });
+    const updatePayload = { name, education: edu };
+    if (groupEl) updatePayload.group = groupEl.value.trim();  // 빈 값 = 공통
+    await updateDoc(doc(db, 'courses', courseId, 'instructors', inst._id), updatePayload);
     lsInvalidate(`instructors:${courseId}`);
     lsInvalidate(`counts:${courseId}`);
     await loadInstructors(courseId, panelIdx);

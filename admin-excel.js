@@ -1,4 +1,4 @@
-import { state, Q_LABELS, DEMO_QUESTIONS, escapeHtml } from './admin-utils.js';
+import { state, escapeHtml, getSurveyConfig, NC_SURVEY } from './admin-utils.js';
 import { computeStats } from './admin-stats.js';
 
 // ── 라벨 헬퍼 ──────────────────────────────
@@ -28,11 +28,11 @@ export async function loadXLSX() {
   });
 }
 
-// 단기는 응답 있는 강사만(기존 동작 유지), 중견리더는 회차 강사 전체(0응답 포함) 고정 순서.
+// 단기는 응답 있는 강사만(기존 동작 유지), 중견리더·신규자는 강사 전체(0응답 포함) 고정 순서.
 // state.lastRoundLabel 이 비어있지 않으면 중견리더 모드 (loadStats 가 채움).
 function pickExportInstKeys(stats) {
-  const isLeadership = !!(state.lastRoundLabel);
-  return isLeadership ? stats.instKeysFullOrder : stats.instKeys;
+  const fixedOrder = !!(state.lastRoundLabel) || state.lastCourseType === 'newcomer';
+  return fixedOrder ? stats.instKeysFullOrder : stats.instKeys;
 }
 
 // ── 엑셀 내보내기 (업로드용) ──────────────────────────────
@@ -40,32 +40,50 @@ export async function exportStatsExcel() {
   if (!state.lastResponses.length) return;
   await loadXLSX();
 
-  const stats = state.lastComputedStats || computeStats(state.lastResponses, state.lastOrderedInstructorKeys);
+  const isNewcomer = state.lastCourseType === 'newcomer';
+  const cfg = getSurveyConfig(state.lastCourseType);
+  const stats = state.lastComputedStats || computeStats(state.lastResponses, state.lastOrderedInstructorKeys, cfg);
   const instKeys = pickExportInstKeys(stats);
   const responses = state.lastResponses;
 
   const wb = XLSX.utils.book_new();
 
-  const instHeaders = instKeys.map(k => {
-    const parts = k.split('__');
-    return parts.length === 2 ? `[${parts[0]}] ${parts[1]} 강사` : `${k} 강사`;
-  });
-  const totalCols = 9 + 1 + 6 + instKeys.length;
+  // 신규자: 문항 1~16 설문지 순서 그대로 + 결번 4칸(OMR 17~20 없음, 강사 문항이 21번부터) + 강사
+  // 표준: 기존 서식 유지 — 9 척도 + 빈칸 1(Q10 주관식 자리) + 인적사항 6 + 강사
+  const NC_BLANKS = 4;
+  const totalCols = isNewcomer
+    ? NC_SURVEY.length + NC_BLANKS + instKeys.length
+    : 9 + 1 + 6 + instKeys.length;
   const headers1 = ['순번', ...Array.from({length: totalCols}, (_, i) => i + 1)];
   const sheet1Data = [headers1];
 
   responses.forEach((r, idx) => {
     const row = [idx + 1];
-    ['q1','q2','q3','q4','q5','q6','q7','q8','q9'].forEach(k => {
-      const v = Number(r[k]);
-      row.push((v >= 1 && v <= 5) ? 6 - v : '');
-    });
-    row.push('');
-    DEMO_QUESTIONS.forEach(dq => {
-      const val = String(r[dq.key] || '').trim();
-      const i = val ? dq.options.indexOf(val) + 1 : '';
-      row.push(i > 0 ? `${i}_0` : '');
-    });
+    if (isNewcomer) {
+      // 척도: 웹 5=매우만족 → OMR ①=매우만족 이라 6-v 로 반전. 선택형: 보기 번호_0.
+      NC_SURVEY.forEach(q => {
+        if (q.kind === 'scale') {
+          const v = Number(r[q.key]);
+          row.push((v >= 1 && v <= 5) ? 6 - v : '');
+        } else {
+          const val = String(r[q.key] || '').trim();
+          const i = val ? q.options.indexOf(val) + 1 : '';
+          row.push(i > 0 ? `${i}_0` : '');
+        }
+      });
+      for (let b = 0; b < NC_BLANKS; b++) row.push('');
+    } else {
+      ['q1','q2','q3','q4','q5','q6','q7','q8','q9'].forEach(k => {
+        const v = Number(r[k]);
+        row.push((v >= 1 && v <= 5) ? 6 - v : '');
+      });
+      row.push('');
+      cfg.choice.forEach(dq => {
+        const val = String(r[dq.key] || '').trim();
+        const i = val ? dq.options.indexOf(val) + 1 : '';
+        row.push(i > 0 ? `${i}_0` : '');
+      });
+    }
     let instObj = r.instructors || {};
     if (typeof instObj === 'string') { try { instObj = JSON.parse(instObj); } catch { instObj = {}; } }
     instKeys.forEach(k => {
@@ -77,26 +95,22 @@ export async function exportStatsExcel() {
 
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sheet1Data), '객관식');
 
-  const sheet2Headers = [
-    '순번',
-    'Q10. 기타 편의시설 건의사항',
-    '소감 및 건의사항',
-    '만족도 평가 개선 필요 부분',
-    '전반적인 과목 및 강사 건의',
-  ];
+  const sheet2Headers = isNewcomer
+    ? ['순번', 'Q6-1. 소양교육 개선사항', 'Q7-1. 직무교육 개선사항', '소감 및 건의사항', '만족도 평가 개선 필요 부분', '전반적인 과목 및 강사 건의']
+    : ['순번', 'Q10. 기타 편의시설 건의사항', '소감 및 건의사항', '만족도 평가 개선 필요 부분', '전반적인 과목 및 강사 건의'];
   const sheet2Data = [sheet2Headers];
   let commentIdx = 1;
   responses.forEach(r => {
-    const q10 = String(r.q10_comment || '').trim();
-    const c1 = String(r.comment1 || r.comment || '').trim();
-    const c2 = String(r.comment2 || '').trim();
-    const c3 = String(r.comment3 || '').trim();
-    if (q10 || c1 || c2 || c3) {
-      sheet2Data.push([commentIdx++, q10, c1, c2, c3]);
+    const cols = isNewcomer
+      ? [r.nq6_comment, r.nq7_comment, r.comment1 || r.comment, r.comment2, r.comment3]
+      : [r.q10_comment, r.comment1 || r.comment, r.comment2, r.comment3];
+    const trimmed = cols.map(v => String(v || '').trim());
+    if (trimmed.some(v => v)) {
+      sheet2Data.push([commentIdx++, ...trimmed]);
     }
   });
   if (sheet2Data.length === 1) {
-    sheet2Data.push(['', '(수집된 주관식 응답이 없습니다)', '', '', '']);
+    sheet2Data.push(['', '(수집된 주관식 응답이 없습니다)', ...new Array(sheet2Headers.length - 2).fill('')]);
   }
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sheet2Data), '주관식');
 
@@ -109,15 +123,16 @@ export async function exportResultsExcel() {
   if (!state.lastResponses.length) return;
   await loadXLSX();
 
+  const cfg = getSurveyConfig(state.lastCourseType);
   const responses = state.lastResponses;
   const n = responses.length;
-  const stats = state.lastComputedStats || computeStats(responses, state.lastOrderedInstructorKeys);
+  const stats = state.lastComputedStats || computeStats(responses, state.lastOrderedInstructorKeys, cfg);
   const { avgs, dists, hasData, instRaw, demoRaw } = stats;
   const instKeys = pickExportInstKeys(stats);
   const wb = XLSX.utils.book_new();
 
   // ── 시트1: 만족도 통계 ──
-  const keys = ['q1','q2','q3','q4','q5','q6','q7','q8','q9'];
+  const keys = cfg.scale.map(q => q.key);
   const satisfyPcts = dists.map(d => n > 0 ? (d[3] + d[4]) / n * 100 : 0);
 
   const validAvgs = avgs.filter((_, i) => hasData[i]);
@@ -139,14 +154,14 @@ export async function exportResultsExcel() {
     ...(categoryLabelForCell ? [['카테고리', categoryLabelForCell, '', '', '', '', '', '']] : []),
     ['응답자 수', n + '명', '', '', '', '', '', ''],
     ['작성일', new Date().toLocaleDateString('ko-KR'), '', '', '', '', '', ''],
-    ['전체 평균 (Q1~Q9 + 강사)', Number(overallAvg.toFixed(2)), '', '', '', '', '', ''],
+    [cfg.overallLabel, Number(overallAvg.toFixed(2)), '', '', '', '', '', ''],
     [],
     ['항목', '평균점수', '만족이상(%)', '1점(명)', '2점(명)', '3점(명)', '4점(명)', '5점(명)'],
   ];
 
   keys.forEach((k, i) => {
     statsData.push([
-      Q_LABELS[i],
+      cfg.scale[i].label,
       Number(avgs[i].toFixed(2)),
       Number(satisfyPcts[i].toFixed(1)),
       dists[i][0], dists[i][1], dists[i][2], dists[i][3], dists[i][4]
@@ -189,7 +204,7 @@ export async function exportResultsExcel() {
     ['응답자 수', n + '명'],
     []
   ];
-  DEMO_QUESTIONS.forEach(dq => {
+  cfg.choice.forEach(dq => {
     const counts = dq.options.map(opt => demoRaw[dq.key][opt] || 0);
     const total = counts.reduce((a, b) => a + b, 0);
     demoData.push([dq.label, '인원(명)', '비율(%)']);
@@ -205,37 +220,37 @@ export async function exportResultsExcel() {
   XLSX.utils.book_append_sheet(wb, ws2, '응답자 특성');
 
   // ── 시트3: 주관식 의견 ──
+  // 주관식 컬럼은 과정 타입별 정의(cfg.subjective) 순서. legacy 'comment' 키는 comment1 에 흡수.
+  const subjectiveCols = cfg.subjective.filter(s => s.key !== 'comment');
   const commentData = [
     ['교육과정', courseLabelForCell],
     ...(roundLabelForCell ? [['회차', roundLabelForCell]] : []),
     ...(categoryLabelForCell ? [['카테고리', categoryLabelForCell]] : []),
     ['응답자 수', n + '명'],
     [],
-    ['순번', 'Q10. 기타 편의시설 건의사항', '소감 및 건의사항', '만족도 평가 개선 필요 부분', '전반적인 과목 및 강사 건의'],
+    ['순번', ...subjectiveCols.map(s => s.label)],
   ];
+  const commentHeaderRows = commentData.length;
   let cidx = 1;
   responses.forEach(r => {
-    const q10 = String(r.q10_comment || '').trim();
-    const c1 = String(r.comment1 || r.comment || '').trim();
-    const c2 = String(r.comment2 || '').trim();
-    const c3 = String(r.comment3 || '').trim();
-    if (q10 || c1 || c2 || c3) commentData.push([cidx++, q10, c1, c2, c3]);
+    const vals = subjectiveCols.map(s => {
+      if (s.key === 'comment1') return String(r.comment1 || r.comment || '').trim();
+      return String(r[s.key] || '').trim();
+    });
+    if (vals.some(v => v)) commentData.push([cidx++, ...vals]);
   });
-  if (commentData.length === 4) commentData.push(['', '(수집된 주관식 응답이 없습니다)', '', '', '']);
+  if (commentData.length === commentHeaderRows) {
+    commentData.push(['', '(수집된 주관식 응답이 없습니다)', ...new Array(Math.max(0, subjectiveCols.length - 1)).fill('')]);
+  }
   const ws3 = XLSX.utils.aoa_to_sheet(commentData);
-  ws3['!cols'] = [{ wch: 6 }, { wch: 35 }, { wch: 35 }, { wch: 35 }, { wch: 35 }];
+  ws3['!cols'] = [{ wch: 6 }, ...subjectiveCols.map(() => ({ wch: 35 }))];
   XLSX.utils.book_append_sheet(wb, ws3, '주관식 의견');
 
   const filename = `${getExportFullLabel()}_만족도결과_${new Date().toISOString().slice(0,10)}.xlsx`;
   XLSX.writeFile(wb, filename);
 
   // ── 분야별 막대그래프 PNG ──
-  const catDefs = [
-    { label: '교육기간', keys: ['q1'] },
-    { label: '교육운영', keys: ['q2','q3','q4','q5','q6'] },
-    { label: '교육효과', keys: ['q7'] },
-    { label: '시설환경', keys: ['q8','q9'] },
-  ];
+  const catDefs = cfg.chartCats;
   const catAvgs = catDefs.map(cat => {
     const vals = cat.keys.map(k => avgs[keys.indexOf(k)]);
     return Number((vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2));

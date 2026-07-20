@@ -2,7 +2,7 @@ import { db } from './firebase-config.js';
 import {
   collection, getDocs
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
-import { state, Q_LABELS, QUESTION_CATEGORIES, DEMO_QUESTIONS, escapeHtml, escapeAttr, formatDate } from './admin-utils.js';
+import { state, escapeHtml, escapeAttr, formatDate, getSurveyConfig, normalizeCourseType, getInstructorGroup } from './admin-utils.js';
 import { lsRead, lsWrite } from './admin-courses.js';
 import { getInstructorCategory, COMMON_CATEGORY } from './admin-rounds.js';
 
@@ -20,16 +20,17 @@ function sortInstructors(arr) {
 }
 
 // ── 통계 단일 패스 계산 ──────────────────────────────
-export function computeStats(responses, orderedInstructorKeys) {
+// config: getSurveyConfig(courseType) — 과정 타입별 척도/선택형 문항 정의.
+export function computeStats(responses, orderedInstructorKeys, config = getSurveyConfig('standard')) {
   const n = responses.length;
-  const keys = ['q1','q2','q3','q4','q5','q6','q7','q8','q9'];
+  const keys = config.scale.map(q => q.key);
 
   // 초기화
-  const sums = new Array(9).fill(0);
+  const sums = new Array(keys.length).fill(0);
   const dists = keys.map(() => [0, 0, 0, 0, 0]); // 인덱스 0~4 = 점수 1~5
   const instRaw = {}; // key -> { sum, count, dist[] }
   const demoRaw = {}; // dq.key -> { opt -> count }
-  DEMO_QUESTIONS.forEach(dq => {
+  config.choice.forEach(dq => {
     demoRaw[dq.key] = {};
     dq.options.forEach(o => { demoRaw[dq.key][o] = 0; });
   });
@@ -53,7 +54,7 @@ export function computeStats(responses, orderedInstructorKeys) {
       }
     });
 
-    DEMO_QUESTIONS.forEach(dq => {
+    config.choice.forEach(dq => {
       const val = String(r[dq.key] || '').trim();
       if (val && demoRaw[dq.key][val] !== undefined) demoRaw[dq.key][val]++;
     });
@@ -116,7 +117,7 @@ async function refreshStatsCoursesFresh(prevCached) {
         active: data.active !== false,
         startDate: data.startDate || null,
         endDate: data.endDate || null,
-        type: data.type === 'leadership' ? 'leadership' : 'standard',
+        type: normalizeCourseType(data.type),
       };
     });
     if (courses.length > 0) lsWrite('courses', courses);
@@ -192,6 +193,30 @@ function populateCategorySelect(instructors) {
   if (prev && (prev === COMMON_CATEGORY || cats.includes(prev))) sel.value = prev;
 }
 
+// 신규자 과정 반 셀렉트 — 강사 group 필드 union. 반 없으면 숨김.
+// 반 선택 시 응답·학생·강사가 모두 그 반 기준으로 좁혀져 과정 만족도도 반별로 나온다.
+function populateNcGroupSelect(instructors) {
+  const sel = document.getElementById('stats-group-select');
+  if (!sel) return;
+  const seen = new Set();
+  const groups = [];
+  instructors.forEach(inst => {
+    const g = getInstructorGroup(inst);
+    if (g && !seen.has(g)) { seen.add(g); groups.push(g); }
+  });
+  if (groups.length === 0) {
+    sel.style.display = 'none';
+    sel.value = '';
+    sel.innerHTML = '<option value="">(전체)</option>';
+    return;
+  }
+  const prev = sel.value;
+  sel.style.display = 'inline-block';
+  sel.innerHTML = '<option value="">(전체)</option>' +
+    groups.map(g => `<option value="${escapeAttr(g)}">${escapeHtml(g)}</option>`).join('');
+  if (prev && groups.includes(prev)) sel.value = prev;
+}
+
 export async function loadStats() {
   const sel = document.getElementById('stats-course-select');
   const courseId = sel?.value;
@@ -199,7 +224,7 @@ export async function loadStats() {
   const opt = sel.options[sel.selectedIndex];
   const courseName  = opt?.dataset.name || '';
   const courseLabel = opt?.textContent || courseName;
-  const courseType  = opt?.dataset.type === 'leadership' ? 'leadership' : 'standard';
+  const courseType  = normalizeCourseType(opt?.dataset.type);
   state.lastCourseName  = courseName;
   state.lastCourseLabel = courseLabel;
   state.lastCourseType  = courseType;
@@ -216,7 +241,8 @@ export async function loadStats() {
     roundSel.style.display = 'inline-block';
   } else {
     roundSel.style.display = 'none';
-    if (groupSel) { groupSel.style.display = 'none'; groupSel.value = ''; }
+    // 신규자 과정은 반 필터로 groupSel 을 재사용 — 강사 fetch 후 populateNcGroupSelect 가 처리
+    if (groupSel && courseType !== 'newcomer') { groupSel.style.display = 'none'; groupSel.value = ''; }
     state.lastRoundId = '';
     state.lastRoundLabel = '';
     state.lastRoundNumber = 0;
@@ -267,15 +293,20 @@ export async function loadStats() {
 
     const allInstructors = sortInstructors(instructorsSnap.docs.map(d => d.data()));
 
-    // 카테고리 셀렉트는 회차 강사 fetch 후에 갱신 (중견리더만)
+    // 필터 셀렉트는 강사 fetch 후에 갱신 (중견리더: 카테고리 / 신규자: 반)
     if (courseType === 'leadership') {
       populateCategorySelect(allInstructors);
+    } else if (courseType === 'newcomer') {
+      populateNcGroupSelect(allInstructors);
     }
     const categoryFilter = (courseType === 'leadership' && groupSel?.style.display !== 'none')
       ? (groupSel?.value || '')
       : '';
+    const ncGroupFilter = (courseType === 'newcomer' && groupSel?.style.display !== 'none')
+      ? (groupSel?.value || '')
+      : '';
 
-    // 라벨 갱신 (카테고리까지 포함)
+    // 라벨 갱신 (카테고리/반까지 포함)
     let displayLabel = courseLabel;
     if (courseType === 'leadership') {
       const rOpt = roundSel.options[roundSel.selectedIndex];
@@ -293,17 +324,26 @@ export async function loadStats() {
         state.lastGroupName = '';
         state.lastGroupLabel = '';
       }
+    } else if (courseType === 'newcomer') {
+      if (ncGroupFilter) {
+        displayLabel += ` · ${ncGroupFilter}`;
+        state.lastGroupName = ncGroupFilter;
+        state.lastGroupLabel = ncGroupFilter;
+      } else {
+        state.lastGroupName = '';
+        state.lastGroupLabel = '';
+      }
     }
     const nameEl = document.getElementById('stats-course-name');
     if (nameEl) nameEl.textContent = displayLabel;
 
-    const responses = responsesSnap.docs.map(d => ({
+    let responses = responsesSnap.docs.map(d => ({
       ...d.data(),
       submittedAt: d.data().submittedAt?.toDate?.()?.toISOString() ?? null
     }));
 
     // 학생: 회차 모드에서는 completedRounds.includes(roundId) 로 완료 매핑
-    const students = studentsSnap.docs.map(d => {
+    let students = studentsSnap.docs.map(d => {
       const data = d.data();
       const isComplete = courseType === 'leadership'
         ? Array.isArray(data.completedRounds) && data.completedRounds.includes(roundId)
@@ -315,10 +355,26 @@ export async function loadStats() {
       };
     });
 
-    // 강사 키 순서: 카테고리 필터 적용 시 해당 카테고리 강사만, 미선택 시 전체 (응답 0명도 포함)
-    const visibleInstructors = categoryFilter
-      ? allInstructors.filter(inst => getInstructorCategory(inst) === categoryFilter)
-      : allInstructors;
+    // 신규자 반 필터: 응답(groupName)·학생(group) 모두 그 반으로 좁힘
+    // → 과정 만족도(고정 문항)도 반별로 각각 산출된다
+    if (ncGroupFilter) {
+      responses = responses.filter(r => (r.groupName || '') === ncGroupFilter);
+      students = students.filter(s => ((s.group || '').trim()) === ncGroupFilter);
+    }
+
+    // 강사 키 순서:
+    // - 중견리더: 카테고리 필터 적용 시 해당 카테고리 강사만
+    // - 신규자: 반 필터 적용 시 공통 + 그 반 강사 (학생이 실제로 본 목록과 동일)
+    // - 미선택 시 전체 (응답 0명도 포함)
+    let visibleInstructors = allInstructors;
+    if (categoryFilter) {
+      visibleInstructors = allInstructors.filter(inst => getInstructorCategory(inst) === categoryFilter);
+    } else if (ncGroupFilter) {
+      visibleInstructors = allInstructors.filter(inst => {
+        const g = getInstructorGroup(inst);
+        return !g || g === ncGroupFilter;
+      });
+    }
     const orderedInstructorKeys = visibleInstructors.map(({ name, education }) =>
       education ? `${education}__${name}` : name
     );
@@ -332,7 +388,7 @@ export async function loadStats() {
 
     state.lastResponses = responses;
     state.lastOrderedInstructorKeys = orderedInstructorKeys;
-    state.lastComputedStats = computeStats(responses, orderedInstructorKeys);
+    state.lastComputedStats = computeStats(responses, orderedInstructorKeys, getSurveyConfig(courseType));
 
     renderStats(state.lastComputedStats, students, responses);
     document.getElementById('stats-area').style.display = 'block';
@@ -343,6 +399,8 @@ export async function loadStats() {
 
 export function renderStats(stats, students, responses) {
   const { n, avgs, dists, hasData, instRaw, instKeys, demoRaw } = stats;
+  // 과정 타입별 문항 정의 — loadStats 가 state.lastCourseType 을 먼저 채운다
+  const cfg = getSurveyConfig(state.lastCourseType);
   const totalStudents = students.length;
   const completedStudents = students.filter(s => s.completed).length;
   const rate = totalStudents > 0 ? Math.round(completedStudents / totalStudents * 100) : 0;
@@ -367,7 +425,7 @@ export function renderStats(stats, students, responses) {
     if (!hasData[i]) return `
       <div class="q-stat-card">
         <div class="q-stat-header">
-          <span class="q-stat-label">${Q_LABELS[i]}</span>
+          <span class="q-stat-label">${cfg.scale[i].label}</span>
           <span class="q-stat-avg" style="color:#aaa;">응답 없음</span>
         </div>
         <div style="color:#bbb;font-size:0.82rem;padding:0.3rem 0;">아직 수집된 응답이 없습니다.</div>
@@ -378,7 +436,7 @@ export function renderStats(stats, students, responses) {
     return `
       <div class="q-stat-card">
         <div class="q-stat-header">
-          <span class="q-stat-label">${Q_LABELS[i]}</span>
+          <span class="q-stat-label">${cfg.scale[i].label}</span>
           <span class="q-stat-avg" style="color:${color}">${avg.toFixed(2)}점</span>
           <span class="q-stat-satisfy">만족이상 ${satisfyPct}%</span>
         </div>
@@ -394,7 +452,7 @@ export function renderStats(stats, students, responses) {
       </div>`;
   };
 
-  document.getElementById('question-stats').innerHTML = QUESTION_CATEGORIES.map(cat => {
+  document.getElementById('question-stats').innerHTML = cfg.categories.map(cat => {
     const validIdx = cat.indices.filter(i => hasData[i]);
     const catValidAvgs = validIdx.map(i => avgs[i]);
     const catAvg = catValidAvgs.length > 0 ? catValidAvgs.reduce((a, b) => a + b, 0) / catValidAvgs.length : null;
@@ -468,7 +526,7 @@ export function renderStats(stats, students, responses) {
   document.getElementById('overall-avg').textContent = overallAvg.toFixed(2);
 
   document.getElementById('demographics-stats-section').style.display = 'block';
-  document.getElementById('demographics-stats').innerHTML = DEMO_QUESTIONS.map(dq => {
+  document.getElementById('demographics-stats').innerHTML = cfg.choice.map(dq => {
     const counts = dq.options.map(opt => demoRaw[dq.key][opt] || 0);
     const total = counts.reduce((a, b) => a + b, 0);
     if (total === 0) {
@@ -502,13 +560,7 @@ export function renderStats(stats, students, responses) {
       </div>`;
   }).join('');
 
-  const subjectiveTypes = [
-    { key: 'q10_comment', label: 'Q10. 기타 편의시설 건의사항' },
-    { key: 'comment1', label: '소감 및 건의사항' },
-    { key: 'comment2', label: '만족도 평가 개선 필요 부분' },
-    { key: 'comment3', label: '전반적인 과목 및 강사 건의' },
-    { key: 'comment', label: '기타 의견 (이전 양식)' },
-  ];
+  const subjectiveTypes = cfg.subjective;
   let totalCommentCount = 0;
   let commentListHtml = '';
   subjectiveTypes.forEach(({ key, label }) => {

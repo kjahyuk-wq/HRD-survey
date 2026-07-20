@@ -600,6 +600,11 @@ header h1 { font-size: 1.3rem; font-weight: 700; margin: 0; color: #fff; }
   color: #6d28d9;
   border: 1px solid #c4b5fd;
 }
+.course-type-badge.newcomer {
+  background: #ecfeff;
+  color: #0e7490;
+  border: 1px solid #67e8f9;
+}
 
 /* 새 과정 등록 폼의 유형 선택 라디오 */
 .course-type-row {
