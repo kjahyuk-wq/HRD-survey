@@ -60,15 +60,16 @@ export async function exportStatsExcel() {
   responses.forEach((r, idx) => {
     const row = [idx + 1];
     if (isNewcomer) {
-      // 척도: 웹 5=매우만족 → OMR ①=매우만족 이라 6-v 로 반전. 선택형: 보기 번호_0.
+      // 결과폼 서식: 모든 값이 순수 숫자. 척도는 웹 5=매우만족 → 서식 ①=매우만족 이라 6-v 반전,
+      // 선택형은 보기 번호 그대로.
       NC_SURVEY.forEach(q => {
         if (q.kind === 'scale') {
           const v = Number(r[q.key]);
           row.push((v >= 1 && v <= 5) ? 6 - v : '');
         } else {
           const val = String(r[q.key] || '').trim();
-          const i = val ? q.options.indexOf(val) + 1 : '';
-          row.push(i > 0 ? `${i}_0` : '');
+          const i = val ? q.options.indexOf(val) + 1 : 0;
+          row.push(i > 0 ? i : '');
         }
       });
       for (let b = 0; b < NC_BLANKS; b++) row.push('');
@@ -88,12 +89,14 @@ export async function exportStatsExcel() {
     if (typeof instObj === 'string') { try { instObj = JSON.parse(instObj); } catch { instObj = {}; } }
     instKeys.forEach(k => {
       const v = Number(instObj[k]);
-      row.push((v >= 1 && v <= 5) ? `${6 - v}_0` : '');
+      if (!(v >= 1 && v <= 5)) { row.push(''); return; }
+      // 신규자 결과폼은 순수 숫자, 표준 서식은 기존 `n_0` 텍스트 유지
+      row.push(isNewcomer ? 6 - v : `${6 - v}_0`);
     });
     sheet1Data.push(row);
   });
 
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sheet1Data), '객관식');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sheet1Data), isNewcomer ? '공공기관신규자' : '객관식');
 
   const sheet2Headers = isNewcomer
     ? ['순번', 'Q6-1. 소양교육 개선사항', 'Q7-1. 직무교육 개선사항', '소감 및 건의사항', '만족도 평가 개선 필요 부분', '전반적인 과목 및 강사 건의']
