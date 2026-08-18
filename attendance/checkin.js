@@ -65,7 +65,7 @@ window.doLogout = async function() {
   if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
   autoResumed = false;
   currentUser = null;
-  showScreen('screen-login');
+  showScreen('screen-login-empno');
 };
 
 function showLoginError(msg) {
@@ -316,8 +316,8 @@ async function proceedWithCourse(name, candidate) {
           await deleteDoc(resetRef);
           // 초기화됨 → 계속 진행
         } else {
-          showScreen('screen-login');
-          showLoginError(`이 기기는 오늘 이미 ${locked.name} 님의 출석에 사용되었습니다.\n본인 기기를 사용하거나 담당자에게 문의해 주세요.`);
+          showScreen('screen-login-empno');
+          showEmpNoError(`이 기기는 오늘 이미 ${locked.name} 님의 출석에 사용되었습니다.\n본인 기기를 사용하거나 담당자에게 문의해 주세요.`);
           return;
         }
       }

@@ -1,25 +1,92 @@
+/* ═══════════════════════════════════════════════
+   대전광역시 CI 디자인 토큰
+   - 블루 : 엠블럼 하단 밴드 / 시정구호 '대전'
+   - 그린 : 엠블럼 꽃잎
+   - 틸   : 시정구호 '온통'
+   ═══════════════════════════════════════════════ */
+:root {
+  --dj-blue: #0b5cab;
+  --dj-blue-dark: #0a4a8f;
+  --dj-blue-deep: #083a72;
+  --dj-blue-light: #eaf3fb;
+  --dj-green: #2e9b47;
+  --dj-teal: #3ec1ae;
+  --dj-teal-dark: #159e8a;
+  --dj-gray: #64748b;
+  --dj-ink: #1e293b;
+}
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
   font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background: #f0f4f8;
-  color: #1e293b;
+  color: var(--dj-ink);
   min-height: 100vh;
+}
+
+/* ── 브랜드 바 (엠블럼 + 기관명) ── */
+.brand-bar {
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+.brand-bar img.brand-emblem {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.brand-bar .brand-name {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--dj-blue-deep);
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+}
+.brand-bar .brand-name small {
+  display: block;
+  font-size: 0.62rem;
+  font-weight: 500;
+  color: #94a3b8;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 /* ── 헤더 ── */
 .att-header {
-  background: linear-gradient(135deg, #003d99, #0066cc);
+  background: linear-gradient(135deg, var(--dj-blue-deep) 0%, var(--dj-blue) 62%, var(--dj-teal-dark) 130%);
   color: #fff;
   padding: 1.1rem 1.4rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.8rem;
-  box-shadow: 0 2px 12px rgba(0,61,153,0.25);
+  box-shadow: 0 2px 12px rgba(8,58,114,0.25);
 }
 .att-header h1 { font-size: 1.1rem; font-weight: 700; }
-.att-header .sub { font-size: 0.78rem; opacity: 0.8; margin-top: 0.15rem; }
+.att-header .sub { font-size: 0.78rem; opacity: 0.85; margin-top: 0.15rem; }
+
+/* ── 시정구호 푸터 ── */
+.slogan-footer {
+  text-align: center;
+  padding: 1.6rem 1rem 2rem;
+}
+.slogan-footer img {
+  max-width: min(300px, 82%);
+  height: auto;
+  opacity: 0.95;
+}
+.slogan-footer .copyright {
+  font-size: 0.72rem;
+  color: #94a3b8;
+  margin-top: 0.7rem;
+  letter-spacing: 0.01em;
+}
 
 /* ── 경고 배너 ── */
 .warning-banner {
@@ -58,7 +125,7 @@ body {
   outline: none;
   transition: border-color 0.15s;
 }
-.form-group input:focus, .form-group select:focus { border-color: #0066cc; }
+.form-group input:focus, .form-group select:focus { border-color: var(--dj-blue); }
 
 .btn {
   display: inline-flex;
@@ -74,9 +141,9 @@ body {
   transition: background 0.15s, opacity 0.15s;
 }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-primary { background: #0066cc; color: #fff; width: 100%; }
-.btn-primary:hover:not(:disabled) { background: #0052a3; }
-.btn-secondary { background: #e2eaf6; color: #0066cc; }
+.btn-primary { background: var(--dj-blue); color: #fff; width: 100%; }
+.btn-primary:hover:not(:disabled) { background: var(--dj-blue-dark); }
+.btn-secondary { background: var(--dj-blue-light); color: var(--dj-blue); }
 .btn-secondary:hover:not(:disabled) { background: #c7daf5; }
 .btn-danger { background: #dc2626; color: #fff; }
 .btn-sm { padding: 0.45rem 0.9rem; font-size: 0.85rem; }
@@ -117,7 +184,7 @@ body {
   font-size: 2.4rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  color: #0066cc;
+  color: var(--dj-blue);
   line-height: 1;
 }
 .countdown.urgent { color: #dc2626; animation: pulse 1s ease-in-out infinite; }
@@ -153,7 +220,7 @@ body {
   box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }
 .session-label { font-size: 0.8rem; color: #64748b; }
-.session-value { font-size: 1rem; font-weight: 700; color: #0066cc; }
+.session-value { font-size: 1rem; font-weight: 700; color: var(--dj-blue); }
 
 #qr-reader {
   background: #000;
@@ -234,7 +301,7 @@ body {
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
-.tab-btn.active { background: #0066cc; color: #fff; }
+.tab-btn.active { background: var(--dj-blue); color: #fff; }
 
 /* 과정 설정 폼 */
 .config-section { margin-bottom: 1.5rem; }
@@ -260,7 +327,7 @@ body {
   transition: border-color 0.15s, background 0.15s;
   color: #475569;
 }
-.session-opt.selected { border-color: #0066cc; background: #eff6ff; color: #0066cc; }
+.session-opt.selected { border-color: var(--dj-blue); background: var(--dj-blue-light); color: var(--dj-blue); }
 
 .time-row { display: flex; gap: 0.6rem; align-items: center; }
 .time-row input[type="time"] {
@@ -367,7 +434,7 @@ table.att-table {
   box-shadow: 0 2px 8px rgba(0,0,0,0.06);
   text-align: center;
 }
-.rate-card .num { font-size: 1.5rem; font-weight: 700; color: #0066cc; }
+.rate-card .num { font-size: 1.5rem; font-weight: 700; color: var(--dj-blue); }
 .rate-card .label { font-size: 0.75rem; color: #64748b; margin-top: 0.2rem; }
 .rate-card.highlight .num { color: #dc2626; }
 

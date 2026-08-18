@@ -10,7 +10,8 @@
   <meta name="apple-mobile-web-app-title" content="QR 출석">
   <meta name="theme-color" content="#0f172a">
   <title>QR 스캔 - 출결관리</title>
-  <link rel="stylesheet" href="attendance.css?v=2">
+  <link rel="icon" type="image/png" href="assets/emblem.png">
+  <link rel="stylesheet" href="attendance.css?v=3">
   <style>
     body { background: #0f172a; color: #f1f5f9; }
     /* 가로 화면(짧은 세로)에서도 카메라가 화면 밖으로 안 나가게 폭을 viewport 높이 기준으로도 제한 */
@@ -149,8 +150,9 @@
 
 <!-- 관리자 인증 게이트 -->
 <div id="scan-auth-screen" class="scan-auth-gate">
-  <div style="font-size:2.5rem;margin-bottom:0.6rem;">🔒</div>
-  <h2>관리자 인증</h2>
+  <img src="assets/emblem.png" alt="대전광역시 엠블럼" style="width:64px;height:64px;margin-bottom:0.6rem;">
+  <div style="font-size:0.82rem;font-weight:700;color:#94a3b8;letter-spacing:0.04em;margin-bottom:0.8rem;">대전광역시 인재개발원 출결 키오스크</div>
+  <h2>🔒 관리자 인증</h2>
   <p>출결 키오스크는 관리자 인증이 필요합니다.</p>
   <input type="password" id="scan-admin-pw" placeholder="관리자 암호" autocomplete="current-password">
   <button class="btn-primary" id="scan-login-btn" onclick="scanLogin()">로그인</button>
@@ -158,6 +160,12 @@
 </div>
 
 <div class="scan-page container" id="scan-main" style="display:none;">
+
+  <!-- 기관 브랜드 라인 -->
+  <div style="display:flex;align-items:center;justify-content:center;gap:0.5rem;padding:0.4rem 0 0;">
+    <img src="assets/emblem.png" alt="대전광역시 엠블럼" style="width:26px;height:26px;">
+    <span style="font-size:0.85rem;font-weight:700;color:#94a3b8;letter-spacing:0.04em;">대전광역시 인재개발원 · QR 출석체크</span>
+  </div>
 
   <!-- 시계 + 날짜 -->
   <div class="clock-bar">
