@@ -18,41 +18,77 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+html { scroll-behavior: smooth; }
+
 body {
   font-family: 'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background: #eef2f7;
   color: var(--dj-ink);
-  min-height: 100vh;
+  min-height: 100dvh;
+  -webkit-font-smoothing: antialiased;
+  word-break: keep-all;
 }
 
-/* ═══ 체크인 히어로 (엠블럼 + 타이틀 통합 헤더) ═══ */
+h1, h2, h3, .status-title { text-wrap: balance; }
+
+/* Supanova 모션 시그니처 — 모든 인터랙션은 스프링 이징 */
+:root { --spring: cubic-bezier(0.16, 1, 0.3, 1); }
+
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(1.3rem); filter: blur(4px); }
+  to   { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+@keyframes orb-float {
+  0%, 100% { transform: translateY(0) translateX(0); }
+  50%      { transform: translateY(-14px) translateX(6px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* ═══ 체크인 히어로 — 메시 그라디언트 + 플로팅 오브 ═══ */
 .hero {
   position: relative;
   overflow: hidden;
   background:
-    radial-gradient(130% 90% at 85% -10%, rgba(62,193,174,0.32) 0%, rgba(62,193,174,0) 52%),
-    linear-gradient(152deg, var(--dj-blue-deep) 0%, var(--dj-blue) 58%, #1373c9 100%);
+    radial-gradient(85% 70% at 10% -5%, rgba(23,116,199,0.85) 0%, rgba(23,116,199,0) 58%),
+    radial-gradient(110% 85% at 96% 4%, rgba(62,193,174,0.34) 0%, rgba(62,193,174,0) 52%),
+    radial-gradient(120% 110% at 45% 125%, rgba(6,32,64,0.75) 0%, rgba(6,32,64,0) 58%),
+    linear-gradient(158deg, var(--dj-blue-deep) 0%, var(--dj-blue) 52%, #1373c9 100%);
   color: #fff;
-  padding: 1.15rem 1.3rem 3.6rem;
+  padding: 1.2rem 1.35rem 3.8rem;
 }
-/* 은은한 장식 원 — 엠블럼 꽃잎 컬러를 빛으로 흩뿌림 */
-.hero::before, .hero::after {
-  content: '';
+/* 플로팅 오브 — 배경 장식은 미세하게 계속 부유 */
+.hero-orb {
   position: absolute;
   border-radius: 50%;
   pointer-events: none;
+  filter: blur(2px);
 }
-.hero::before {
-  width: 320px; height: 320px;
-  right: -120px; top: -150px;
-  background: radial-gradient(circle, rgba(255,255,255,0.16) 0%, rgba(255,255,255,0) 68%);
+.hero-orb.o1 {
+  width: 300px; height: 300px;
+  right: -110px; top: -140px;
+  background: radial-gradient(circle, rgba(255,255,255,0.17) 0%, rgba(255,255,255,0) 66%);
+  animation: orb-float 7s ease-in-out infinite;
 }
-.hero::after {
-  width: 260px; height: 260px;
-  left: -110px; bottom: -140px;
-  background: radial-gradient(circle, rgba(62,193,174,0.38) 0%, rgba(62,193,174,0) 68%);
+.hero-orb.o2 {
+  width: 240px; height: 240px;
+  left: -100px; bottom: -130px;
+  background: radial-gradient(circle, rgba(62,193,174,0.42) 0%, rgba(62,193,174,0) 66%);
+  animation: orb-float 9s ease-in-out 1.2s infinite reverse;
+}
+.hero-orb.o3 {
+  width: 120px; height: 120px;
+  right: 16%; bottom: -46px;
+  background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 70%);
+  animation: orb-float 6s ease-in-out 0.6s infinite;
 }
 .hero > * { position: relative; z-index: 1; }
+
+/* 히어로 요소 스태거 등장 */
+.hero-top   { animation: rise-in 0.6s var(--spring) both; }
+.hero-title { animation: rise-in 0.6s var(--spring) 0.09s both; }
+.date-pill  { animation: rise-in 0.6s var(--spring) 0.18s both; }
 
 .hero-top {
   display: flex;
@@ -88,48 +124,60 @@ body {
   text-transform: uppercase;
 }
 .hero-logout {
-  background: rgba(255,255,255,0.13);
-  border: 1px solid rgba(255,255,255,0.28);
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.25);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.15);
   color: #fff;
-  padding: 0.34rem 0.8rem;
+  padding: 0.36rem 0.85rem;
   border-radius: 999px;
   font-size: 0.76rem;
   font-weight: 600;
   cursor: pointer;
-  backdrop-filter: blur(4px);
-  transition: background 0.15s;
+  backdrop-filter: blur(8px);
+  transition: all 0.4s var(--spring);
 }
-.hero-logout:hover { background: rgba(255,255,255,0.24); }
+.hero-logout:hover { background: rgba(255,255,255,0.24); transform: scale(1.03); }
+.hero-logout:active { transform: scale(0.97); }
 
-.hero-title { margin-top: 1.7rem; }
+.hero-title { margin-top: 1.8rem; }
 .hero-title .eyebrow {
-  display: inline-block;
-  font-size: 0.74rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(62,193,174,0.16);
+  border: 1px solid rgba(143,227,213,0.32);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
   color: #8fe3d5;
-  margin-bottom: 0.4rem;
+  font-size: 0.67rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  margin-bottom: 0.65rem;
 }
 .hero-title h1 {
-  font-size: 1.8rem;
+  font-size: 1.95rem;
   font-weight: 800;
-  letter-spacing: -0.015em;
-  line-height: 1.12;
-  text-shadow: 0 2px 12px rgba(3,24,54,0.25);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  text-shadow: 0 2px 14px rgba(3,24,54,0.28);
 }
 .date-pill {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  margin-top: 0.85rem;
-  background: rgba(255,255,255,0.13);
-  border: 1px solid rgba(255,255,255,0.24);
-  padding: 0.32rem 0.85rem;
+  margin-top: 0.9rem;
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.22);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.12);
+  padding: 0.34rem 0.9rem;
   border-radius: 999px;
   font-size: 0.8rem;
   font-weight: 600;
-  backdrop-filter: blur(4px);
+  font-variant-numeric: tabular-nums;
+  backdrop-filter: blur(8px);
 }
+.date-pill iconify-icon { font-size: 0.95rem; color: #8fe3d5; }
 
 /* 본문 카드가 히어로 하단을 겹쳐 올라오도록 */
 .page-body {
@@ -142,19 +190,30 @@ body {
 /* ── 대리출석 경고 카드 ── */
 .notice-card {
   display: flex;
-  gap: 0.6rem;
+  gap: 0.65rem;
   align-items: flex-start;
-  background: #fff;
-  border-radius: 14px;
-  border-left: 4px solid #dc2626;
-  box-shadow: 0 8px 26px rgba(8,58,114,0.12);
-  padding: 0.85rem 1rem;
-  margin: 0 1rem 0.9rem;
+  background: rgba(255,255,255,0.86);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.65);
+  border-radius: 16px;
+  box-shadow: 0 10px 30px -8px rgba(8,58,114,0.2), inset 0 1px 0 rgba(255,255,255,0.9);
+  padding: 0.9rem 1.05rem;
+  margin: 0 1rem 0.95rem;
   font-size: 0.79rem;
-  line-height: 1.6;
+  line-height: 1.62;
   color: #64748b;
+  animation: rise-in 0.6s var(--spring) 0.24s both;
 }
-.notice-card .notice-icon { font-size: 1.05rem; line-height: 1.5; }
+.notice-card .notice-icon {
+  width: 30px; height: 30px;
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 9px;
+  background: #fef2f2;
+  color: #dc2626;
+  font-size: 1rem;
+  margin-top: 0.1rem;
+}
 .notice-card strong { color: #dc2626; }
 
 /* ── 헤더 ── */
@@ -190,6 +249,7 @@ body {
   max-width: min(272px, 76%);
   height: auto;
 }
+.slogan-footer { animation: rise-in 0.7s var(--spring) 0.4s both; }
 .slogan-footer .copyright {
   font-size: 0.72rem;
   color: #94a3b8;
@@ -209,26 +269,32 @@ body {
   letter-spacing: 0.01em;
 }
 
-/* ── 카드 ── */
+/* ── 카드 — Double-Bezel (유리판을 알루미늄 트레이에 얹은 구조) ── */
 .card {
   background: #fff;
-  border-radius: 20px;
-  padding: 1.6rem 1.35rem;
-  margin: 0 1rem 1rem;
+  background-clip: padding-box;
+  border: 6px solid rgba(255,255,255,0.55);
+  border-radius: 26px;
+  padding: 1.7rem 1.4rem;
+  margin: 0 0.9rem 1rem;
   max-width: 480px;
-  box-shadow: 0 12px 36px rgba(8,58,114,0.11);
+  box-shadow:
+    0 0 0 1px rgba(11,92,171,0.07),
+    0 26px 52px -20px rgba(8,58,114,0.3),
+    0 6px 16px -8px rgba(8,58,114,0.12);
 }
+.screen.active .card { animation: rise-in 0.55s var(--spring) 0.3s both; }
 .card-title {
-  font-size: 1.12rem;
+  font-size: 1.15rem;
   font-weight: 800;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.012em;
   margin-bottom: 0.35rem;
 }
 .card-desc {
   font-size: 0.85rem;
   color: #64748b;
-  line-height: 1.6;
-  margin-bottom: 1.3rem;
+  line-height: 1.62;
+  margin-bottom: 1.35rem;
 }
 
 .container { max-width: 960px; margin: 0 auto; padding: 1rem; }
@@ -238,14 +304,14 @@ body {
 .form-group label { display: block; font-size: 0.84rem; font-weight: 700; color: #475569; margin-bottom: 0.45rem; }
 .form-group input, .form-group select {
   width: 100%;
-  padding: 0.88rem 1.05rem;
+  padding: 0.9rem 1.1rem;
   border: 1.5px solid #dde5ee;
-  border-radius: 13px;
+  border-radius: 14px;
   font-size: 1.02rem;
   color: var(--dj-ink);
   background: #f8fafc;
   outline: none;
-  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  transition: all 0.4s var(--spring);
 }
 .form-group input::placeholder { color: #a8b4c4; }
 .form-group input:focus, .form-group select:focus {
@@ -261,29 +327,53 @@ body {
   gap: 0.4rem;
   padding: 0.75rem 1.5rem;
   border: none;
-  border-radius: 10px;
+  border-radius: 999px;
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s, opacity 0.15s;
+  transition: all 0.4s var(--spring);
 }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-primary {
+  position: relative;
   background: linear-gradient(135deg, var(--dj-blue) 0%, #1373c9 100%);
   color: #fff;
   width: 100%;
+  min-height: 54px;
   padding: 0.95rem 1.5rem;
-  border-radius: 13px;
   font-size: 1.05rem;
   font-weight: 700;
   letter-spacing: 0.01em;
-  box-shadow: 0 6px 18px rgba(11,92,171,0.3);
-  transition: box-shadow 0.15s, transform 0.1s, filter 0.15s;
+  box-shadow:
+    0 10px 24px -8px rgba(11,92,171,0.5),
+    inset 0 1px 0 rgba(255,255,255,0.22);
 }
-.btn-primary:hover:not(:disabled) { filter: brightness(1.07); }
-.btn-primary:active:not(:disabled) { transform: translateY(1px); box-shadow: 0 3px 10px rgba(11,92,171,0.25); }
+.btn-primary:hover:not(:disabled) { transform: scale(1.02); filter: brightness(1.06); }
+.btn-primary:active:not(:disabled) { transform: scale(0.98); }
+.btn-cta { padding-right: 3.4rem; }
+/* CTA 화살표 — 버튼 안쪽 끝의 원형 캡슐에 담는다 */
+.btn-arrow {
+  position: absolute;
+  right: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.16);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  transition: transform 0.4s var(--spring), background 0.4s var(--spring);
+}
+.btn-primary:hover:not(:disabled) .btn-arrow {
+  transform: translateY(-50%) translateX(3px);
+  background: rgba(255,255,255,0.26);
+}
 .btn-secondary { background: var(--dj-blue-light); color: var(--dj-blue); }
-.btn-secondary:hover:not(:disabled) { background: #c7daf5; }
+.btn-secondary:hover:not(:disabled) { background: #c7daf5; transform: scale(1.02); }
+.btn-secondary:active:not(:disabled) { transform: scale(0.98); }
 .btn-danger { background: #dc2626; color: #fff; }
 .btn-sm { padding: 0.45rem 0.9rem; font-size: 0.85rem; }
 
@@ -358,8 +448,12 @@ body {
   font-size: 2.7rem;
   background: linear-gradient(145deg, var(--dj-blue-light), #f2fbf9);
   border-radius: 50%;
-  box-shadow: inset 0 0 0 1px rgba(11,92,171,0.08);
+  box-shadow: inset 0 0 0 1px rgba(11,92,171,0.08), inset 0 2px 4px rgba(255,255,255,0.9);
+  color: var(--dj-blue);
 }
+.status-icon iconify-icon { font-size: 2.9rem; }
+.status-icon.ok { color: #16a34a; background: linear-gradient(145deg, #ecfdf5, #f0fdf4); }
+.status-icon.warn { color: #d97706; background: linear-gradient(145deg, #fffbeb, #fef9ec); }
 .status-title { font-size: 1.12rem; font-weight: 800; margin-bottom: 0.5rem; letter-spacing: -0.01em; }
 .status-desc { font-size: 0.88rem; color: #64748b; line-height: 1.65; white-space: pre-line; }
 

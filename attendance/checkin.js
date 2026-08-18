@@ -126,7 +126,8 @@ window.doLoginEmpNo = async function() {
 
   document.getElementById('login-error-empno').style.display = 'none';
   const btn = document.getElementById('login-btn-empno');
-  btn.disabled = true; btn.textContent = '확인 중...';
+  const btnLabel = document.getElementById('login-btn-label');
+  btn.disabled = true; btnLabel.textContent = '확인 중...';
 
   try {
     const result = await loginByEmpNo({ name, empNo });
@@ -160,7 +161,7 @@ window.doLoginEmpNo = async function() {
       showEmpNoError('서버 연결에 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.');
     }
   } finally {
-    btn.disabled = false; btn.textContent = '확인하기';
+    btn.disabled = false; btnLabel.textContent = '확인하기';
   }
 };
 
@@ -207,7 +208,7 @@ function showCoursePicker(name, candidates) {
   const list = document.getElementById('course-picker-list');
   list.innerHTML = candidates.map((c, i) => `
     <div class="course-item" onclick="pickCourse(${i})">
-      <div class="c-name">📚 ${escapeHtml(c.courseName)}</div>
+      <div class="c-name"><iconify-icon icon="solar:square-academic-cap-bold" style="color:var(--dj-blue);vertical-align:-2px;"></iconify-icon> ${escapeHtml(c.courseName)}</div>
       <div class="c-dates">${getDailySessionLabel(c.config)}</div>
     </div>
   `).join('');

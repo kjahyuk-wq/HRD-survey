@@ -33,8 +33,18 @@
   <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.10.0/firebase-app-check.js">
 
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-  <link rel="stylesheet" href="attendance.css?v=4">
+  <script src="https://code.iconify.design/iconify-icon/2.3.0/iconify-icon.min.js"></script>
+  <link rel="stylesheet" href="attendance.css?v=5">
   <style>
+    /* 그레인 텍스처 — 디지털 민낯을 가리는 유기적 질감 */
+    body::after {
+      content: '';
+      position: fixed; inset: 0;
+      z-index: 60;
+      pointer-events: none;
+      opacity: 0.03;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
     /* 자동 로그인 중 스피너 — '빈 로그인 폼' 노출 방지 용도 */
     .auto-spinner {
       width: 48px; height: 48px;
@@ -76,6 +86,9 @@
 <body>
 <div class="page-wrap">
   <header class="hero">
+    <span class="hero-orb o1"></span>
+    <span class="hero-orb o2"></span>
+    <span class="hero-orb o3"></span>
     <div class="hero-top">
       <div class="hero-brand">
         <span class="emblem-chip"><img src="assets/emblem.png" alt="대전광역시 엠블럼"></span>
@@ -90,12 +103,12 @@
       <span class="eyebrow">신규자 과정</span>
       <h1>출석체크</h1>
     </div>
-    <span class="date-pill">📅 <span id="today-date"></span></span>
+    <span class="date-pill"><iconify-icon icon="solar:calendar-bold"></iconify-icon> <span id="today-date"></span></span>
   </header>
 
   <div class="page-body">
     <div class="notice-card">
-      <span class="notice-icon">🚨</span>
+      <span class="notice-icon"><iconify-icon icon="solar:danger-triangle-bold"></iconify-icon></span>
       <div>
         <strong>대리 출석 금지</strong> — 적발 시 학칙에 의거하여 강제 퇴교 처리 후 소속기관에 통보됩니다.
         입력하신 정보는 본인 확인 용도로만 안전하게 보관됩니다.
@@ -127,10 +140,14 @@
         <input type="text" id="input-empno" placeholder="교번" inputmode="numeric" autocomplete="off">
       </div>
       <div id="login-error-empno" class="error-text" style="display:none;margin-bottom:0.8rem;white-space:pre-line;"></div>
-      <button class="btn btn-primary" id="login-btn-empno" onclick="doLoginEmpNo()">확인하기</button>
-      <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:0.7rem 0.9rem;margin-top:1.1rem;">
+      <button class="btn btn-primary btn-cta" id="login-btn-empno" onclick="doLoginEmpNo()">
+        <span id="login-btn-label">확인하기</span>
+        <span class="btn-arrow"><iconify-icon icon="solar:arrow-right-linear"></iconify-icon></span>
+      </button>
+      <div style="display:flex;align-items:center;gap:0.5rem;background:#fffbeb;border:1px solid #fde68a;border-radius:13px;padding:0.7rem 0.9rem;margin-top:1.15rem;">
+        <iconify-icon icon="solar:lightbulb-bold" style="color:#d97706;font-size:1.05rem;flex-shrink:0;"></iconify-icon>
         <p style="font-size:0.8rem;color:#92400e;line-height:1.55;margin:0;">
-          💡 <strong>교번을 모를 경우</strong> 담당자에게 문의해 주세요.
+          <strong>교번을 모를 경우</strong> 담당자에게 문의해 주세요.
         </p>
       </div>
     </div>
@@ -149,7 +166,7 @@
   <div id="screen-no-class" class="screen">
     <div class="card">
       <div class="status-msg">
-        <div class="status-icon">🏖️</div>
+        <div class="status-icon"><iconify-icon icon="solar:moon-stars-bold"></iconify-icon></div>
         <div class="status-title" id="no-class-title">오늘은 휴강일입니다</div>
         <div class="status-desc" id="no-class-desc">출석 체크가 비활성화되어 있습니다.</div>
       </div>
@@ -160,7 +177,7 @@
   <div id="screen-already" class="screen">
     <div class="card">
       <div class="status-msg">
-        <div class="status-icon">✅</div>
+        <div class="status-icon ok"><iconify-icon icon="solar:check-circle-bold"></iconify-icon></div>
         <div class="status-title">이미 출석 처리되었습니다</div>
         <div class="status-desc" id="already-desc"></div>
       </div>
@@ -171,7 +188,7 @@
   <div id="screen-no-session" class="screen">
     <div class="card">
       <div class="status-msg">
-        <div class="status-icon">⏰</div>
+        <div class="status-icon warn"><iconify-icon icon="solar:clock-circle-bold"></iconify-icon></div>
         <div class="status-title">현재 출석 시간이 아닙니다</div>
         <div class="status-desc" id="no-session-desc"></div>
       </div>
@@ -191,7 +208,7 @@
         <div class="qr-img-wrap" id="qr-img-wrap">
           <canvas id="qr-canvas" width="280" height="280"></canvas>
           <div class="expired-overlay" id="expired-overlay" style="display:none;">
-            <div class="expired-icon">⏱</div>
+            <div class="expired-icon"><iconify-icon icon="solar:hourglass-bold" style="color:#dc2626;"></iconify-icon></div>
             <div class="expired-text">QR이 만료되었습니다</div>
             <button class="btn btn-secondary btn-sm" onclick="reissueQr()">다시 발급받기</button>
           </div>
