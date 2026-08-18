@@ -13,20 +13,7 @@ import { escapeHtml, toDateStr, formatDisplayDate, formatTime, getBuiltinHoliday
 setPersistence(auth, browserLocalPersistence).catch(() => {});
 const SESSION_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 
-const loginByEmail = httpsCallable(functions, 'loginByEmail');
 const loginByEmpNo = httpsCallable(functions, 'loginByEmpNo');
-
-// 두 로그인 화면 토글
-window.showEmailLogin = function() {
-  document.getElementById('login-error').style.display = 'none';
-  document.getElementById('login-error-empno').style.display = 'none';
-  showScreen('screen-login');
-};
-window.showEmpNoLogin = function() {
-  document.getElementById('login-error').style.display = 'none';
-  document.getElementById('login-error-empno').style.display = 'none';
-  showScreen('screen-login-empno');
-};
 
 // ── 상태 ──────────────────────────────
 let currentUser = null;   // { name, empNo, courseId, courseName, config }
@@ -47,8 +34,7 @@ function showScreen(id) {
   // 로그인 화면 외에선 로그아웃 버튼 표시
   const logoutBtn = document.getElementById('logout-btn');
   if (logoutBtn) {
-    const isLoginScreen = id === 'screen-login' || id === 'screen-login-empno';
-    logoutBtn.style.display = isLoginScreen ? 'none' : 'inline-block';
+    logoutBtn.style.display = id === 'screen-login-empno' ? 'none' : 'inline-block';
   }
 }
 
@@ -58,7 +44,7 @@ window.doLogout = async function() {
   clearSessionCache();
   clearSnapshot();
   try { await signOut(auth); } catch(_) {}
-  ['input-name', 'input-email', 'input-name-empno', 'input-empno'].forEach(id => {
+  ['input-name-empno', 'input-empno'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -67,12 +53,6 @@ window.doLogout = async function() {
   currentUser = null;
   showScreen('screen-login-empno');
 };
-
-function showLoginError(msg) {
-  const el = document.getElementById('login-error');
-  el.textContent = msg;
-  el.style.display = 'block';
-}
 
 function showEmpNoError(msg) {
   const el = document.getElementById('login-error-empno');
@@ -133,58 +113,7 @@ function clearSessionCache() {
 // onAuthStateChanged ↔ doLogin 동시 진행 방지 플래그
 let autoResumed = false;
 
-// ── 로그인 ──────────────────────────────
-window.doLogin = async function() {
-  const name = document.getElementById('input-name').value.trim();
-  const email = document.getElementById('input-email').value.trim().toLowerCase();
-
-  if (!name) { document.getElementById('input-name').focus(); return; }
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-    showLoginError('메일 주소를 올바르게 입력해 주세요.');
-    return;
-  }
-
-  document.getElementById('login-error').style.display = 'none';
-  const btn = document.getElementById('login-btn');
-  btn.disabled = true; btn.textContent = '확인 중...';
-
-  try {
-    const result = await loginByEmail({ name, email });
-    const { customToken, candidates: rawCandidates } = result.data || {};
-
-    if (!customToken) {
-      showLoginError('서버 응답이 올바르지 않습니다. 담당자에게 문의해 주세요.');
-      return;
-    }
-
-    // 인증 변경 후 onAuthStateChanged 가 동시에 자동 진행하지 않도록 미리 잠금
-    autoResumed = true;
-    await signInWithCustomToken(auth, customToken);
-
-    // 메일은 절대 캐싱하지 않음. 이름/후보/타임스탬프만 저장 (72시간 자동 진행용)
-    localStorage.setItem(SESSION_NAME_KEY, name);
-    localStorage.setItem(SESSION_CANDS_KEY, JSON.stringify(rawCandidates || []));
-    localStorage.setItem(SESSION_TS_KEY, String(Date.now()));
-
-    await proceedWithCandidates(name, rawCandidates || []);
-  } catch (e) {
-    console.error(e);
-    const code = e?.code || '';
-    if (code === 'functions/not-found') {
-      showLoginError('등록된 수강생 정보를 찾을 수 없습니다.\n이름과 메일을 확인하거나 담당자에게 문의해 주세요.');
-    } else if (code === 'functions/resource-exhausted') {
-      showLoginError('잠시 후 다시 시도해 주세요. (요청 한도 초과)');
-    } else if (code === 'functions/invalid-argument') {
-      showLoginError(e.message || '입력값이 올바르지 않습니다.');
-    } else {
-      showLoginError('서버 연결에 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.');
-    }
-  } finally {
-    btn.disabled = false; btn.textContent = '확인하기';
-  }
-};
-
-// ── 이름+교번 로그인 (공무직 등 메일 없는 학생) ─────
+// ── 이름+교번 로그인 (유일한 로그인 수단) ─────
 window.doLoginEmpNo = async function() {
   const name = document.getElementById('input-name-empno').value.trim();
   const empNo = document.getElementById('input-empno').value.trim();
@@ -565,8 +494,6 @@ function clearTimer() {
 }
 
 // 엔터키 지원
-document.getElementById('input-name').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('input-email').focus(); });
-document.getElementById('input-email').addEventListener('keydown', e => { if (e.key === 'Enter') window.doLogin(); });
 document.getElementById('input-name-empno').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('input-empno').focus(); });
 document.getElementById('input-empno').addEventListener('keydown', e => { if (e.key === 'Enter') window.doLoginEmpNo(); });
 
@@ -593,7 +520,7 @@ onAuthStateChanged(auth, async (user) => {
     if (!Array.isArray(cachedCands) || !cachedCands.length) return;
 
     autoResumed = true;
-    document.getElementById('input-name').value = cachedName;
+    document.getElementById('input-name-empno').value = cachedName;
     await proceedWithCandidates(cachedName, cachedCands);
   } catch (e) {
     console.warn('자동 진행 실패', e);

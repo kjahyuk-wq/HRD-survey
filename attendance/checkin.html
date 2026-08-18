@@ -32,9 +32,9 @@
   <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.10.0/firebase-functions.js">
   <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.10.0/firebase-app-check.js">
 
-  <link rel="stylesheet" href="attendance.css?v=3">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+  <link rel="stylesheet" href="attendance.css?v=4">
   <style>
-    body { background: #f0f4f8; }
     /* 자동 로그인 중 스피너 — '빈 로그인 폼' 노출 방지 용도 */
     .auto-spinner {
       width: 48px; height: 48px;
@@ -75,31 +75,32 @@
 </head>
 <body>
 <div class="page-wrap">
-  <div class="brand-bar">
-    <img class="brand-emblem" src="assets/emblem.png" alt="대전광역시 엠블럼">
-    <div class="brand-name">
-      대전광역시 인재개발원
-      <small>Daejeon Human Resource Development Institute</small>
+  <header class="hero">
+    <div class="hero-top">
+      <div class="hero-brand">
+        <span class="emblem-chip"><img src="assets/emblem.png" alt="대전광역시 엠블럼"></span>
+        <div class="hero-org">
+          대전광역시 인재개발원
+          <small>Daejeon HRD Institute</small>
+        </div>
+      </div>
+      <button id="logout-btn" class="hero-logout" onclick="doLogout()" style="display:none;">로그아웃</button>
     </div>
-  </div>
-
-  <div class="warning-banner">
-    본인 외 대리 출석 적발 시 학칙에 의거하여 강제 퇴교 처리 후 소속기관에 통보됩니다.<br>
-    입력하신 정보는 본인 확인용으로만 쓰이고, 안전한 형태로 보관됩니다.
-  </div>
-
-  <div class="att-header">
-    <div>
-      <h1>📋 출석 관리 시스템</h1>
-      <div class="sub">신규자 과정 출석체크</div>
+    <div class="hero-title">
+      <span class="eyebrow">신규자 과정</span>
+      <h1>출석체크</h1>
     </div>
-    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.35rem;">
-      <button id="logout-btn" onclick="doLogout()" style="display:none;background:rgba(255,255,255,0.18);color:#fff;border:none;padding:0.3rem 0.7rem;border-radius:8px;font-size:0.78rem;cursor:pointer;">로그아웃</button>
-      <div id="today-date" style="font-size:0.82rem;opacity:0.85;"></div>
-    </div>
-  </div>
+    <span class="date-pill">📅 <span id="today-date"></span></span>
+  </header>
 
   <div class="page-body">
+    <div class="notice-card">
+      <span class="notice-icon">🚨</span>
+      <div>
+        <strong>대리 출석 금지</strong> — 적발 시 학칙에 의거하여 강제 퇴교 처리 후 소속기관에 통보됩니다.
+        입력하신 정보는 본인 확인 용도로만 안전하게 보관됩니다.
+      </div>
+    </div>
 
   <!-- 스크린 0: 자동 로그인 대기 (옵티미스틱 인라인 스크립트가 활성화) -->
   <div id="screen-resuming" class="screen">
@@ -112,13 +113,11 @@
     </div>
   </div>
 
-  <!-- 스크린 1A: 이름+교번 로그인 (기본 — 신규자는 공직자 통합메일이 없음) -->
+  <!-- 스크린 1: 이름+교번 로그인 (유일한 로그인 수단) -->
   <div id="screen-login-empno" class="screen active">
     <div class="card">
-      <h2 style="font-size:1.05rem;font-weight:700;margin-bottom:1rem;">본인 확인</h2>
-      <p style="font-size:0.85rem;color:#64748b;margin-bottom:1.2rem;line-height:1.6;">
-        <strong>이름</strong>과 <strong>교번</strong>을 입력해 주세요.
-      </p>
+      <h2 class="card-title">본인 확인</h2>
+      <p class="card-desc"><strong>이름</strong>과 <strong>교번</strong>을 입력해 주세요.</p>
       <div class="form-group">
         <label>이름</label>
         <input type="text" id="input-name-empno" placeholder="홍길동" maxlength="20" autocomplete="name">
@@ -129,40 +128,10 @@
       </div>
       <div id="login-error-empno" class="error-text" style="display:none;margin-bottom:0.8rem;white-space:pre-line;"></div>
       <button class="btn btn-primary" id="login-btn-empno" onclick="doLoginEmpNo()">확인하기</button>
-      <div style="background:#fef3c7;border-radius:10px;padding:0.7rem 0.9rem;margin-top:1rem;">
+      <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:0.7rem 0.9rem;margin-top:1.1rem;">
         <p style="font-size:0.8rem;color:#92400e;line-height:1.55;margin:0;">
-          ⚠️ <strong>교번을 모를 경우</strong>, 담당자에게 문의해 주세요.
+          💡 <strong>교번을 모를 경우</strong> 담당자에게 문의해 주세요.
         </p>
-      </div>
-      <div style="text-align:center;margin-top:0.8rem;">
-        <a href="#" onclick="event.preventDefault();showEmailLogin();" style="font-size:0.83rem;color:#64748b;text-decoration:underline;">
-          공직자 통합메일로 로그인하기 →
-        </a>
-      </div>
-    </div>
-  </div>
-
-  <!-- 스크린 1B: 메일 로그인 (공직자 통합메일 보유자) -->
-  <div id="screen-login" class="screen">
-    <div class="card">
-      <h2 style="font-size:1.05rem;font-weight:700;margin-bottom:1rem;">공직자 통합메일로 본인 확인</h2>
-      <p style="font-size:0.85rem;color:#64748b;margin-bottom:1.2rem;line-height:1.6;">
-        <strong>이름</strong>과 <strong>공직자 통합메일</strong>을 입력해 주세요.
-      </p>
-      <div class="form-group">
-        <label>이름</label>
-        <input type="text" id="input-name" placeholder="홍길동" maxlength="20" autocomplete="name">
-      </div>
-      <div class="form-group">
-        <label>공직자 통합메일</label>
-        <input type="email" id="input-email" placeholder="example@korea.kr" autocomplete="email" inputmode="email">
-      </div>
-      <div id="login-error" class="error-text" style="display:none;margin-bottom:0.8rem;white-space:pre-line;"></div>
-      <button class="btn btn-primary" id="login-btn" onclick="doLogin()">확인하기</button>
-      <div style="text-align:center;margin-top:0.9rem;">
-        <a href="#" onclick="event.preventDefault();showEmpNoLogin();" style="font-size:0.83rem;color:var(--dj-blue);text-decoration:underline;">
-          ← 이름과 교번으로 로그인하기
-        </a>
       </div>
     </div>
   </div>
@@ -279,8 +248,7 @@
       if (target) target.classList.add('active');
       var lo = document.getElementById('logout-btn');
       if (lo) {
-        var isLogin = (id === 'screen-login' || id === 'screen-login-empno');
-        lo.style.display = isLogin ? 'none' : 'inline-block';
+        lo.style.display = (id === 'screen-login-empno') ? 'none' : 'inline-block';
       }
     }
 

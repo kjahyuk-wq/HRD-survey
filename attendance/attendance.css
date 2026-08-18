@@ -19,43 +19,143 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background: #f0f4f8;
+  font-family: 'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #eef2f7;
   color: var(--dj-ink);
   min-height: 100vh;
 }
 
-/* ── 브랜드 바 (엠블럼 + 기관명) ── */
-.brand-bar {
-  background: #fff;
+/* ═══ 체크인 히어로 (엠블럼 + 타이틀 통합 헤더) ═══ */
+.hero {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(130% 90% at 85% -10%, rgba(62,193,174,0.32) 0%, rgba(62,193,174,0) 52%),
+    linear-gradient(152deg, var(--dj-blue-deep) 0%, var(--dj-blue) 58%, #1373c9 100%);
+  color: #fff;
+  padding: 1.15rem 1.3rem 3.6rem;
+}
+/* 은은한 장식 원 — 엠블럼 꽃잎 컬러를 빛으로 흩뿌림 */
+.hero::before, .hero::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.hero::before {
+  width: 320px; height: 320px;
+  right: -120px; top: -150px;
+  background: radial-gradient(circle, rgba(255,255,255,0.16) 0%, rgba(255,255,255,0) 68%);
+}
+.hero::after {
+  width: 260px; height: 260px;
+  left: -110px; bottom: -140px;
+  background: radial-gradient(circle, rgba(62,193,174,0.38) 0%, rgba(62,193,174,0) 68%);
+}
+.hero > * { position: relative; z-index: 1; }
+
+.hero-top {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.6rem;
-  padding: 0.7rem 1rem;
-  border-bottom: 1px solid #e2e8f0;
+  justify-content: space-between;
+  gap: 0.7rem;
 }
-.brand-bar img.brand-emblem {
-  width: 34px;
-  height: 34px;
-  object-fit: contain;
+.hero-brand { display: flex; align-items: center; gap: 0.65rem; min-width: 0; }
+.emblem-chip {
+  width: 44px; height: 44px;
+  background: #fff;
+  border-radius: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px rgba(3,24,54,0.4);
   flex-shrink: 0;
 }
-.brand-bar .brand-name {
-  font-size: 0.95rem;
-  font-weight: 800;
-  color: var(--dj-blue-deep);
-  letter-spacing: 0.02em;
-  line-height: 1.2;
+.emblem-chip img { width: 36px; height: 36px; object-fit: contain; }
+.hero-org {
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1.3;
+  white-space: nowrap;
 }
-.brand-bar .brand-name small {
+.hero-org small {
   display: block;
-  font-size: 0.62rem;
+  font-size: 0.56rem;
   font-weight: 500;
-  color: #94a3b8;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.16em;
+  opacity: 0.62;
   text-transform: uppercase;
 }
+.hero-logout {
+  background: rgba(255,255,255,0.13);
+  border: 1px solid rgba(255,255,255,0.28);
+  color: #fff;
+  padding: 0.34rem 0.8rem;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition: background 0.15s;
+}
+.hero-logout:hover { background: rgba(255,255,255,0.24); }
+
+.hero-title { margin-top: 1.7rem; }
+.hero-title .eyebrow {
+  display: inline-block;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #8fe3d5;
+  margin-bottom: 0.4rem;
+}
+.hero-title h1 {
+  font-size: 1.8rem;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  line-height: 1.12;
+  text-shadow: 0 2px 12px rgba(3,24,54,0.25);
+}
+.date-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.85rem;
+  background: rgba(255,255,255,0.13);
+  border: 1px solid rgba(255,255,255,0.24);
+  padding: 0.32rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  backdrop-filter: blur(4px);
+}
+
+/* 본문 카드가 히어로 하단을 겹쳐 올라오도록 */
+.page-body {
+  position: relative;
+  z-index: 2;
+  margin-top: -2.5rem;
+  padding-bottom: 0.4rem;
+}
+
+/* ── 대리출석 경고 카드 ── */
+.notice-card {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  background: #fff;
+  border-radius: 14px;
+  border-left: 4px solid #dc2626;
+  box-shadow: 0 8px 26px rgba(8,58,114,0.12);
+  padding: 0.85rem 1rem;
+  margin: 0 1rem 0.9rem;
+  font-size: 0.79rem;
+  line-height: 1.6;
+  color: #64748b;
+}
+.notice-card .notice-icon { font-size: 1.05rem; line-height: 1.5; }
+.notice-card strong { color: #dc2626; }
 
 /* ── 헤더 ── */
 .att-header {
@@ -74,18 +174,27 @@ body {
 /* ── 시정구호 푸터 ── */
 .slogan-footer {
   text-align: center;
-  padding: 1.6rem 1rem 2rem;
+  padding: 1.4rem 1rem 2.2rem;
+  margin-top: auto;
+}
+.slogan-footer::before {
+  content: '';
+  display: block;
+  width: 46px;
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--dj-blue), var(--dj-teal));
+  margin: 0 auto 1.4rem;
 }
 .slogan-footer img {
-  max-width: min(300px, 82%);
+  max-width: min(272px, 76%);
   height: auto;
-  opacity: 0.95;
 }
 .slogan-footer .copyright {
   font-size: 0.72rem;
   color: #94a3b8;
-  margin-top: 0.7rem;
-  letter-spacing: 0.01em;
+  margin-top: 0.8rem;
+  letter-spacing: 0.02em;
 }
 
 /* ── 경고 배너 ── */
@@ -103,29 +212,47 @@ body {
 /* ── 카드 ── */
 .card {
   background: #fff;
-  border-radius: 16px;
-  padding: 1.4rem 1.2rem;
-  margin: 1rem auto;
+  border-radius: 20px;
+  padding: 1.6rem 1.35rem;
+  margin: 0 1rem 1rem;
   max-width: 480px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  box-shadow: 0 12px 36px rgba(8,58,114,0.11);
+}
+.card-title {
+  font-size: 1.12rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  margin-bottom: 0.35rem;
+}
+.card-desc {
+  font-size: 0.85rem;
+  color: #64748b;
+  line-height: 1.6;
+  margin-bottom: 1.3rem;
 }
 
 .container { max-width: 960px; margin: 0 auto; padding: 1rem; }
 
 /* ── 폼 ── */
-.form-group { margin-bottom: 1rem; }
-.form-group label { display: block; font-size: 0.85rem; font-weight: 600; color: #475569; margin-bottom: 0.4rem; }
+.form-group { margin-bottom: 1.05rem; }
+.form-group label { display: block; font-size: 0.84rem; font-weight: 700; color: #475569; margin-bottom: 0.45rem; }
 .form-group input, .form-group select {
   width: 100%;
-  padding: 0.75rem 1rem;
-  border: 1.5px solid #cbd5e1;
-  border-radius: 10px;
-  font-size: 1rem;
-  color: #1e293b;
+  padding: 0.88rem 1.05rem;
+  border: 1.5px solid #dde5ee;
+  border-radius: 13px;
+  font-size: 1.02rem;
+  color: var(--dj-ink);
+  background: #f8fafc;
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
 }
-.form-group input:focus, .form-group select:focus { border-color: var(--dj-blue); }
+.form-group input::placeholder { color: #a8b4c4; }
+.form-group input:focus, .form-group select:focus {
+  border-color: var(--dj-blue);
+  background: #fff;
+  box-shadow: 0 0 0 3.5px rgba(11,92,171,0.13);
+}
 
 .btn {
   display: inline-flex;
@@ -141,8 +268,20 @@ body {
   transition: background 0.15s, opacity 0.15s;
 }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-primary { background: var(--dj-blue); color: #fff; width: 100%; }
-.btn-primary:hover:not(:disabled) { background: var(--dj-blue-dark); }
+.btn-primary {
+  background: linear-gradient(135deg, var(--dj-blue) 0%, #1373c9 100%);
+  color: #fff;
+  width: 100%;
+  padding: 0.95rem 1.5rem;
+  border-radius: 13px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  box-shadow: 0 6px 18px rgba(11,92,171,0.3);
+  transition: box-shadow 0.15s, transform 0.1s, filter 0.15s;
+}
+.btn-primary:hover:not(:disabled) { filter: brightness(1.07); }
+.btn-primary:active:not(:disabled) { transform: translateY(1px); box-shadow: 0 3px 10px rgba(11,92,171,0.25); }
 .btn-secondary { background: var(--dj-blue-light); color: var(--dj-blue); }
 .btn-secondary:hover:not(:disabled) { background: #c7daf5; }
 .btn-danger { background: #dc2626; color: #fff; }
@@ -160,9 +299,13 @@ body {
   gap: 1rem;
   padding: 1.2rem 0;
 }
-#qr-canvas {
-  border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+#qr-canvas { border-radius: 10px; }
+.qr-img-wrap {
+  background: #fff;
+  border: 1.5px solid #e6ecf4;
+  border-radius: 18px;
+  padding: 12px;
+  box-shadow: 0 10px 28px rgba(8,58,114,0.12);
 }
 .qr-meta { text-align: center; font-size: 0.88rem; color: #64748b; }
 .qr-name { font-size: 1.1rem; font-weight: 700; color: #1e293b; margin-bottom: 0.3rem; }
@@ -179,7 +322,12 @@ body {
 .badge-afternoon { background: #ede9fe; color: #6d28d9; }
 
 /* ── 카운트다운 ── */
-.countdown-wrap { text-align: center; }
+.countdown-wrap {
+  text-align: center;
+  background: var(--dj-blue-light);
+  border-radius: 16px;
+  padding: 0.75rem 2rem;
+}
 .countdown {
   font-size: 2.4rem;
   font-weight: 700;
@@ -200,9 +348,20 @@ body {
   text-align: center;
   padding: 2rem 1rem;
 }
-.status-icon { font-size: 3.5rem; margin-bottom: 0.8rem; }
-.status-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.5rem; }
-.status-desc { font-size: 0.88rem; color: #64748b; line-height: 1.6; }
+.status-icon {
+  width: 92px;
+  height: 92px;
+  margin: 0 auto 1.1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.7rem;
+  background: linear-gradient(145deg, var(--dj-blue-light), #f2fbf9);
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(11,92,171,0.08);
+}
+.status-title { font-size: 1.12rem; font-weight: 800; margin-bottom: 0.5rem; letter-spacing: -0.01em; }
+.status-desc { font-size: 0.88rem; color: #64748b; line-height: 1.65; white-space: pre-line; }
 
 .error-text { color: #dc2626; font-size: 0.85rem; margin-top: 0.5rem; }
 
