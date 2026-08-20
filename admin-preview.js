@@ -2,7 +2,7 @@ import { db } from './firebase-config.js';
 import {
   collection, getDocs
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
-import { state, escapeHtml, escapeAttr, NC_SURVEY, normalizeCourseType, getInstructorGroup } from './admin-utils.js';
+import { state, escapeHtml, escapeAttr, NC_SURVEY, RK_SURVEY, RK_SUB_COMMENTS, normalizeCourseType, getInstructorGroup } from './admin-utils.js';
 import { lsRead, lsWrite } from './admin-courses.js';
 import { getInstructorCategory, COMMON_CATEGORY } from './admin-rounds.js';
 
@@ -137,6 +137,49 @@ function renderNewcomerPreviewQuestions() {
   container.innerHTML = html;
 }
 
+// 공무원 신규자 과정 고정 문항 미리보기 — RK_SURVEY 정의로 동적 생성 (index.html 블록과 동일 구성)
+function renderRookiePreviewQuestions() {
+  const container = document.getElementById('preview-rookie-questions');
+  if (!container || container.dataset.rendered) return;
+  container.dataset.rendered = '1';
+
+  const DEFAULT_WORDS = ['매우 불만족', '불만족', '보통', '만족', '매우 만족'];
+  const ratingHtml = (name, words) => [1, 2, 3, 4, 5].map((v, i) =>
+    `<label class="rating-label"><input type="radio" name="${name}" value="${v}"><span class="rating-btn">${v}<br><small>${words[i]}</small></span></label>`
+  ).join('');
+
+  container.innerHTML = RK_SURVEY.map(q => {
+    const num = q.label.split('.')[0];  // 'Q1'
+    const txt = q.label.slice(q.label.indexOf('.') + 1).trim();
+    const subDef = RK_SUB_COMMENTS.find(s => s.after === q.key);
+    const sub = subDef
+      ? `<div class="q-card optional">
+          <div class="q-num opt">${subDef.num} <em>선택</em></div>
+          <div class="q-txt">${escapeHtml(subDef.prompt)}</div>
+          <textarea placeholder="개선이 필요한 사항을 작성해 주세요." rows="3"></textarea>
+        </div>`
+      : '';
+    // text 문항(rq10·rq11)은 주관식 선택 입력 카드
+    if (q.kind === 'text') {
+      return `<div class="q-card optional">
+          <div class="q-num opt">${num} <em>선택</em></div>
+          <div class="q-txt">${escapeHtml(txt)}은?</div>
+          <textarea placeholder="과목명을 작성해 주세요." rows="3"></textarea>
+        </div>${sub}`;
+    }
+    const body = q.kind === 'scale'
+      ? `<div class="rating-group">${ratingHtml(`p${q.key}`, q.words || DEFAULT_WORDS)}</div>`
+      : `<div class="choice-group">${q.options.map(o =>
+          `<label class="choice-label"><input type="radio" name="p${q.key}" value="${escapeAttr(o)}"><span class="choice-btn">${escapeHtml(o)}</span></label>`
+        ).join('')}</div>`;
+    return `<div class="q-card">
+        <div class="q-num">${num}</div>
+        <div class="q-txt">${escapeHtml(txt)}</div>
+        ${body}
+      </div>${sub}`;
+  }).join('');
+}
+
 // 신규자 과정 반 셀렉트 — 강사 group union. 반 없으면 숨김.
 function populatePreviewNcGroupSelect(instructors) {
   const sel = document.getElementById('preview-group-select');
@@ -198,14 +241,20 @@ export async function loadPreviewInstructors() {
   const roundSel = document.getElementById('preview-round-select');
   const groupSel = document.getElementById('preview-group-select');
 
-  // 과정 타입별 고정 문항 블록 전환 (표준 vs 신규자)
+  // 과정 타입별 고정 문항 블록 전환 (표준 vs 신규자 vs 공무원 신규자)
   const isNewcomer = courseType === 'newcomer';
+  const isRookie = courseType === 'rookie';
   const stdBlock = document.getElementById('preview-standard-questions');
   const ncBlock = document.getElementById('preview-newcomer-questions');
-  if (stdBlock) stdBlock.style.display = isNewcomer ? 'none' : 'block';
+  const rkBlock = document.getElementById('preview-rookie-questions');
+  if (stdBlock) stdBlock.style.display = (isNewcomer || isRookie) ? 'none' : 'block';
   if (ncBlock) {
     ncBlock.style.display = isNewcomer ? 'block' : 'none';
     if (isNewcomer) renderNewcomerPreviewQuestions();
+  }
+  if (rkBlock) {
+    rkBlock.style.display = isRookie ? 'block' : 'none';
+    if (isRookie) renderRookiePreviewQuestions();
   }
 
   if (!courseId) {
@@ -287,8 +336,9 @@ export async function loadPreviewInstructors() {
       return;
     }
 
+    const instQBase = isRookie ? 20 : 17;  // 공무원 신규자는 고정 19문항 다음부터
     container.innerHTML = instructors.map((inst, i) => {
-      const qNum = 17 + i;
+      const qNum = instQBase + i;
       // 칩: 중견리더 = 카테고리, 신규자 = 반. 단기는 기존 그대로 강사명만.
       let catTag = '';
       if (courseType === 'leadership') {

@@ -514,6 +514,259 @@
 
         </div><!-- /survey-newcomer-questions -->
 
+        <!-- 공무원 신규자 과정 고정 문항 (type: 'rookie') — 신규자(2기) 종이 설문지 1~19번과 1:1 -->
+        <div id="survey-rookie-questions" style="display:none;">
+
+        <div class="q-card">
+          <div class="q-num">Q1</div>
+          <div class="q-txt">교육기간(2주)은 적절한가?</div>
+          <div class="rating-group" data-question="rq1">
+            <label class="rating-label"><input type="radio" name="rq1" value="1"><span class="rating-btn">1<br><small>매우 부적절</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq1" value="2"><span class="rating-btn">2<br><small>부적절</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq1" value="3"><span class="rating-btn">3<br><small>보통</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq1" value="4"><span class="rating-btn">4<br><small>적절</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq1" value="5"><span class="rating-btn">5<br><small>매우 적절</small></span></label>
+          </div>
+        </div>
+
+        <div class="q-card">
+          <div class="q-num">Q2</div>
+          <div class="q-txt">본 과정의 전반적인 교과편성에 대한 의견은?</div>
+          <div class="rating-group" data-question="rq2">
+            <label class="rating-label"><input type="radio" name="rq2" value="1"><span class="rating-btn">1<br><small>매우 불만족</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq2" value="2"><span class="rating-btn">2<br><small>불만족</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq2" value="3"><span class="rating-btn">3<br><small>보통</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq2" value="4"><span class="rating-btn">4<br><small>만족</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq2" value="5"><span class="rating-btn">5<br><small>매우 만족</small></span></label>
+          </div>
+        </div>
+
+        <div class="q-card">
+          <div class="q-num">Q3</div>
+          <div class="q-txt">공직가치 및 직무교육(헌법, 예산, 행정, 공문서 작성법 등)에 대한 의견은?</div>
+          <div class="rating-group" data-question="rq3">
+            <label class="rating-label"><input type="radio" name="rq3" value="1"><span class="rating-btn">1<br><small>매우 불만족</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq3" value="2"><span class="rating-btn">2<br><small>불만족</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq3" value="3"><span class="rating-btn">3<br><small>보통</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq3" value="4"><span class="rating-btn">4<br><small>만족</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq3" value="5"><span class="rating-btn">5<br><small>매우 만족</small></span></label>
+          </div>
+        </div>
+
+        <div class="q-card optional">
+          <div class="q-num opt">Q3-1 <em>선택</em></div>
+          <div class="q-txt">문3.에서 불만족하다면 개선해야 할 사항은? (구체적으로)</div>
+          <textarea id="rq3-comment" placeholder="공직가치·직무교육에서 개선이 필요한 사항을 작성해 주세요." rows="3"></textarea>
+        </div>
+
+        <div class="q-card">
+          <div class="q-num">Q4</div>
+          <div class="q-txt">역량 및 소양 교육(갈등해결, 민원응대, 개인정보 보호, 자산관리 등)에 대한 의견은?</div>
+          <div class="rating-group" data-question="rq4">
+            <label class="rating-label"><input type="radio" name="rq4" value="1"><span class="rating-btn">1<br><small>매우 불만족</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq4" value="2"><span class="rating-btn">2<br><small>불만족</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq4" value="3"><span class="rating-btn">3<br><small>보통</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq4" value="4"><span class="rating-btn">4<br><small>만족</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq4" value="5"><span class="rating-btn">5<br><small>매우 만족</small></span></label>
+          </div>
+        </div>
+
+        <div class="q-card optional">
+          <div class="q-num opt">Q4-1 <em>선택</em></div>
+          <div class="q-txt">문4.에서 불만족하다면 개선해야 할 사항은? (구체적으로)</div>
+          <textarea id="rq4-comment" placeholder="역량·소양교육에서 개선이 필요한 사항을 작성해 주세요." rows="3"></textarea>
+        </div>
+
+        <div class="q-card">
+          <div class="q-num">Q5</div>
+          <div class="q-txt">참여학습(분임정책연구, 체육대회)에 대한 의견은?</div>
+          <div class="rating-group" data-question="rq5">
+            <label class="rating-label"><input type="radio" name="rq5" value="1"><span class="rating-btn">1<br><small>매우 불만족</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq5" value="2"><span class="rating-btn">2<br><small>불만족</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq5" value="3"><span class="rating-btn">3<br><small>보통</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq5" value="4"><span class="rating-btn">4<br><small>만족</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq5" value="5"><span class="rating-btn">5<br><small>매우 만족</small></span></label>
+          </div>
+        </div>
+
+        <div class="q-card optional">
+          <div class="q-num opt">Q5-1 <em>선택</em></div>
+          <div class="q-txt">문5.에서 불만족하다면 개선해야 할 사항은? (구체적으로)</div>
+          <textarea id="rq5-comment" placeholder="참여학습에서 개선이 필요한 사항을 작성해 주세요." rows="3"></textarea>
+        </div>
+
+        <div class="q-card">
+          <div class="q-num">Q6</div>
+          <div class="q-txt">과정 목적 달성을 위한 강사선정은?</div>
+          <div class="rating-group" data-question="rq6">
+            <label class="rating-label"><input type="radio" name="rq6" value="1"><span class="rating-btn">1<br><small>매우 불만족</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq6" value="2"><span class="rating-btn">2<br><small>불만족</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq6" value="3"><span class="rating-btn">3<br><small>보통</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq6" value="4"><span class="rating-btn">4<br><small>만족</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq6" value="5"><span class="rating-btn">5<br><small>매우 만족</small></span></label>
+          </div>
+        </div>
+
+        <div class="q-card">
+          <div class="q-num">Q7</div>
+          <div class="q-txt">강의와 관련된 교재 및 교안의 적절성은?</div>
+          <div class="rating-group" data-question="rq7">
+            <label class="rating-label"><input type="radio" name="rq7" value="1"><span class="rating-btn">1<br><small>매우 불만족</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq7" value="2"><span class="rating-btn">2<br><small>불만족</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq7" value="3"><span class="rating-btn">3<br><small>보통</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq7" value="4"><span class="rating-btn">4<br><small>만족</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq7" value="5"><span class="rating-btn">5<br><small>매우 만족</small></span></label>
+          </div>
+        </div>
+
+        <div class="q-card">
+          <div class="q-num">Q8</div>
+          <div class="q-txt">평가 방식(필기평가 및 분임정책연구 평가)의 적절성은?</div>
+          <div class="rating-group" data-question="rq8">
+            <label class="rating-label"><input type="radio" name="rq8" value="1"><span class="rating-btn">1<br><small>매우 부적절</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq8" value="2"><span class="rating-btn">2<br><small>부적절</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq8" value="3"><span class="rating-btn">3<br><small>보통</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq8" value="4"><span class="rating-btn">4<br><small>적절</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq8" value="5"><span class="rating-btn">5<br><small>매우 적절</small></span></label>
+          </div>
+        </div>
+
+        <div class="q-card optional">
+          <div class="q-num opt">Q8-1 <em>선택</em></div>
+          <div class="q-txt">문8.에서 불만족하다면 개선사항은?</div>
+          <textarea id="rq8-comment" placeholder="평가 방식에서 개선이 필요한 사항을 작성해 주세요." rows="3"></textarea>
+        </div>
+
+        <div class="q-card">
+          <div class="q-num">Q9</div>
+          <div class="q-txt">과정 운영(일정 안내, 진행 등)에 대한 만족도는?</div>
+          <div class="rating-group" data-question="rq9">
+            <label class="rating-label"><input type="radio" name="rq9" value="1"><span class="rating-btn">1<br><small>매우 불만족</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq9" value="2"><span class="rating-btn">2<br><small>불만족</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq9" value="3"><span class="rating-btn">3<br><small>보통</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq9" value="4"><span class="rating-btn">4<br><small>만족</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq9" value="5"><span class="rating-btn">5<br><small>매우 만족</small></span></label>
+          </div>
+        </div>
+
+        <div class="q-card optional">
+          <div class="q-num opt">Q10 <em>선택</em></div>
+          <div class="q-txt">교육과정 중 도움이 된 과목은?</div>
+          <textarea id="rq10-comment" placeholder="도움이 된 과목명을 작성해 주세요." rows="3"></textarea>
+        </div>
+
+        <div class="q-card optional">
+          <div class="q-num opt">Q11 <em>선택</em></div>
+          <div class="q-txt">교육과정 중 개선이 필요한 과목은?</div>
+          <textarea id="rq11-comment" placeholder="개선이 필요한 과목명과 이유를 작성해 주세요." rows="3"></textarea>
+        </div>
+
+        <div class="q-card">
+          <div class="q-num">Q12</div>
+          <div class="q-txt">교육내용 효과(향후 업무 및 개인생활 기여도)에 대한 만족도는?</div>
+          <div class="rating-group" data-question="rq12">
+            <label class="rating-label"><input type="radio" name="rq12" value="1"><span class="rating-btn">1<br><small>매우 불만족</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq12" value="2"><span class="rating-btn">2<br><small>불만족</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq12" value="3"><span class="rating-btn">3<br><small>보통</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq12" value="4"><span class="rating-btn">4<br><small>만족</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq12" value="5"><span class="rating-btn">5<br><small>매우 만족</small></span></label>
+          </div>
+        </div>
+
+        <div class="q-card">
+          <div class="q-num">Q13</div>
+          <div class="q-txt">교육장소(KT인재개발원)의 접근성(교통, 주차)은?</div>
+          <div class="rating-group" data-question="rq13">
+            <label class="rating-label"><input type="radio" name="rq13" value="1"><span class="rating-btn">1<br><small>매우 불만족</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq13" value="2"><span class="rating-btn">2<br><small>불만족</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq13" value="3"><span class="rating-btn">3<br><small>보통</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq13" value="4"><span class="rating-btn">4<br><small>만족</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq13" value="5"><span class="rating-btn">5<br><small>매우 만족</small></span></label>
+          </div>
+        </div>
+
+        <div class="q-card">
+          <div class="q-num">Q14</div>
+          <div class="q-txt">대강당 강의환경(좌석, 음향, 화면, 냉난방)은?</div>
+          <div class="rating-group" data-question="rq14">
+            <label class="rating-label"><input type="radio" name="rq14" value="1"><span class="rating-btn">1<br><small>매우 불만족</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq14" value="2"><span class="rating-btn">2<br><small>불만족</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq14" value="3"><span class="rating-btn">3<br><small>보통</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq14" value="4"><span class="rating-btn">4<br><small>만족</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq14" value="5"><span class="rating-btn">5<br><small>매우 만족</small></span></label>
+          </div>
+        </div>
+
+        <div class="q-card optional">
+          <div class="q-num opt">Q14-1 <em>선택</em></div>
+          <div class="q-txt">문14.에서 불만족하다면 불편했던 점은?</div>
+          <textarea id="rq14-comment" placeholder="대강당 강의환경에서 불편했던 점을 작성해 주세요." rows="3"></textarea>
+        </div>
+
+        <div class="q-card">
+          <div class="q-num">Q15</div>
+          <div class="q-txt">식당, 휴게공간 등 편의시설은?</div>
+          <div class="rating-group" data-question="rq15">
+            <label class="rating-label"><input type="radio" name="rq15" value="1"><span class="rating-btn">1<br><small>매우 불만족</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq15" value="2"><span class="rating-btn">2<br><small>불만족</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq15" value="3"><span class="rating-btn">3<br><small>보통</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq15" value="4"><span class="rating-btn">4<br><small>만족</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq15" value="5"><span class="rating-btn">5<br><small>매우 만족</small></span></label>
+          </div>
+        </div>
+
+        <div class="q-card">
+          <div class="q-num">Q16</div>
+          <div class="q-txt">향후 신규자 과정 교육장소로 KT인재개발원이 적합한가?</div>
+          <div class="rating-group" data-question="rq16">
+            <label class="rating-label"><input type="radio" name="rq16" value="1"><span class="rating-btn">1<br><small>매우 부적합</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq16" value="2"><span class="rating-btn">2<br><small>부적합</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq16" value="3"><span class="rating-btn">3<br><small>보통</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq16" value="4"><span class="rating-btn">4<br><small>적합</small></span></label>
+            <label class="rating-label"><input type="radio" name="rq16" value="5"><span class="rating-btn">5<br><small>매우 적합</small></span></label>
+          </div>
+        </div>
+
+        <div class="q-card optional">
+          <div class="q-num opt">Q16-1 <em>선택</em></div>
+          <div class="q-txt">문16.에서 부적합하다면 이유는?</div>
+          <textarea id="rq16-comment" placeholder="KT인재개발원이 부적합하다고 생각하는 이유를 작성해 주세요." rows="3"></textarea>
+        </div>
+
+        <div class="q-card">
+          <div class="q-num">Q17</div>
+          <div class="q-txt">귀하의 직렬은?</div>
+          <div class="choice-group" data-question="rq17">
+            <label class="choice-label"><input type="radio" name="rq17" value="행정직"><span class="choice-btn">행정직</span></label>
+            <label class="choice-label"><input type="radio" name="rq17" value="사회복지직"><span class="choice-btn">사회복지직</span></label>
+            <label class="choice-label"><input type="radio" name="rq17" value="세무직"><span class="choice-btn">세무직</span></label>
+            <label class="choice-label"><input type="radio" name="rq17" value="시설직(토목,건축,전기,기계 등)"><span class="choice-btn">시설직(토목,건축,전기,기계 등)</span></label>
+            <label class="choice-label"><input type="radio" name="rq17" value="기타(보건,간호,전산,환경,농업 등)"><span class="choice-btn">기타(보건,간호,전산,환경,농업 등)</span></label>
+          </div>
+        </div>
+
+        <div class="q-card">
+          <div class="q-num">Q18</div>
+          <div class="q-txt">귀하의 연령은?</div>
+          <div class="choice-group" data-question="rq18">
+            <label class="choice-label"><input type="radio" name="rq18" value="20대"><span class="choice-btn">20대</span></label>
+            <label class="choice-label"><input type="radio" name="rq18" value="30대"><span class="choice-btn">30대</span></label>
+            <label class="choice-label"><input type="radio" name="rq18" value="40대"><span class="choice-btn">40대</span></label>
+            <label class="choice-label"><input type="radio" name="rq18" value="50대"><span class="choice-btn">50대</span></label>
+          </div>
+        </div>
+
+        <div class="q-card">
+          <div class="q-num">Q19</div>
+          <div class="q-txt">귀하의 성별은?</div>
+          <div class="choice-group" data-question="rq19">
+            <label class="choice-label"><input type="radio" name="rq19" value="남"><span class="choice-btn">남</span></label>
+            <label class="choice-label"><input type="radio" name="rq19" value="여"><span class="choice-btn">여</span></label>
+          </div>
+        </div>
+
+        </div><!-- /survey-rookie-questions -->
+
         <!-- 강사별 만족도 문항 (동적 생성: Q17, Q18, ...) -->
         <div id="instructor-questions"></div>
 

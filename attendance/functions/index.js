@@ -311,6 +311,21 @@ const NC_SCALE_KEYS = [
 ];
 const NC_CHOICE_KEYS = ['nq2', 'nq3', 'nq15', 'nq16'];
 
+// 공무원 신규자 과정 (course.type === 'rookie') 고정 문항 키.
+// 클라이언트 index.html / admin-utils.js 의 RK_SURVEY 와 1:1 로 유지할 것.
+// rq10·rq11(도움/개선 과목)은 주관식 선택 입력이라 척도가 아닌 comment 쪽.
+const RK_SCALE_KEYS = [
+  'rq1', 'rq2', 'rq3', 'rq4', 'rq5', 'rq6', 'rq7', 'rq8', 'rq9',
+  'rq12', 'rq13', 'rq14', 'rq15', 'rq16',
+];
+const RK_CHOICE_KEYS = ['rq17', 'rq18', 'rq19'];
+// 주관식 선택 입력 (불만족 시 개선사항 + 도움/개선 과목)
+const RK_COMMENT_KEYS = [
+  'rq3_comment', 'rq4_comment', 'rq5_comment', 'rq8_comment',
+  'rq10', 'rq11',
+  'rq14_comment', 'rq16_comment',
+];
+
 // ── 만족도 응답 제출 (단기 + 회차 + 신규자 통합) ─────────────────
 // 학생 직접 쓰기를 차단하고 서버에서 본인성/중복 검증 + 트랜잭션 처리.
 // rules 의 students.update / responses.create 가 admin only 로 잠긴 뒤로 이 함수만 통과 경로.
@@ -368,6 +383,7 @@ exports.submitSurveyResponse = onCall(
     checkLen('q10_comment', 1000);
     checkLen('nq6_comment', 1000);
     checkLen('nq7_comment', 1000);
+    RK_COMMENT_KEYS.forEach((k) => checkLen(k, 1000));
     checkLen('comment1', 2000);
     checkLen('comment2', 2000);
     checkLen('comment3', 2000);
@@ -407,18 +423,22 @@ exports.submitSurveyResponse = onCall(
     }
     const isLeadership = courseData.type === 'leadership';
     const isNewcomer = courseData.type === 'newcomer';
+    const isRookie = courseData.type === 'rookie';
 
     // 고정 문항 검증 — 과정 타입별 스키마가 다르다.
     // 표준/중견리더: q1~q9 (1~5 정수) + q11~q16 (문자열)
     // 신규자: nq1,nq4~nq14 (1~5 정수) + nq2,nq3,nq15,nq16 (문자열)
-    if (isNewcomer) {
-      for (const k of NC_SCALE_KEYS) {
+    // 공무원 신규자: rq1~rq16 (1~5 정수) + rq17~rq19 (문자열)
+    if (isNewcomer || isRookie) {
+      const scaleKeys = isRookie ? RK_SCALE_KEYS : NC_SCALE_KEYS;
+      const choiceKeys = isRookie ? RK_CHOICE_KEYS : NC_CHOICE_KEYS;
+      for (const k of scaleKeys) {
         const v = response[k];
         if (!Number.isInteger(v) || v < 1 || v > 5) {
           throw new HttpsError('invalid-argument', `${k} 값이 올바르지 않습니다.`);
         }
       }
-      for (const k of NC_CHOICE_KEYS) {
+      for (const k of choiceKeys) {
         const v = response[k];
         if (typeof v !== 'string' || v.length === 0 || v.length > 50) {
           throw new HttpsError('invalid-argument', `${k} 값이 올바르지 않습니다.`);
@@ -486,7 +506,14 @@ exports.submitSurveyResponse = onCall(
       submittedAt: FieldValue.serverTimestamp(),
     };
 
-    if (isNewcomer) {
+    if (isRookie) {
+      for (const k of [...RK_SCALE_KEYS, ...RK_CHOICE_KEYS]) {
+        respBase[k] = response[k];
+      }
+      RK_COMMENT_KEYS.forEach((k) => {
+        respBase[k] = typeof response[k] === 'string' ? response[k] : '';
+      });
+    } else if (isNewcomer) {
       for (const k of [...NC_SCALE_KEYS, ...NC_CHOICE_KEYS]) {
         respBase[k] = response[k];
       }

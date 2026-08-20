@@ -276,7 +276,9 @@ function renderCourseItem({ id, name, active, idx, startDate, endDate, type }) {
     ? `<span class="course-type-badge leadership" title="회차별 분반 운영">중견리더</span>`
     : type === 'newcomer'
       ? `<span class="course-type-badge newcomer" title="신규자 전용 설문 + 반별 강사 운영">신규자</span>`
-      : '';
+      : type === 'rookie'
+        ? `<span class="course-type-badge newcomer" title="공무원 신규자 설문지 19문항 + 강사 평가">공무원 신규자</span>`
+        : '';
   const dateLabel = formatDateRange(startDate, endDate);
   const dateHtml = dateLabel
     ? `<span class="course-date-range">${escapeHtml(dateLabel)}</span>`
@@ -561,7 +563,7 @@ export async function toggleCourseActive(courseId, currentActive, btnEl) {
   // 카드 헤더에서 과정명 추출 (확인 안내문에 표시)
   const item = btnEl.closest('.course-manage-item');
   const nameEl = item?.querySelector('.course-manage-name');
-  const courseLabel = nameEl ? (nameEl.textContent.replace('진행중', '').replace('종료', '').replace('중견리더', '').replace('신규자', '').trim()) : '이 과정';
+  const courseLabel = nameEl ? (nameEl.textContent.replace('진행중', '').replace('종료', '').replace('중견리더', '').replace('공무원 신규자', '').replace('신규자', '').trim()) : '이 과정';
   const msg = newActive
     ? `"${courseLabel}" 과정을 다시 활성 상태로 전환하시겠습니까?\n수강생들이 다시 로그인할 수 있게 됩니다.`
     : `"${courseLabel}" 과정을 종료 처리하시겠습니까?\n\n• 수강생 로그인 차단(이름·교번 중복 충돌 방지)\n• 통계·응답 데이터는 그대로 보관됨\n• 언제든 재활성 가능`;
@@ -585,7 +587,7 @@ export async function toggleCourseActive(courseId, currentActive, btnEl) {
 export async function deleteCourse(courseId, btnEl) {
   const item = btnEl.closest('.course-manage-item');
   const nameEl = item?.querySelector('.course-manage-name');
-  const courseLabel = nameEl ? nameEl.textContent.replace('종료', '').replace('중견리더', '').replace('신규자', '').trim() : '이 과정';
+  const courseLabel = nameEl ? nameEl.textContent.replace('종료', '').replace('중견리더', '').replace('공무원 신규자', '').replace('신규자', '').trim() : '이 과정';
   const msg = `"${courseLabel}" 과정을 영구 삭제하시겠습니까?\n\n` +
     `• 수강생·강사·설문 응답 데이터가 모두 삭제됩니다.\n` +
     `• 이 작업은 되돌릴 수 없습니다.`;

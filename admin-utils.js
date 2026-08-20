@@ -52,6 +52,56 @@ export const NC_SURVEY = [
 export const NC_SCALE_QUESTIONS  = NC_SURVEY.filter(q => q.kind === 'scale');
 export const NC_CHOICE_QUESTIONS = NC_SURVEY.filter(q => q.kind === 'choice');
 
+// ── 공무원 신규자 과정 (type: 'rookie') 문항 정의 ──────────────────────
+// 신규자(2기) 종이 설문지(OMR 1~19번) 서식과 동일 순서. 응답 키는 rq 접두.
+// kind:'scale'=5점(웹 1=최저~5=최고, 서식 ①=최고라 export 시 6-v 반전),
+// kind:'text'=주관식 선택 입력(담당자 결정: Q10·Q11은 과목명을 직접 적는 문항이라 주관식·비필수),
+// words: 척도 어미 변형 (기본 '매우 불만족~매우 만족', 1점→5점 순).
+export const RK_WORDS_PROPER = ['매우 부적절', '부적절', '보통', '적절', '매우 적절'];
+export const RK_WORDS_FIT    = ['매우 부적합', '부적합', '보통', '적합', '매우 적합'];
+export const RK_SURVEY = [
+  { key: 'rq1',  kind: 'scale',  label: 'Q1. 교육기간(2주)의 적절성', words: RK_WORDS_PROPER },
+  { key: 'rq2',  kind: 'scale',  label: 'Q2. 과정의 전반적인 교과편성' },
+  { key: 'rq3',  kind: 'scale',  label: 'Q3. 공직가치 및 직무교육(헌법, 예산, 행정, 공문서 작성법 등)' },
+  { key: 'rq4',  kind: 'scale',  label: 'Q4. 역량 및 소양 교육(갈등해결, 민원응대, 개인정보 보호, 자산관리 등)' },
+  { key: 'rq5',  kind: 'scale',  label: 'Q5. 참여학습(분임정책연구, 체육대회)' },
+  { key: 'rq6',  kind: 'scale',  label: 'Q6. 과정 목적 달성을 위한 강사선정' },
+  { key: 'rq7',  kind: 'scale',  label: 'Q7. 강의 관련 교재 및 교안의 적절성' },
+  { key: 'rq8',  kind: 'scale',  label: 'Q8. 평가 방식(필기평가 및 분임정책연구 평가)의 적절성', words: RK_WORDS_PROPER },
+  { key: 'rq9',  kind: 'scale',  label: 'Q9. 과정 운영(일정 안내, 진행 등)' },
+  { key: 'rq10', kind: 'text',   label: 'Q10. 교육과정 중 도움이 된 과목' },
+  { key: 'rq11', kind: 'text',   label: 'Q11. 교육과정 중 개선이 필요한 과목' },
+  { key: 'rq12', kind: 'scale',  label: 'Q12. 교육내용 효과(향후 업무·개인생활 기여도)' },
+  { key: 'rq13', kind: 'scale',  label: 'Q13. 교육장소(KT인재개발원)의 접근성(교통, 주차)' },
+  { key: 'rq14', kind: 'scale',  label: 'Q14. 대강당 강의환경(좌석, 음향, 화면, 냉난방)' },
+  { key: 'rq15', kind: 'scale',  label: 'Q15. 식당, 휴게공간 등 편의시설' },
+  { key: 'rq16', kind: 'scale',  label: 'Q16. 향후 신규자 과정 교육장소로 KT인재개발원의 적합성', words: RK_WORDS_FIT },
+  { key: 'rq17', kind: 'choice', label: 'Q17. 귀하의 직렬',
+    options: ['행정직', '사회복지직', '세무직', '시설직(토목,건축,전기,기계 등)', '기타(보건,간호,전산,환경,농업 등)'] },
+  { key: 'rq18', kind: 'choice', label: 'Q18. 귀하의 연령', options: ['20대', '30대', '40대', '50대'] },
+  { key: 'rq19', kind: 'choice', label: 'Q19. 귀하의 성별', options: ['남', '여'] },
+];
+
+export const RK_SCALE_QUESTIONS  = RK_SURVEY.filter(q => q.kind === 'scale');
+export const RK_CHOICE_QUESTIONS = RK_SURVEY.filter(q => q.kind === 'choice');
+
+// 종이 설문의 불만족 시 주관식 답란 (3-1, 4-1, 5-1, 8-1, 14-1, 16-1) — 항상 표시, 선택 입력.
+// after: 이 객관식 문항 바로 뒤에 렌더.
+export const RK_SUB_COMMENTS = [
+  { after: 'rq3',  key: 'rq3_comment',  num: 'Q3-1',  label: 'Q3-1. 공직가치·직무교육 개선사항',
+    prompt: '문3.에서 불만족하다면 개선해야 할 사항은? (구체적으로)' },
+  { after: 'rq4',  key: 'rq4_comment',  num: 'Q4-1',  label: 'Q4-1. 역량·소양교육 개선사항',
+    prompt: '문4.에서 불만족하다면 개선해야 할 사항은? (구체적으로)' },
+  { after: 'rq5',  key: 'rq5_comment',  num: 'Q5-1',  label: 'Q5-1. 참여학습 개선사항',
+    prompt: '문5.에서 불만족하다면 개선해야 할 사항은? (구체적으로)' },
+  { after: 'rq8',  key: 'rq8_comment',  num: 'Q8-1',  label: 'Q8-1. 평가 방식 개선사항',
+    prompt: '문8.에서 불만족하다면 개선사항은?' },
+  { after: 'rq14', key: 'rq14_comment', num: 'Q14-1', label: 'Q14-1. 대강당 강의환경 불편사항',
+    prompt: '문14.에서 불만족하다면 불편했던 점은?' },
+  { after: 'rq16', key: 'rq16_comment', num: 'Q16-1', label: 'Q16-1. KT인재개발원 부적합 이유',
+    prompt: '문16.에서 부적합하다면 이유는?' },
+];
+
 // 신규자 척도 문항 카테고리 (인덱스는 NC_SCALE_QUESTIONS 배열 기준)
 // nq1(0) nq4(1) nq5(2) nq6(3) nq7(4) nq8(5) nq9(6) nq10(7) nq11(8) nq12(9) nq13(10) nq14(11)
 export const NC_QUESTION_CATEGORIES = [
@@ -77,9 +127,41 @@ const NC_SUBJECTIVE = [
   { key: 'comment3', label: '전반적인 과목 및 강사 건의' },
 ];
 
+// 설문지 등장 순서대로: 3-1, 4-1, 5-1, 8-1, Q10, Q11, 14-1, 16-1, 소감/개선/건의
+const RK_SUBJECTIVE = [
+  ...RK_SUB_COMMENTS.slice(0, 4).map(({ key, label }) => ({ key, label })),
+  { key: 'rq10', label: 'Q10. 교육과정 중 도움이 된 과목' },
+  { key: 'rq11', label: 'Q11. 교육과정 중 개선이 필요한 과목' },
+  ...RK_SUB_COMMENTS.slice(4).map(({ key, label }) => ({ key, label })),
+  { key: 'comment1', label: '소감 및 건의사항' },
+  { key: 'comment2', label: '만족도 평가 개선 필요 부분' },
+  { key: 'comment3', label: '전반적인 과목 및 강사 건의' },
+];
+
 // 과정 타입별 설문 구성 — 통계/엑셀/렌더가 공유하는 단일 소스.
 // chartCats.keys 는 scale 배열의 key 기준.
 export function getSurveyConfig(courseType) {
+  if (courseType === 'rookie') {
+    return {
+      scale: RK_SCALE_QUESTIONS,
+      // 종이 설문지 섹션 구분 그대로: 교육기간(1) / 교육운영(2~12) / 교육환경(13~16)
+      // 인덱스는 RK_SCALE_QUESTIONS 배열 기준 — rq10·rq11은 주관식(text)이라 척도 배열에서 빠짐:
+      // rq1(0) rq2~rq9(1~8) rq12(9) rq13~rq16(10~13)
+      categories: [
+        { label: '교육기간', indices: [0] },
+        { label: '교육운영', indices: [1, 2, 3, 4, 5, 6, 7, 8, 9] },
+        { label: '교육환경', indices: [10, 11, 12, 13] },
+      ],
+      choice: RK_CHOICE_QUESTIONS,
+      subjective: RK_SUBJECTIVE,
+      overallLabel: '전체 평균 (객관식 + 강사)',
+      chartCats: [
+        { label: '교육기간', keys: ['rq1'] },
+        { label: '교육운영', keys: ['rq2', 'rq3', 'rq4', 'rq5', 'rq6', 'rq7', 'rq8', 'rq9', 'rq12'] },
+        { label: '교육환경', keys: ['rq13', 'rq14', 'rq15', 'rq16'] },
+      ],
+    };
+  }
   if (courseType === 'newcomer') {
     return {
       scale: NC_SCALE_QUESTIONS,
@@ -114,6 +196,7 @@ export function getSurveyConfig(courseType) {
 export function normalizeCourseType(t) {
   if (t === 'leadership') return 'leadership';
   if (t === 'newcomer') return 'newcomer';
+  if (t === 'rookie') return 'rookie';
   return 'standard';
 }
 

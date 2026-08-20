@@ -29,9 +29,20 @@ const NC_ITEMS = [
   { key: 'nq16', kind: 'choice' },
 ];
 
+// 공무원 신규자 과정(type: 'rookie') 고정 문항 — index.html 블록과 1:1.
+// scale=5점 필수, choice=선택형 필수, text=주관식 선택 입력(rq10·rq11: 과목명 직접 기재).
+const RK_ITEMS = Array.from({ length: 19 }, (_, i) => {
+  const n = i + 1;
+  const kind = (n === 10 || n === 11) ? 'text' : n >= 17 ? 'choice' : 'scale';
+  return { key: `rq${n}`, kind };
+});
+// 불만족 시 개선사항 주관식 (3-1, 4-1, 5-1, 8-1, 14-1, 16-1) — 선택 입력
+const RK_SUB_KEYS = ['rq3', 'rq4', 'rq5', 'rq8', 'rq14', 'rq16'];
+
 function normalizeCourseType(t) {
   if (t === 'leadership') return 'leadership';
   if (t === 'newcomer') return 'newcomer';
+  if (t === 'rookie') return 'rookie';
   return 'standard';
 }
 
@@ -392,7 +403,9 @@ function enterConfirmWithFilteredInstructors(allInstructors) {
 
 function updateSurveyMeta(instructorCount) {
   // 표준: 16문항 + 3주관식 / 신규자: 16문항 + 6-1·7-1 + 3주관식
-  const base = currentUser.type === 'newcomer' ? 21 : 19;
+  // 공무원 신규자: 19문항 + 개선사항 주관식 6개 + 3주관식
+  const base = currentUser.type === 'rookie' ? 28
+    : currentUser.type === 'newcomer' ? 21 : 19;
   const totalQ = base + instructorCount;
   const mins = Math.max(3, Math.round(totalQ * 0.4));
   document.getElementById('survey-q-count').textContent = `총 ${totalQ}문항`;
@@ -413,10 +426,12 @@ async function startSurvey() {
   badge.textContent = currentUser.course;
   badge.style.display = 'inline-block';
 
-  // 과정 타입별 고정 문항 블록 전환 (표준 vs 신규자)
+  // 과정 타입별 고정 문항 블록 전환 (표준 vs 신규자 vs 공무원 신규자)
   const isNewcomer = currentUser.type === 'newcomer';
-  document.getElementById('survey-standard-questions').style.display = isNewcomer ? 'none' : 'block';
+  const isRookie = currentUser.type === 'rookie';
+  document.getElementById('survey-standard-questions').style.display = (isNewcomer || isRookie) ? 'none' : 'block';
   document.getElementById('survey-newcomer-questions').style.display = isNewcomer ? 'block' : 'none';
+  document.getElementById('survey-rookie-questions').style.display = isRookie ? 'block' : 'none';
 
   renderInstructorQuestions(currentUser.instructors);
   updateSurveyMeta(currentUser.instructors.length);
@@ -424,12 +439,18 @@ async function startSurvey() {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
+// 강사 문항 시작 번호 — 표준/신규자: 고정 16문항 다음(Q17), 공무원 신규자: 19문항 다음(Q20)
+function instQNumBase() {
+  return currentUser.type === 'rookie' ? 20 : 17;
+}
+
 function renderInstructorQuestions(instructors) {
   const container = document.getElementById('instructor-questions');
   if (!instructors || instructors.length === 0) { container.innerHTML = ''; return; }
 
+  const base = instQNumBase();
   container.innerHTML = instructors.map((inst, idx) => {
-    const qNum = 17 + idx;
+    const qNum = base + idx;
     const inputName = `instructor_${idx}`;
     const instName = typeof inst === 'string' ? inst : inst.name;
     const edu = typeof inst === 'string' ? '' : inst.education;
@@ -470,6 +491,29 @@ function collectNewcomerAnswers() {
   return out;
 }
 
+// 공무원 신규자 과정 고정 문항 수집 — 객관식 전부 필수, text 문항(rq10·rq11)은 선택 입력.
+// 미응답 시 해당 카드로 스크롤 후 null 반환.
+function collectRookieAnswers() {
+  const out = {};
+  for (const { key, kind } of RK_ITEMS) {
+    if (kind === 'text') {
+      out[key] = document.getElementById(`${key}-comment`).value.trim();
+      continue;
+    }
+    const selected = document.querySelector(`input[name="${key}"]:checked`);
+    if (!selected) {
+      document.getElementById('error-msg').style.display = 'block';
+      document.querySelector(`[data-question="${key}"]`).scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return null;
+    }
+    out[key] = kind === 'scale' ? parseInt(selected.value) : selected.value;
+  }
+  RK_SUB_KEYS.forEach(k => {
+    out[`${k}_comment`] = document.getElementById(`${k}-comment`).value.trim();
+  });
+  return out;
+}
+
 // 표준(단기/중견리더) 고정 문항 수집 — 미응답 시 스크롤 후 null 반환.
 function collectStandardAnswers() {
   const answers = [];
@@ -506,17 +550,20 @@ function collectStandardAnswers() {
 }
 
 async function submitSurvey() {
-  const fixedAnswers = currentUser.type === 'newcomer'
-    ? collectNewcomerAnswers()
-    : collectStandardAnswers();
+  const fixedAnswers = currentUser.type === 'rookie'
+    ? collectRookieAnswers()
+    : currentUser.type === 'newcomer'
+      ? collectNewcomerAnswers()
+      : collectStandardAnswers();
   if (!fixedAnswers) return;
 
   const instructorScores = {};
+  const instBase = instQNumBase();
   for (let idx = 0; idx < currentUser.instructors.length; idx++) {
     const selected = document.querySelector(`input[name="instructor_${idx}"]:checked`);
     if (!selected) {
       document.getElementById('error-msg').style.display = 'block';
-      document.querySelector(`[data-question="${17 + idx}"]`).scrollIntoView({ behavior: 'smooth', block: 'center' });
+      document.querySelector(`[data-question="${instBase + idx}"]`).scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
     const inst = currentUser.instructors[idx];

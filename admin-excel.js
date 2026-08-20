@@ -1,4 +1,4 @@
-import { state, escapeHtml, getSurveyConfig, NC_SURVEY } from './admin-utils.js';
+import { state, escapeHtml, getSurveyConfig, NC_SURVEY, RK_SURVEY } from './admin-utils.js';
 import { computeStats } from './admin-stats.js';
 
 // ── 라벨 헬퍼 ──────────────────────────────
@@ -28,10 +28,12 @@ export async function loadXLSX() {
   });
 }
 
-// 단기는 응답 있는 강사만(기존 동작 유지), 중견리더·신규자는 강사 전체(0응답 포함) 고정 순서.
+// 단기는 응답 있는 강사만(기존 동작 유지), 중견리더·신규자(양쪽)는 강사 전체(0응답 포함) 고정 순서.
 // state.lastRoundLabel 이 비어있지 않으면 중견리더 모드 (loadStats 가 채움).
 function pickExportInstKeys(stats) {
-  const fixedOrder = !!(state.lastRoundLabel) || state.lastCourseType === 'newcomer';
+  const fixedOrder = !!(state.lastRoundLabel)
+    || state.lastCourseType === 'newcomer'
+    || state.lastCourseType === 'rookie';
   return fixedOrder ? stats.instKeysFullOrder : stats.instKeys;
 }
 
@@ -41,6 +43,7 @@ export async function exportStatsExcel() {
   await loadXLSX();
 
   const isNewcomer = state.lastCourseType === 'newcomer';
+  const isRookie = state.lastCourseType === 'rookie';
   const cfg = getSurveyConfig(state.lastCourseType);
   const stats = state.lastComputedStats || computeStats(state.lastResponses, state.lastOrderedInstructorKeys, cfg);
   const instKeys = pickExportInstKeys(stats);
@@ -49,30 +52,39 @@ export async function exportStatsExcel() {
   const wb = XLSX.utils.book_new();
 
   // 신규자: 문항 1~16 설문지 순서 그대로 + 결번 4칸(OMR 17~20 없음, 강사 문항이 21번부터) + 강사
+  // 공무원 신규자: 문항 1~19 + 결번 1칸(OMR 20 없음, 강사 문항이 21번부터) + 강사
   // 표준: 기존 서식 유지 — 9 척도 + 빈칸 1(Q10 주관식 자리) + 인적사항 6 + 강사
   const NC_BLANKS = 4;
-  const totalCols = isNewcomer
-    ? NC_SURVEY.length + NC_BLANKS + instKeys.length
-    : 9 + 1 + 6 + instKeys.length;
+  const RK_BLANKS = 1;
+  const totalCols = isRookie
+    ? RK_SURVEY.length + RK_BLANKS + instKeys.length
+    : isNewcomer
+      ? NC_SURVEY.length + NC_BLANKS + instKeys.length
+      : 9 + 1 + 6 + instKeys.length;
   const headers1 = ['순번', ...Array.from({length: totalCols}, (_, i) => i + 1)];
   const sheet1Data = [headers1];
 
   responses.forEach((r, idx) => {
     const row = [idx + 1];
-    if (isNewcomer) {
-      // 결과폼 서식: 모든 값이 순수 숫자. 척도는 웹 5=매우만족 → 서식 ①=매우만족 이라 6-v 반전,
+    if (isNewcomer || isRookie) {
+      // 결과폼 서식: 모든 값이 순수 숫자. 척도는 웹 5=최고 → 서식 ①=최고 라 6-v 반전,
       // 선택형은 보기 번호 그대로.
-      NC_SURVEY.forEach(q => {
+      const survey = isRookie ? RK_SURVEY : NC_SURVEY;
+      survey.forEach(q => {
         if (q.kind === 'scale') {
           const v = Number(r[q.key]);
           row.push((v >= 1 && v <= 5) ? 6 - v : '');
-        } else {
+        } else if (q.kind === 'choice') {
           const val = String(r[q.key] || '').trim();
           const i = val ? q.options.indexOf(val) + 1 : 0;
           row.push(i > 0 ? i : '');
+        } else {
+          // text 문항(rq10·rq11 등)은 주관식 시트로 — OMR 열 번호 정합을 위해 자리만 비워 유지
+          row.push('');
         }
       });
-      for (let b = 0; b < NC_BLANKS; b++) row.push('');
+      const blanks = isRookie ? RK_BLANKS : NC_BLANKS;
+      for (let b = 0; b < blanks; b++) row.push('');
     } else {
       ['q1','q2','q3','q4','q5','q6','q7','q8','q9'].forEach(k => {
         const v = Number(r[k]);
@@ -90,23 +102,24 @@ export async function exportStatsExcel() {
     instKeys.forEach(k => {
       const v = Number(instObj[k]);
       if (!(v >= 1 && v <= 5)) { row.push(''); return; }
-      // 신규자 결과폼은 순수 숫자, 표준 서식은 기존 `n_0` 텍스트 유지
-      row.push(isNewcomer ? 6 - v : `${6 - v}_0`);
+      // 신규자(양쪽) 결과폼은 순수 숫자, 표준 서식은 기존 `n_0` 텍스트 유지
+      row.push((isNewcomer || isRookie) ? 6 - v : `${6 - v}_0`);
     });
     sheet1Data.push(row);
   });
 
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sheet1Data), isNewcomer ? '공공기관신규자' : '객관식');
+  const sheet1Name = isRookie ? '공무원신규자' : isNewcomer ? '공공기관신규자' : '객관식';
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sheet1Data), sheet1Name);
 
-  const sheet2Headers = isNewcomer
-    ? ['순번', 'Q6-1. 소양교육 개선사항', 'Q7-1. 직무교육 개선사항', '소감 및 건의사항', '만족도 평가 개선 필요 부분', '전반적인 과목 및 강사 건의']
-    : ['순번', 'Q10. 기타 편의시설 건의사항', '소감 및 건의사항', '만족도 평가 개선 필요 부분', '전반적인 과목 및 강사 건의'];
+  // 주관식 시트 — 컬럼은 과정 타입별 subjective 정의(cfg.subjective) 순서, legacy 'comment' 키 제외
+  const subjectiveCols = cfg.subjective.filter(s => s.key !== 'comment');
+  const sheet2Headers = ['순번', ...subjectiveCols.map(s => s.label)];
   const sheet2Data = [sheet2Headers];
   let commentIdx = 1;
   responses.forEach(r => {
-    const cols = isNewcomer
-      ? [r.nq6_comment, r.nq7_comment, r.comment1 || r.comment, r.comment2, r.comment3]
-      : [r.q10_comment, r.comment1 || r.comment, r.comment2, r.comment3];
+    const cols = subjectiveCols.map(s =>
+      s.key === 'comment1' ? (r.comment1 || r.comment) : r[s.key]
+    );
     const trimmed = cols.map(v => String(v || '').trim());
     if (trimmed.some(v => v)) {
       sheet2Data.push([commentIdx++, ...trimmed]);
