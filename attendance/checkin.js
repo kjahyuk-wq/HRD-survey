@@ -208,7 +208,7 @@ function showCoursePicker(name, candidates) {
   const list = document.getElementById('course-picker-list');
   list.innerHTML = candidates.map((c, i) => `
     <div class="course-item" onclick="pickCourse(${i})">
-      <div class="c-name"><iconify-icon icon="solar:square-academic-cap-bold" style="color:var(--dj-blue);vertical-align:-2px;"></iconify-icon> ${escapeHtml(c.courseName)}</div>
+      <div class="c-name"><svg class="icn" style="color:var(--dj-blue);"><use href="#i-course"/></svg> ${escapeHtml(c.courseName)}</div>
       <div class="c-dates">${getDailySessionLabel(c.config)}</div>
     </div>
   `).join('');

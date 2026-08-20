@@ -34,6 +34,16 @@ h1, h2, h3, .status-title { text-wrap: balance; }
 /* Supanova 모션 시그니처 — 모든 인터랙션은 스프링 이징 */
 :root { --spring: cubic-bezier(0.16, 1, 0.3, 1); }
 
+/* 인라인 SVG 아이콘 (Solar 스프라이트) — font-size 로 크기 제어 */
+.icn {
+  width: 1em;
+  height: 1em;
+  display: inline-block;
+  vertical-align: -0.125em;
+  fill: currentColor;
+  flex-shrink: 0;
+}
+
 @keyframes rise-in {
   from { opacity: 0; transform: translateY(1.3rem); filter: blur(4px); }
   to   { opacity: 1; transform: translateY(0); filter: blur(0); }
@@ -177,7 +187,7 @@ h1, h2, h3, .status-title { text-wrap: balance; }
   font-variant-numeric: tabular-nums;
   backdrop-filter: blur(8px);
 }
-.date-pill iconify-icon { font-size: 0.95rem; color: #8fe3d5; }
+.date-pill .icn { font-size: 0.95rem; color: #8fe3d5; }
 
 /* 본문 카드가 히어로 하단을 겹쳐 올라오도록 */
 .page-body {
@@ -451,7 +461,7 @@ h1, h2, h3, .status-title { text-wrap: balance; }
   box-shadow: inset 0 0 0 1px rgba(11,92,171,0.08), inset 0 2px 4px rgba(255,255,255,0.9);
   color: var(--dj-blue);
 }
-.status-icon iconify-icon { font-size: 2.9rem; }
+.status-icon .icn { font-size: 2.9rem; }
 .status-icon.ok { color: #16a34a; background: linear-gradient(145deg, #ecfdf5, #f0fdf4); }
 .status-icon.warn { color: #d97706; background: linear-gradient(145deg, #fffbeb, #fef9ec); }
 .status-title { font-size: 1.12rem; font-weight: 800; margin-bottom: 0.5rem; letter-spacing: -0.01em; }
