@@ -60,26 +60,34 @@ export const NC_CHOICE_QUESTIONS = NC_SURVEY.filter(q => q.kind === 'choice');
 export const RK_WORDS_PROPER = ['매우 부적절', '부적절', '보통', '적절', '매우 적절'];
 export const RK_WORDS_FIT    = ['매우 부적합', '부적합', '보통', '적합', '매우 적합'];
 export const RK_SURVEY = [
-  { key: 'rq1',  kind: 'scale',  label: 'Q1. 교육기간(2주)의 적절성', words: RK_WORDS_PROPER },
-  { key: 'rq2',  kind: 'scale',  label: 'Q2. 과정의 전반적인 교과편성' },
-  { key: 'rq3',  kind: 'scale',  label: 'Q3. 공직가치 및 직무교육(헌법, 예산, 행정, 공문서 작성법 등)' },
-  { key: 'rq4',  kind: 'scale',  label: 'Q4. 역량 및 소양 교육(갈등해결, 민원응대, 개인정보 보호, 자산관리 등)' },
-  { key: 'rq5',  kind: 'scale',  label: 'Q5. 참여학습(분임정책연구, 체육대회)' },
-  { key: 'rq6',  kind: 'scale',  label: 'Q6. 과정 목적 달성을 위한 강사선정' },
-  { key: 'rq7',  kind: 'scale',  label: 'Q7. 강의 관련 교재 및 교안의 적절성' },
-  { key: 'rq8',  kind: 'scale',  label: 'Q8. 평가 방식(필기평가 및 분임정책연구 평가)의 적절성', words: RK_WORDS_PROPER },
-  { key: 'rq9',  kind: 'scale',  label: 'Q9. 과정 운영(일정 안내, 진행 등)' },
-  { key: 'rq10', kind: 'text',   label: 'Q10. 교육과정 중 도움이 된 과목' },
-  { key: 'rq11', kind: 'text',   label: 'Q11. 교육과정 중 개선이 필요한 과목' },
-  { key: 'rq12', kind: 'scale',  label: 'Q12. 교육내용 효과(향후 업무·개인생활 기여도)' },
-  { key: 'rq13', kind: 'scale',  label: 'Q13. 교육장소(KT인재개발원)의 접근성(교통, 주차)' },
-  { key: 'rq14', kind: 'scale',  label: 'Q14. 대강당 강의환경(좌석, 음향, 화면, 냉난방)' },
-  { key: 'rq15', kind: 'scale',  label: 'Q15. 식당, 휴게공간 등 편의시설' },
-  { key: 'rq16', kind: 'scale',  label: 'Q16. 향후 신규자 과정 교육장소로 KT인재개발원의 적합성', words: RK_WORDS_FIT },
-  { key: 'rq17', kind: 'choice', label: 'Q17. 귀하의 직렬',
+  { key: 'rq1',  kind: 'scale',  label: 'Q1. 교육기간(2주)은 적절한가?', words: RK_WORDS_PROPER },
+  { key: 'rq2',  kind: 'scale',  label: 'Q2. 본 과정의 전반적인 교과편성에 대한 의견은?' },
+  { key: 'rq3',  kind: 'scale',  label: 'Q3. 공직가치 및 직무교육(헌법, 예산, 행정, 공문서 작성법 등)에 대한 의견은?' },
+  { key: 'rq4',  kind: 'scale',  label: 'Q4. 역량 및 소양 교육(갈등해결, 민원응대, 개인정보 보호, 자산관리 등)에 대한 의견은?' },
+  { key: 'rq5',  kind: 'scale',  label: 'Q5. 참여학습(분임정책연구, 체육대회)에 대한 의견은?' },
+  { key: 'rq6',  kind: 'scale',  label: 'Q6. 과정 목적 달성을 위한 강사선정은?' },
+  { key: 'rq7',  kind: 'scale',  label: 'Q7. 강의와 관련된 교재 및 교안의 적절성은?' },
+  { key: 'rq8',  kind: 'scale',  label: 'Q8. 평가 방식(필기평가 및 분임정책연구 평가)의 적절성은?', words: RK_WORDS_PROPER },
+  { key: 'rq9',  kind: 'scale',  label: 'Q9. 과정 운영(일정 안내, 진행 등)에 대한 만족도는?' },
+  { key: 'rq10', kind: 'text',   label: 'Q10. 교육과정 중 도움이 된 과목은?' },
+  { key: 'rq11', kind: 'text',   label: 'Q11. 교육과정 중 개선이 필요한 과목은?' },
+  { key: 'rq12', kind: 'scale',  label: 'Q12. 교육내용 효과(향후 업무 및 개인생활 기여도)에 대한 만족도는?' },
+  { key: 'rq13', kind: 'scale',  label: 'Q13. 교육장소(KT인재개발원)의 접근성(교통, 주차)은?' },
+  { key: 'rq14', kind: 'scale',  label: 'Q14. 대강당 강의환경(좌석, 음향, 화면, 냉난방)은?' },
+  { key: 'rq15', kind: 'scale',  label: 'Q15. 식당, 휴게공간 등 편의시설은?' },
+  { key: 'rq16', kind: 'scale',  label: 'Q16. 향후 신규자 과정 교육장소로 KT인재개발원이 적합한가?', words: RK_WORDS_FIT },
+  { key: 'rq17', kind: 'choice', label: 'Q17. 귀하의 직렬은?',
     options: ['행정직', '사회복지직', '세무직', '시설직(토목,건축,전기,기계 등)', '기타(보건,간호,전산,환경,농업 등)'] },
-  { key: 'rq18', kind: 'choice', label: 'Q18. 귀하의 연령', options: ['20대', '30대', '40대', '50대'] },
-  { key: 'rq19', kind: 'choice', label: 'Q19. 귀하의 성별', options: ['남', '여'] },
+  { key: 'rq18', kind: 'choice', label: 'Q18. 귀하의 연령은?', options: ['20대', '30대', '40대', '50대'] },
+  { key: 'rq19', kind: 'choice', label: 'Q19. 귀하의 성별은?', options: ['남', '여'] },
+];
+
+// 종이 설문지의 분류 박스 — before 문항 카드 앞에 섹션 제목 렌더 (index.html 블록과 1:1)
+export const RK_SECTIONS = [
+  { before: 'rq1',  title: '교육기간에 관한 질문입니다' },
+  { before: 'rq2',  title: '교육운영에 관한 질문입니다' },
+  { before: 'rq13', title: '교육환경에 관한 질문입니다' },
+  { before: 'rq17', title: '인적사항에 관한 질문입니다' },
 ];
 
 export const RK_SCALE_QUESTIONS  = RK_SURVEY.filter(q => q.kind === 'scale');

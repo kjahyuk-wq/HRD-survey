@@ -2,7 +2,7 @@ import { db } from './firebase-config.js';
 import {
   collection, getDocs
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
-import { state, escapeHtml, escapeAttr, NC_SURVEY, RK_SURVEY, RK_SUB_COMMENTS, normalizeCourseType, getInstructorGroup } from './admin-utils.js';
+import { state, escapeHtml, escapeAttr, NC_SURVEY, RK_SURVEY, RK_SUB_COMMENTS, RK_SECTIONS, normalizeCourseType, getInstructorGroup } from './admin-utils.js';
 import { lsRead, lsWrite } from './admin-courses.js';
 import { getInstructorCategory, COMMON_CATEGORY } from './admin-rounds.js';
 
@@ -151,6 +151,11 @@ function renderRookiePreviewQuestions() {
   container.innerHTML = RK_SURVEY.map(q => {
     const num = q.label.split('.')[0];  // 'Q1'
     const txt = q.label.slice(q.label.indexOf('.') + 1).trim();
+    // 종이 설문지 분류 박스 ("교육기간에 관한 질문입니다" 등)
+    const sectionDef = RK_SECTIONS.find(s => s.before === q.key);
+    const section = sectionDef
+      ? `<div class="sv-section-title">${escapeHtml(sectionDef.title)}</div>`
+      : '';
     const subDef = RK_SUB_COMMENTS.find(s => s.after === q.key);
     const sub = subDef
       ? `<div class="q-card optional">
@@ -161,9 +166,9 @@ function renderRookiePreviewQuestions() {
       : '';
     // text 문항(rq10·rq11)은 주관식 선택 입력 카드
     if (q.kind === 'text') {
-      return `<div class="q-card optional">
+      return `${section}<div class="q-card optional">
           <div class="q-num opt">${num} <em>선택</em></div>
-          <div class="q-txt">${escapeHtml(txt)}은?</div>
+          <div class="q-txt">${escapeHtml(txt)}</div>
           <textarea placeholder="과목명을 작성해 주세요." rows="3"></textarea>
         </div>${sub}`;
     }
@@ -172,7 +177,7 @@ function renderRookiePreviewQuestions() {
       : `<div class="choice-group">${q.options.map(o =>
           `<label class="choice-label"><input type="radio" name="p${q.key}" value="${escapeAttr(o)}"><span class="choice-btn">${escapeHtml(o)}</span></label>`
         ).join('')}</div>`;
-    return `<div class="q-card">
+    return `${section}<div class="q-card">
         <div class="q-num">${num}</div>
         <div class="q-txt">${escapeHtml(txt)}</div>
         ${body}

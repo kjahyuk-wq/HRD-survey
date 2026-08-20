@@ -303,6 +303,19 @@ body {
   line-height: 1.6;
 }
 
+/* 설문 섹션 제목 — 종이 설문지의 분류 박스 ("교육기간에 관한 질문입니다" 등) */
+.sv-section-title {
+  margin: 1.8rem 0 0.9rem;
+  padding: 0.7rem 1.1rem;
+  background: #eef4fb;
+  border-left: 4px solid #0066cc;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #1a3a5c;
+}
+.sv-section-title:first-child { margin-top: 0; }
+
 /* 문항 카드 (관리자 section-card와 동일한 스타일) */
 .q-card {
   background: #fff;
