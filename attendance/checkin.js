@@ -498,32 +498,52 @@ function clearTimer() {
 document.getElementById('input-name-empno').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('input-empno').focus(); });
 document.getElementById('input-empno').addEventListener('keydown', e => { if (e.key === 'Enter') window.doLoginEmpNo(); });
 
-// 72시간 세션이 살아 있으면 메일/교번 재입력 없이 자동 진행
+// 옵티미스틱 스피너(자동 로그인 중) 상태에서 자동 진행이 불가능한 것으로
+// 판명되면 로그인 폼으로 폴백 — 무한 스피너 방지
+function fallbackFromResuming() {
+  const r = document.getElementById('screen-resuming');
+  if (r && r.classList.contains('active')) showScreen('screen-login-empno');
+}
+
+// 세션이 살아 있으면 교번 재입력 없이 자동 진행
 onAuthStateChanged(auth, async (user) => {
-  if (!user || user.isAnonymous || autoResumed) return;
+  if (autoResumed) return;
+  if (!user || user.isAnonymous) { fallbackFromResuming(); return; }
   try {
     const tokenResult = await user.getIdTokenResult();
-    if (tokenResult.claims?.role !== 'student') return;
+    if (tokenResult.claims?.role !== 'student') { fallbackFromResuming(); return; }
 
     const cachedName = localStorage.getItem(SESSION_NAME_KEY);
     const cachedCandsRaw = localStorage.getItem(SESSION_CANDS_KEY);
     const cachedTs = parseInt(localStorage.getItem(SESSION_TS_KEY) || '0', 10);
-    if (!cachedName || !cachedCandsRaw) return;
+    if (!cachedName || !cachedCandsRaw) { fallbackFromResuming(); return; }
 
-    // 72시간 만료 체크
+    // 세션 만료 체크
     if (!cachedTs || Date.now() - cachedTs > SESSION_MAX_AGE_MS) {
       clearSessionCache();
       try { await signOut(auth); } catch(_) {}
+      fallbackFromResuming();
       return;
     }
 
     const cachedCands = JSON.parse(cachedCandsRaw);
-    if (!Array.isArray(cachedCands) || !cachedCands.length) return;
+    if (!Array.isArray(cachedCands) || !cachedCands.length) { fallbackFromResuming(); return; }
+
+    // 로그인 폼이 이미 보이고 사용자가 입력을 시작했다면 화면을 뺏지 않는다
+    // (자동 진행이 타이핑 중간에 화면을 전환해 버리는 문제 방지)
+    const loginScreen = document.getElementById('screen-login-empno');
+    const nameEl = document.getElementById('input-name-empno');
+    const empEl = document.getElementById('input-empno');
+    if (loginScreen.classList.contains('active') &&
+        ((nameEl && nameEl.value.trim()) || (empEl && empEl.value.trim()))) {
+      return;
+    }
 
     autoResumed = true;
-    document.getElementById('input-name-empno').value = cachedName;
+    if (nameEl) nameEl.value = cachedName;
     await proceedWithCandidates(cachedName, cachedCands);
   } catch (e) {
     console.warn('자동 진행 실패', e);
+    fallbackFromResuming();
   }
 });

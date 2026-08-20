@@ -7,22 +7,75 @@
   <title>출석 관리 시스템 - 대전광역시 인재개발원</title>
   <link rel="icon" type="image/png" href="assets/emblem.png">
 
-  <!-- 안드로이드 한정 silent fallback: 카톡/네이버 등 인앱 webview 감지 시 Chrome intent 스킴으로
-       외부 브라우저 자동 호출. iOS 는 자동 우회 불가능 — QR/링크 측에서 ?openExternalBrowser=1 등으로
-       사전 우회 권장. (인앱은 IndexedDB 휘발이 잦아 Firebase Auth 세션이 유지 안 됨) -->
+  <!-- 인앱 브라우저(카톡/네이버/라인 등) 우회: 인앱 웹뷰는 저장소 휘발이 잦아
+       Firebase Auth 세션이 유지되지 않음 → 자동 로그인 불가.
+       - 카카오톡: kakaotalk://web/openExternal 스킴 (iOS/Android 모두 기본 브라우저 강제 오픈)
+       - 라인: ?openExternalBrowser=1 파라미터
+       - 안드로이드 기타 인앱: Chrome intent 스킴
+       - iOS 기타 인앱: 자동 우회 불가 → 안내 오버레이만 표시 -->
   <script>
   (function() {
     var ua = navigator.userAgent || '';
     var isInApp = /KAKAOTALK|NAVER\(inapp|Line\/|FBAV|FB_IAB|Instagram|; wv\)/i.test(ua);
-    if (!isInApp || !/Android/i.test(ua)) return;
+    if (!isInApp) return;
+
+    var kind = /KAKAOTALK/i.test(ua) ? 'kakao'
+             : /Line\//i.test(ua) ? 'line'
+             : /Android/i.test(ua) ? 'android' : 'ios';
+
+    var tried = false;
     try {
-      if (sessionStorage.getItem('att_extTried') === '1') return;
+      tried = sessionStorage.getItem('att_extTried') === '1';
       sessionStorage.setItem('att_extTried', '1');
-    } catch (_) { return; }
-    location.href = 'intent://' + location.host + location.pathname + location.search + location.hash
-      + '#Intent;scheme=https;package=com.android.chrome;end';
+    } catch (_) {}
+
+    // 1회 자동 우회 시도
+    if (!tried) {
+      if (kind === 'kakao') {
+        location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(location.href);
+      } else if (kind === 'line') {
+        if (location.href.indexOf('openExternalBrowser=1') < 0) {
+          location.replace(location.href + (location.search ? '&' : '?') + 'openExternalBrowser=1');
+          return;
+        }
+      } else if (kind === 'android') {
+        location.href = 'intent://' + location.host + location.pathname + location.search + location.hash
+          + '#Intent;scheme=https;package=com.android.chrome;end';
+      }
+    }
+
+    // 웹뷰에 남은 화면에는 안내 오버레이 (수동 로그인은 가능하므로 '계속하기' 제공)
+    document.addEventListener('DOMContentLoaded', function() {
+      var g = document.getElementById('inapp-guide');
+      if (!g) return;
+      var openBtn = document.getElementById('inapp-open-btn');
+      var iosHint = document.getElementById('inapp-ios-hint');
+      if (kind === 'kakao') {
+        openBtn.style.display = 'block';
+        openBtn.onclick = function() {
+          location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(location.href);
+        };
+      } else if (kind === 'android') {
+        openBtn.style.display = 'block';
+        openBtn.textContent = 'Chrome으로 열기';
+        openBtn.onclick = function() {
+          location.href = 'intent://' + location.host + location.pathname + location.search + location.hash
+            + '#Intent;scheme=https;package=com.android.chrome;end';
+        };
+      } else {
+        iosHint.style.display = 'block';
+      }
+      g.style.display = 'flex';
+    });
   })();
   </script>
+
+  <!-- Firebase 백엔드 preconnect — 자동 로그인 시 TLS 핸드셰이크 선행으로 수백 ms 단축 -->
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://securetoken.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://asia-northeast3-hrd-data.cloudfunctions.net" crossorigin>
 
   <!-- 옵티미스틱 즉시 렌더에 쓸 Firebase 모듈 미리 다운로드 시작
        (모듈 파싱 시점까지 기다리지 않게 함 — 백그라운드 검증 지연 단축) -->
@@ -243,6 +296,25 @@
   </div>
 </div>
 
+<!-- 인앱 브라우저 안내 오버레이 (head 의 인앱 감지 스크립트가 표시) -->
+<div id="inapp-guide" style="display:none;position:fixed;inset:0;z-index:100;background:rgba(4,24,52,0.78);backdrop-filter:blur(8px);align-items:center;justify-content:center;padding:1.2rem;">
+  <div style="background:#fff;border-radius:24px;padding:1.8rem 1.5rem;max-width:400px;width:100%;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,0.4);">
+    <img src="assets/emblem.png" alt="대전광역시 엠블럼" style="width:52px;height:52px;margin-bottom:0.8rem;">
+    <h2 style="font-size:1.1rem;font-weight:800;margin-bottom:0.6rem;">기본 브라우저로 열어 주세요</h2>
+    <p style="font-size:0.85rem;color:#64748b;line-height:1.65;margin-bottom:1.2rem;">
+      지금은 앱 안의 브라우저에서 열려 있어요.<br>
+      이 상태로는 <strong style="color:#0b5cab;">자동 로그인이 저장되지 않아</strong><br>
+      매일 이름과 교번을 다시 입력해야 합니다.
+    </p>
+    <button id="inapp-open-btn" style="display:none;width:100%;min-height:52px;border:none;border-radius:999px;background:linear-gradient(135deg,#0b5cab,#1373c9);color:#fff;font-size:1rem;font-weight:700;cursor:pointer;box-shadow:0 10px 24px -8px rgba(11,92,171,0.5);font-family:inherit;">기본 브라우저로 열기</button>
+    <div id="inapp-ios-hint" style="display:none;background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;padding:0.9rem 1rem;font-size:0.83rem;color:#475569;line-height:1.7;text-align:left;">
+      화면 하단의 <strong>공유 버튼</strong> 또는 <strong>메뉴(⋯)</strong>를 눌러<br>
+      <strong style="color:#0b5cab;">"Safari로 열기"</strong>를 선택해 주세요.
+    </div>
+    <a href="#" onclick="event.preventDefault();document.getElementById('inapp-guide').style.display='none';" style="display:inline-block;margin-top:1rem;font-size:0.8rem;color:#94a3b8;text-decoration:underline;">이대로 계속하기</a>
+  </div>
+</div>
+
 <!-- qrious: canvas 기반 QR 라이브러리 -->
 <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
 
@@ -257,18 +329,6 @@
 (function () {
   try {
     var SNAPSHOT_KEY = 'att_last_state_v1';
-    var raw = localStorage.getItem(SNAPSHOT_KEY);
-    if (!raw) return;
-    var s = JSON.parse(raw);
-    if (!s || s.v !== 1 || !s.name || !s.config) return;
-
-    function todayStr() {
-      var d = new Date();
-      return d.getFullYear() + '-' +
-        String(d.getMonth() + 1).padStart(2, '0') + '-' +
-        String(d.getDate()).padStart(2, '0');
-    }
-    var TODAY = todayStr();
 
     function show(id) {
       var screens = document.querySelectorAll('.screen');
@@ -281,11 +341,52 @@
       }
     }
 
+    // 스피너 표시 + 안전장치: 10초 내에 checkin.js 가 화면을 못 바꾸면
+    // (네트워크 장애 / 세션 만료 등) 로그인 폼으로 폴백해 무한 스피너를 방지
+    function showResuming() {
+      show('screen-resuming');
+      window.__optimisticState = { kind: 'resuming' };
+      setTimeout(function () {
+        var r = document.getElementById('screen-resuming');
+        if (r && r.classList.contains('active')) show('screen-login-empno');
+      }, 10000);
+    }
+
+    // 최근 14일 내 로그인 이력(세션 캐시)이 있으면 auth 세션이 살아 있을 확률이 높다
+    function sessionCacheAlive() {
+      try {
+        var nm = localStorage.getItem('att_login_name');
+        var cd = localStorage.getItem('att_login_candidates');
+        var ts = parseInt(localStorage.getItem('att_login_ts') || '0', 10);
+        return !!(nm && cd && ts && (Date.now() - ts) < 14 * 24 * 60 * 60 * 1000);
+      } catch (_) { return false; }
+    }
+
+    var raw = localStorage.getItem(SNAPSHOT_KEY);
+    if (!raw) {
+      // 스냅샷은 없지만 로그인 이력이 있으면 (예: 로그인만 하고 QR 발급 전 이탈,
+      // 휴강일 접속 등) 로그인 폼 대신 스피너 — '이름 입력 중 화면이 넘어가는' 문제 방지
+      if (sessionCacheAlive()) showResuming();
+      return;
+    }
+    var s = JSON.parse(raw);
+    if (!s || s.v !== 1 || !s.name || !s.config) {
+      if (sessionCacheAlive()) showResuming();
+      return;
+    }
+
+    function todayStr() {
+      var d = new Date();
+      return d.getFullYear() + '-' +
+        String(d.getMonth() + 1).padStart(2, '0') + '-' +
+        String(d.getDate()).padStart(2, '0');
+    }
+    var TODAY = todayStr();
+
     // 다른 날 스냅샷이면 일단 스피너로 — 빈 로그인 폼은 보이지 않게 한다.
     // 진짜 결과(휴강/오늘 첫 QR/세션외)는 checkin.js 가 결정해 갱신.
     if (s.date !== TODAY) {
-      show('screen-resuming');
-      window.__optimisticState = { kind: 'resuming' };
+      showResuming();
       return;
     }
 
@@ -378,8 +479,7 @@
     }
 
     // 케이스 C: 그 외 (세션 외 시간 / QR 만료 / 첫 QR 필요) → 스피너
-    show('screen-resuming');
-    window.__optimisticState = { kind: 'resuming' };
+    showResuming();
   } catch (e) {
     // 스냅샷 손상 — 기존 로그인 폼 그대로
     try { console.warn('[optimistic] fallback to login form', e); } catch (_) {}
