@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>신규자과정 좌석 안내</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+      "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+    background: #eef1f6;
+    color: #1a2233;
+    min-height: 100vh;
+    padding: 20px 14px 40px;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 520px; margin: 0 auto; }
+
+  .hero { text-align: center; padding: 10px 0 22px; }
+  .hero .badge {
+    display: inline-block; font-size: 12.5px; font-weight: 600; letter-spacing: .02em;
+    color: #1d4ed8; background: #dbe7ff; border-radius: 999px; padding: 5px 14px; margin-bottom: 10px;
+  }
+  .hero h1 { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
+  .hero p { font-size: 13.5px; color: #5b6577; margin-top: 6px; }
+
+  .card {
+    background: #fff; border-radius: 18px; padding: 22px 20px;
+    box-shadow: 0 2px 14px rgba(23, 43, 99, .07);
+  }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 13px; font-weight: 700; color: #475061; margin-bottom: 6px; }
+  .field input {
+    width: 100%; font-size: 17px; padding: 13px 14px; border: 1.5px solid #d4dae4;
+    border-radius: 12px; outline: none; background: #fafbfd; color: #1a2233;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .field input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, .12); background: #fff; }
+  .field .hint { font-size: 12px; color: #8a93a5; margin-top: 5px; }
+
+  button.go {
+    width: 100%; margin-top: 6px; padding: 15px; font-size: 16.5px; font-weight: 700;
+    color: #fff; background: #2563eb; border: none; border-radius: 12px; cursor: pointer;
+    transition: background .15s, transform .05s;
+  }
+  button.go:active { transform: scale(.99); }
+  button.go:disabled { background: #9db4e6; cursor: default; }
+
+  .msg-error {
+    display: none; margin-top: 14px; padding: 12px 14px; border-radius: 12px;
+    background: #fdecec; color: #b42318; font-size: 14px; font-weight: 600;
+  }
+
+  /* ─── result ─── */
+  #result { display: none; margin-top: 18px; }
+  .greet { text-align: center; margin-bottom: 14px; }
+  .greet .name { font-size: 21px; font-weight: 800; }
+  .greet .sub { font-size: 13px; color: #5b6577; margin-top: 2px; }
+
+  .stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .stat {
+    background: #f5f8ff; border: 1px solid #e3eafc; border-radius: 14px;
+    padding: 14px 10px; text-align: center;
+  }
+  .stat .k { font-size: 12px; font-weight: 700; color: #64708a; margin-bottom: 3px; }
+  .stat .v { font-size: 21px; font-weight: 800; color: #1d3fae; letter-spacing: -0.01em; }
+  .stat .v small { font-size: 13px; font-weight: 700; color: #64708a; }
+  .stat.seat { grid-column: 1 / -1; background: #1d4ed8; border-color: #1d4ed8; }
+  .stat.seat .k { color: #bcd0ff; }
+  .stat.seat .v { color: #fff; font-size: 30px; }
+  .stat .v.tbd { font-size: 15px; color: #8a93a5; padding-top: 5px; }
+
+  .loc {
+    margin-top: 12px; padding: 12px 14px; border-radius: 12px; background: #fff7e8;
+    border: 1px solid #f5e3bd; color: #7a5410; font-size: 14.5px; font-weight: 600; text-align: center;
+  }
+
+  /* ─── seat map ─── */
+  .map-card { margin-top: 14px; }
+  .map-title { font-size: 14px; font-weight: 800; color: #475061; margin-bottom: 4px; }
+  .map-hint { font-size: 12px; color: #8a93a5; margin-bottom: 10px; }
+  .map-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 12px; background: #f7f9fc; border: 1px solid #e6ebf2; }
+  .map-scroll svg { display: block; min-width: 620px; width: 100%; height: auto; }
+
+  @keyframes pulse {
+    0%   { stroke-opacity: .9; stroke-width: 2; }
+    70%  { stroke-opacity: 0;  stroke-width: 9; }
+    100% { stroke-opacity: 0;  stroke-width: 9; }
+  }
+  .pulse-ring { animation: pulse 1.6s ease-out infinite; transform-origin: center; }
+
+  .foot { text-align: center; font-size: 11.5px; color: #98a1b3; margin-top: 26px; line-height: 1.7; }
+  .again { display: none; width: 100%; margin-top: 16px; padding: 12px; font-size: 14px; font-weight: 700;
+    color: #475061; background: #eef1f6; border: none; border-radius: 12px; cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero">
+    <div class="badge">2026년 제2기 신규자과정</div>
+    <h1>내 교번·분임·좌석 확인</h1>
+    <p>이름과 휴대전화 뒤 4자리를 입력하면<br>본인 정보만 확인할 수 있습니다.</p>
+  </div>
+
+  <div class="card" id="formCard">
+    <div class="field">
+      <label for="inName">이름</label>
+      <input id="inName" type="text" placeholder="예) 홍길동" autocomplete="off" enterkeyhint="next">
+    </div>
+    <div class="field">
+      <label for="inPhone">휴대전화 뒤 4자리</label>
+      <input id="inPhone" type="tel" inputmode="numeric" maxlength="4" placeholder="예) 1234" autocomplete="off" enterkeyhint="done">
+      <div class="hint">본인 명의 휴대전화번호의 마지막 4자리</div>
+    </div>
+    <button class="go" id="btnGo">내 좌석 확인하기</button>
+    <div class="msg-error" id="msgErr"></div>
+  </div>
+
+  <div id="result">
+    <div class="card">
+      <div class="greet">
+        <div class="name" id="rName"></div>
+        <div class="sub">아래 정보를 확인해 주세요</div>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="k">교번</div><div class="v" id="rId"></div></div>
+        <div class="stat"><div class="k">분임</div><div class="v" id="rBunim"></div></div>
+        <div class="stat"><div class="k">체육대회 조</div><div class="v" id="rTeam"></div></div>
+        <div class="stat seat"><div class="k">좌석번호 (대강당 1층)</div><div class="v" id="rSeat"></div></div>
+      </div>
+      <div class="loc" id="rLoc"></div>
+    </div>
+
+    <div class="card map-card" id="mapCard">
+      <div class="map-title">대강당 1층 좌석 배치도</div>
+      <div class="map-hint">파란색으로 표시된 자리가 본인 좌석입니다. 좌우로 밀어서 볼 수 있어요.</div>
+      <div class="map-scroll" id="mapScroll"></div>
+    </div>
+
+    <button class="again" id="btnAgain">다시 조회하기</button>
+  </div>
+
+  <div class="foot">
+    본 페이지는 서버 없이 동작하며, 입력한 이름·전화번호는<br>
+    어디에도 전송·저장되지 않습니다.
+  </div>
+</div>
+
+<script>
+const DATA = __DATA__;
+const GRID = __GRID__;   // [seatNo, row(1-15), col(excel col index)]
+const SALT = "__SALT__";
+const ITER = __ITER__;
+
+/* ── crypto lookup ── */
+const enc = new TextEncoder();
+function b64ToBytes(b64){ const s = atob(b64); const a = new Uint8Array(s.length); for(let i=0;i<s.length;i++) a[i]=s.charCodeAt(i); return a; }
+function toHex(buf){ return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,"0")).join(""); }
+
+async function derive(name, last4){
+  const material = await crypto.subtle.importKey("raw", enc.encode(name + "|" + last4), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits(
+    { name:"PBKDF2", hash:"SHA-256", salt: enc.encode(SALT), iterations: ITER }, material, 384);
+  const all = new Uint8Array(bits);
+  return { id: toHex(all.slice(0,16)), key: all.slice(16,48) };
+}
+
+async function lookup(name, last4){
+  const { id, key } = await derive(name, last4);
+  const rec = DATA[id];
+  if(!rec) return null;
+  const raw = b64ToBytes(rec);
+  const iv = raw.slice(0,12), ct = raw.slice(12);
+  const aesKey = await crypto.subtle.importKey("raw", key, "AES-GCM", false, ["decrypt"]);
+  try {
+    const pt = await crypto.subtle.decrypt({name:"AES-GCM", iv}, aesKey, ct);
+    return JSON.parse(new TextDecoder().decode(pt));
+  } catch(e){ return null; }
+}
+
+/* ── seat geometry ── */
+const AISLE1 = 22, AISLE2 = 40;  // excel cols 22-23 & 40-41 are aisles
+function section(c){ return c < AISLE1 ? "L" : (c < AISLE2 ? "C" : "R"); }
+const SEC_NAME = { L:"좌측구역", C:"중앙구역", R:"우측구역" };
+const byNo = {}; GRID.forEach(s => byNo[s[0]] = { n:s[0], r:s[1], c:s[2] });
+
+function locationText(seatNo){
+  const me = byNo[seatNo];
+  if(!me) return "";
+  const rowMates = GRID.filter(s => s[1]===me.r && section(s[2])===section(me.c)).sort((a,b)=>a[2]-b[2]);
+  const idx = rowMates.findIndex(s => s[0]===seatNo) + 1;
+  return `무대를 바라보고 ${SEC_NAME[section(me.c)]} ${me.r}열 · 왼쪽에서 ${idx}번째`;
+}
+
+/* ── SVG map ── */
+function renderMap(seatNo){
+  const U = 15, PAD_L = 34, PAD_T = 46, PAD_B = 14, PAD_R = 12;
+  const minC = 5, maxC = 58, maxR = 15;
+  const W = PAD_L + (maxC - minC + 1) * U + PAD_R;
+  const H = PAD_T + maxR * U + PAD_B;
+  const X = c => PAD_L + (c - minC) * U;
+  const Y = r => PAD_T + (r - 1) * U;
+  const me = byNo[seatNo];
+
+  let s = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">`;
+  // stage
+  const stW = 26 * U;
+  s += `<rect x="${(W-stW)/2}" y="6" width="${stW}" height="22" rx="6" fill="#334155"/>`;
+  s += `<text x="${W/2}" y="21" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">무 대</text>`;
+  // section labels
+  const secMid = { L: X(5) + ((21-5+1)*U)/2, C: X(24) + ((39-24+1)*U)/2, R: X(42) + ((58-42+1)*U)/2 };
+  for(const k of ["L","C","R"])
+    s += `<text x="${secMid[k]}" y="${PAD_T-6}" text-anchor="middle" font-size="9.5" font-weight="700" fill="#94a3b8">${SEC_NAME[k]}</text>`;
+  // row labels
+  for(let r=1; r<=maxR; r++)
+    s += `<text x="${PAD_L-8}" y="${Y(r)+U/2+3.5}" text-anchor="end" font-size="9" fill="#94a3b8">${r}열</text>`;
+  // seats
+  const sz = U - 3;
+  for(const g of GRID){
+    const [n, r, c] = g;
+    const x = X(c), y = Y(r);
+    if(me && n === seatNo){
+      s += `<circle class="pulse-ring" cx="${x+sz/2}" cy="${y+sz/2}" r="${sz}" fill="none" stroke="#2563eb"/>`;
+      s += `<rect x="${x-1.5}" y="${y-1.5}" width="${sz+3}" height="${sz+3}" rx="3.5" fill="#2563eb"/>`;
+    } else {
+      s += `<rect x="${x}" y="${y}" width="${sz}" height="${sz}" rx="2.5" fill="#cdd6e4"/>`;
+    }
+  }
+  // callout label for my seat
+  if(me){
+    const x = X(me.c)+sz/2, y = Y(me.r);
+    const lx = Math.min(Math.max(x, PAD_L+30), W-42);
+    s += `<g font-weight="800"><rect x="${lx-26}" y="${y-24}" width="52" height="17" rx="8" fill="#1e293b"/>`;
+    s += `<text x="${lx}" y="${y-11.5}" text-anchor="middle" font-size="10.5" fill="#fff">${me.n}번</text></g>`;
+  }
+  s += `</svg>`;
+  const holder = document.getElementById("mapScroll");
+  holder.innerHTML = s;
+  if(me){
+    requestAnimationFrame(()=>{
+      const frac = (X(me.c) - PAD_L) / ((maxC-minC+1)*U);
+      holder.scrollLeft = Math.max(0, frac * holder.scrollWidth - holder.clientWidth/2);
+    });
+  }
+}
+
+/* ── UI flow ── */
+const $ = id => document.getElementById(id);
+let fails = 0, lockedUntil = 0;
+
+function showErr(t){ const el = $("msgErr"); el.textContent = t; el.style.display = "block"; }
+function hideErr(){ $("msgErr").style.display = "none"; }
+
+async function go(){
+  hideErr();
+  const now = Date.now();
+  if(now < lockedUntil){
+    showErr(`시도 횟수가 많습니다. ${Math.ceil((lockedUntil-now)/1000)}초 후 다시 시도해 주세요.`);
+    return;
+  }
+  const name = $("inName").value.replace(/\s+/g, "");
+  const last4 = ($("inPhone").value.match(/\d/g) || []).join("").slice(-4);
+  if(!name){ showErr("이름을 입력해 주세요."); return; }
+  if(last4.length !== 4){ showErr("휴대전화 뒤 4자리를 정확히 입력해 주세요."); return; }
+
+  const btn = $("btnGo");
+  btn.disabled = true; btn.textContent = "확인 중…";
+  const rec = await lookup(name, last4);
+  btn.disabled = false; btn.textContent = "내 좌석 확인하기";
+
+  if(!rec){
+    fails++;
+    if(fails >= 5){ lockedUntil = Date.now() + 30000; fails = 0; }
+    showErr("일치하는 정보가 없습니다. 이름과 번호를 다시 확인해 주세요.");
+    return;
+  }
+  fails = 0;
+  render(rec);
+}
+
+function render(rec){
+  $("rName").textContent = rec.n + " 님";
+  $("rId").innerHTML = `${rec.e}<small>번</small>`;
+  $("rBunim").innerHTML = `제${rec.b}<small>분임</small>`;
+  const t = $("rTeam");
+  if(rec.t){ t.className = "v"; t.innerHTML = `${rec.t}`; }
+  else { t.className = "v tbd"; t.textContent = "추후 안내"; }
+  const seat = $("rSeat"), loc = $("rLoc");
+  if(rec.s){
+    seat.className = "v"; seat.style.fontSize = ""; seat.textContent = rec.s + "번";
+    loc.style.display = "block"; loc.textContent = locationText(rec.s);
+    $("mapCard").style.display = "block";
+    renderMap(rec.s);
+  } else {
+    seat.className = "v"; seat.style.fontSize = "18px"; seat.textContent = "추후 개별 안내";
+    loc.style.display = "block";
+    loc.textContent = rec.c ? "별도 좌석(후방 책상)이 준비됩니다. 현장 안내에 따라 주세요." : "좌석은 추후 개별 안내 예정입니다.";
+    $("mapCard").style.display = "none";
+  }
+  $("formCard").style.display = "none";
+  $("result").style.display = "block";
+  $("btnAgain").style.display = "block";
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+$("btnGo").addEventListener("click", go);
+$("inPhone").addEventListener("keydown", e => { if(e.key === "Enter") go(); });
+$("inName").addEventListener("keydown", e => { if(e.key === "Enter") $("inPhone").focus(); });
+$("btnAgain").addEventListener("click", () => {
+  $("result").style.display = "none";
+  $("btnAgain").style.display = "none";
+  $("formCard").style.display = "block";
+  $("inName").value = ""; $("inPhone").value = "";
+  hideErr(); $("inName").focus();
+});
+</script>
+</body>
+</html>

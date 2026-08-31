@@ -79,3 +79,8 @@ firestore-debug.log*
 deploy-log*.txt
 functions-log*.txt
 
+
+# 개인정보 포함 파일 — 커밋 금지
+*.xlsx
+docs/backup-*/
+.DS_Store

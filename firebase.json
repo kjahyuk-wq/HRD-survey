@@ -11,7 +11,10 @@
       "firebase.json",
       "**/.*",
       "**/node_modules/**",
-      "**/functions/**"
+      "**/functions/**",
+      "**/*.xlsx",
+      "**/*.py",
+      "docs/**"
     ],
     "headers": [
       {
