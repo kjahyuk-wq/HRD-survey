@@ -100,7 +100,7 @@
 <body>
 <div class="wrap">
   <div class="hero">
-    <div class="badge">2026년 제2기 신규자과정</div>
+    <div class="badge">2026년 신규자과정</div>
     <h1>내 교번·분임·좌석 확인</h1>
     <p>이름과 휴대전화 뒤 4자리를 입력하면<br>본인 정보만 확인할 수 있습니다.</p>
   </div>
@@ -285,7 +285,7 @@ async function go(){
 function render(rec){
   $("rName").textContent = rec.n + " 님";
   $("rId").innerHTML = `${rec.e}<small>번</small>`;
-  $("rBunim").innerHTML = `제${rec.b}<small>분임</small>`;
+  $("rBunim").innerHTML = `제${rec.b}분임`;
   const t = $("rTeam");
   if(rec.t){ t.className = "v"; t.innerHTML = `${rec.t}`; }
   else { t.className = "v tbd"; t.textContent = "추후 안내"; }
