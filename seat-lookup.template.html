@@ -151,7 +151,7 @@
 
 <script>
 const DATA = __DATA__;
-const GRID = __GRID__;   // [seatNo, row(1-15), col(excel col index)]
+const GRID = __GRID__;   // [seatNo, row(1-16), col(excel col index)] — 16열은 휠체어석
 const SALT = "__SALT__";
 const ITER = __ITER__;
 
@@ -190,6 +190,7 @@ const byNo = {}; GRID.forEach(s => byNo[s[0]] = { n:s[0], r:s[1], c:s[2] });
 function locationText(seatNo){
   const me = byNo[seatNo];
   if(!me) return "";
+  if(me.r === 16) return "무대를 바라보고 우측 뒷편에 마련된 휠체어석입니다";
   const rowMates = GRID.filter(s => s[1]===me.r && section(s[2])===section(me.c)).sort((a,b)=>a[2]-b[2]);
   const idx = rowMates.findIndex(s => s[0]===seatNo) + 1;
   return `무대를 바라보고 ${SEC_NAME[section(me.c)]} ${me.r}열 · 왼쪽에서 ${idx}번째`;
@@ -198,7 +199,7 @@ function locationText(seatNo){
 /* ── SVG map ── */
 function renderMap(seatNo){
   const U = 15, PAD_L = 34, PAD_T = 46, PAD_B = 14, PAD_R = 12;
-  const minC = 5, maxC = 58, maxR = 15;
+  const minC = 5, maxC = 58, maxR = 16;
   const W = PAD_L + (maxC - minC + 1) * U + PAD_R;
   const H = PAD_T + maxR * U + PAD_B;
   const X = c => PAD_L + (c - minC) * U;
@@ -214,9 +215,9 @@ function renderMap(seatNo){
   const secMid = { L: X(5) + ((21-5+1)*U)/2, C: X(24) + ((39-24+1)*U)/2, R: X(42) + ((58-42+1)*U)/2 };
   for(const k of ["L","C","R"])
     s += `<text x="${secMid[k]}" y="${PAD_T-6}" text-anchor="middle" font-size="9.5" font-weight="700" fill="#94a3b8">${SEC_NAME[k]}</text>`;
-  // row labels
+  // row labels (16열은 휠체어석)
   for(let r=1; r<=maxR; r++)
-    s += `<text x="${PAD_L-8}" y="${Y(r)+U/2+3.5}" text-anchor="end" font-size="9" fill="#94a3b8">${r}열</text>`;
+    s += `<text x="${PAD_L-8}" y="${Y(r)+U/2+3.5}" text-anchor="end" font-size="9" fill="#94a3b8">${r===16 ? "휠체어" : r+"열"}</text>`;
   // seats
   const sz = U - 3;
   for(const g of GRID){
@@ -297,7 +298,7 @@ function render(rec){
   } else {
     seat.className = "v"; seat.style.fontSize = "18px"; seat.textContent = "추후 개별 안내";
     loc.style.display = "block";
-    loc.textContent = rec.c ? "별도 좌석(후방 책상)이 준비됩니다. 현장 안내에 따라 주세요." : "좌석은 추후 개별 안내 예정입니다.";
+    loc.textContent = "좌석은 추후 개별 안내 예정입니다.";
     $("mapCard").style.display = "none";
   }
   $("formCard").style.display = "none";
