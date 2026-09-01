@@ -826,8 +826,9 @@ function renderAttendanceTable(date) {
 
   if (!students.length) {
     thead.innerHTML = '';
-    tbody.innerHTML = '<tr><td colspan="5" class="loading">등록된 교육생이 없습니다.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="loading">등록된 교육생이 없습니다.</td></tr>';
     document.getElementById('records-title').textContent = `${formatFullDate(date)} 출석 현황`;
+    document.getElementById('att-filter-bar').style.display = 'none';
     return;
   }
 
@@ -836,26 +837,29 @@ function renderAttendanceTable(date) {
   if (dailySessions === 2) {
     thead.innerHTML = `<tr>
       <th style="width:72px">교번</th><th>이름</th>
-      <th>오전 시각</th><th>오전 상태</th>
-      <th>오후 시각</th><th>오후 상태</th>
+      <th>오전 시각</th><th>오전 상태</th><th>오전 허가</th>
+      <th>오후 시각</th><th>오후 상태</th><th>오후 허가</th>
       <th style="width:56px">저장</th>
     </tr>`;
   } else {
     thead.innerHTML = `<tr>
       <th style="width:72px">교번</th><th>이름</th>
-      <th>출석 시각</th><th>상태</th>
+      <th>출석 시각</th><th>상태</th><th>허가</th>
       <th style="width:56px">저장</th>
     </tr>`;
   }
 
   const statusOpts = [
-    ['present', '출석'], ['late', '지각'], ['leave', '조퇴'], ['absent', '미출석']
+    ['absent', '미출석'], ['present', '출석'], ['late', '지각'], ['leave', '조퇴'], ['outing', '외출']
+  ];
+  const permitOpts = [
+    ['', '—'], ['approved', '허가'], ['unapproved', '미허가']
   ];
 
   tbody.innerHTML = students.map(stu => {
     const cells = sessions.map(sess => {
       const rec = attendanceIndex.get(`${stu.empNo}_${date}_${sess}`);
-      let timeVal = '', statusVal = 'absent';
+      let timeVal = '', statusVal = 'absent', permitVal = '';
       if (rec) {
         if (rec.manual) {
           timeVal = rec.manualTime || '';
@@ -864,14 +868,19 @@ function renderAttendanceTable(date) {
           timeVal = rec.checkedAt ? formatTime(rec.checkedAt) : '';
           statusVal = rec.status || 'present';
         }
+        permitVal = rec.permit || '';
       }
       const key = `${stu.empNo}_${date}_${sess}`;
       const opts = statusOpts.map(([v, l]) =>
         `<option value="${v}"${statusVal === v ? ' selected' : ''}>${l}</option>`
       ).join('');
+      const popts = permitOpts.map(([v, l]) =>
+        `<option value="${v}"${permitVal === v ? ' selected' : ''}>${l}</option>`
+      ).join('');
       return `
         <td><input type="time" id="time_${key}" value="${timeVal}" class="edit-time" onchange="markRowChanged('${stu.empNo}')"></td>
-        <td><select id="status_${key}" class="edit-status" onchange="markRowChanged('${stu.empNo}')">${opts}</select></td>`;
+        <td><select id="status_${key}" class="edit-status" onchange="markRowChanged('${stu.empNo}')">${opts}</select></td>
+        <td><select id="permit_${key}" class="edit-status edit-permit" onchange="markRowChanged('${stu.empNo}')">${popts}</select></td>`;
     }).join('');
 
     return `<tr id="row_${stu.empNo}" data-empno="${escapeHtml(String(stu.empNo))}" data-name="${escapeHtml(stu.name)}" data-date="${date}">
@@ -883,7 +892,76 @@ function renderAttendanceTable(date) {
   }).join('');
 
   document.getElementById('records-title').textContent = `${formatFullDate(date)} 출석 현황 (${students.length}명)`;
+
+  // 필터/검색 바 (필터 상태는 날짜 탭 전환에도 유지)
+  document.getElementById('att-filter-bar').style.display = 'flex';
+  document.getElementById('att-search').value = attSearchQuery;
+  applyAttFilter();
 }
+
+// ── 출석 현황 필터/검색 ──────────────────────────
+let attStatusFilter = 'all';
+let attSearchQuery = '';
+const ATT_FILTER_CHIPS = [
+  ['all', '전체'], ['absent', '미출석'], ['present', '출석'],
+  ['late', '지각'], ['leave', '조퇴'], ['outing', '외출']
+];
+
+function attRows() {
+  return [...document.querySelectorAll('#att-tbody tr[data-empno]')];
+}
+function rowStatuses(row) {
+  return [...row.querySelectorAll('select.edit-status:not(.edit-permit)')].map(s => s.value);
+}
+
+function updateAttChips() {
+  const rows = attRows();
+  const counts = { all: rows.length, absent: 0, present: 0, late: 0, leave: 0, outing: 0 };
+  rows.forEach(row => {
+    const sts = new Set(rowStatuses(row));
+    for (const k of ['absent', 'present', 'late', 'leave', 'outing'])
+      if (sts.has(k)) counts[k]++;
+    row.classList.toggle('absent-row', rowStatuses(row).every(s => s === 'absent'));
+  });
+  document.getElementById('att-status-chips').innerHTML = ATT_FILTER_CHIPS.map(([k, l]) =>
+    `<button class="filter-chip${k === attStatusFilter ? ' active' : ''}${k === 'absent' ? ' danger' : ''}"
+      onclick="setAttStatusFilter('${k}')">${l} <b>${counts[k]}</b></button>`
+  ).join('');
+}
+
+window.setAttStatusFilter = function(f) {
+  attStatusFilter = f;
+  applyAttFilter();
+};
+
+window.onAttSearchInput = function(v) {
+  attSearchQuery = v.trim();
+  applyAttFilter();
+};
+
+window.applyAttFilter = function() {
+  updateAttChips();
+  const q = attSearchQuery;
+  let visible = 0;
+  attRows().forEach(row => {
+    const matchQ = !q || String(row.dataset.empno).includes(q) || row.dataset.name.includes(q);
+    const matchS = attStatusFilter === 'all' || rowStatuses(row).includes(attStatusFilter);
+    const show = matchQ && matchS;
+    row.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+  const info = document.getElementById('att-filter-info');
+  const total = attRows().length;
+  info.textContent = visible === total ? `${total}명` : `${visible}명 표시 / 전체 ${total}명`;
+};
+
+// 요약 카드 "미출석" 클릭 → 미출석 필터로 바로 이동
+window.jumpToAbsent = function() {
+  if (!currentDateTab) return;
+  attStatusFilter = 'absent';
+  applyAttFilter();
+  document.getElementById('records-card')?.scrollIntoView({ behavior: 'smooth' });
+};
 
 window.markRowChanged = function(empNo) {
   document.getElementById(`row_${empNo}`)?.classList.add('row-changed');
@@ -892,6 +970,8 @@ window.markRowChanged = function(empNo) {
     btn.textContent = '저장*';
     Object.assign(btn.style, { background: '#f59e0b', color: '#fff', borderColor: '#f59e0b' });
   }
+  // 상태 변경 시 칩 카운트만 갱신 (편집 중인 행이 필터로 숨지 않도록 표시는 유지)
+  updateAttChips();
 };
 
 window.saveStudentManual = async function(btnEl) {
@@ -910,14 +990,15 @@ window.saveStudentManual = async function(btnEl) {
       const key = `${empNo}_${date}_${sess}`;
       const manualTime = document.getElementById(`time_${key}`)?.value || '';
       const status = document.getElementById(`status_${key}`)?.value || 'absent';
+      const permit = document.getElementById(`permit_${key}`)?.value || '';
       const docId = `manual_${empNo}_${date}_${sess}`;
 
       await setDoc(doc(db, 'courses', currentCourseId, 'attendance', docId), {
-        empNo, name, date, session: sess, status, manualTime,
+        empNo, name, date, session: sess, status, manualTime, permit,
         manual: true, courseId: currentCourseId, updatedAt: serverTimestamp()
       });
 
-      const newRec = { empNo, name, date, session: sess, status, manualTime, manual: true, courseId: currentCourseId, _id: docId };
+      const newRec = { empNo, name, date, session: sess, status, manualTime, permit, manual: true, courseId: currentCourseId, _id: docId };
       const idx = allAttendance.findIndex(a => a._id === docId);
       if (idx >= 0) allAttendance[idx] = newRec;
       else allAttendance.push(newRec);

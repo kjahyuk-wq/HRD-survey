@@ -63,6 +63,32 @@
     .absent-row td { color: #dc2626; }
     .absent-row td:first-child { font-weight: 600; }
     tr.row-changed td { background: #fffbeb !important; }
+    .edit-permit { min-width: 64px; }
+
+    /* 필터/검색 바 */
+    .att-filter-bar {
+      display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
+      padding: 0.6rem 0.7rem; margin-bottom: 0.7rem;
+      background: #f8faff; border: 1px solid #e2e8f0; border-radius: 10px;
+    }
+    .att-filter-bar input[type="search"] {
+      padding: 0.42rem 0.7rem; border: 1.5px solid #cbd5e1; border-radius: 8px;
+      font-size: 0.85rem; width: 150px;
+    }
+    .att-filter-bar input[type="search"]:focus { outline: none; border-color: var(--dj-blue); }
+    .filter-chips { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+    .filter-chip {
+      padding: 0.32rem 0.7rem; border: 1.5px solid #cbd5e1; border-radius: 16px;
+      font-size: 0.8rem; cursor: pointer; background: #fff; color: #64748b;
+      white-space: nowrap; transition: all 0.15s;
+    }
+    .filter-chip b { font-weight: 700; }
+    .filter-chip:hover:not(.active) { background: #f1f5f9; border-color: #94a3b8; }
+    .filter-chip.active { background: var(--dj-blue); color: #fff; border-color: var(--dj-blue); }
+    .filter-chip.danger b { color: #dc2626; }
+    .filter-chip.danger.active { background: #dc2626; border-color: #dc2626; color: #fff; }
+    .filter-chip.danger.active b { color: #fff; }
+    .filter-info { font-size: 0.78rem; color: #64748b; margin-left: auto; white-space: nowrap; }
 
     /* 엑셀 드롭존 */
     .dropzone {
@@ -159,7 +185,7 @@
         <div class="rate-summary" id="rate-summary" style="display:none;">
           <div class="rate-card"><div class="num" id="rate-total">0</div><div class="label">전체 교육생</div></div>
           <div class="rate-card"><div class="num" id="rate-present">0</div><div class="label">출석</div></div>
-          <div class="rate-card highlight"><div class="num" id="rate-absent">0</div><div class="label">미출석</div></div>
+          <div class="rate-card highlight" onclick="jumpToAbsent()" style="cursor:pointer;" title="클릭하면 미출석 명단만 표시합니다"><div class="num" id="rate-absent">0</div><div class="label">미출석 ▼</div></div>
           <div class="rate-card"><div class="num" id="rate-pct">0%</div><div class="label">출석률</div></div>
         </div>
 
@@ -171,6 +197,11 @@
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.8rem;">
             <span id="records-title" style="font-size:0.9rem;font-weight:600;color:#334155;"></span>
             <button class="btn btn-secondary btn-sm" onclick="exportExcel()">엑셀 다운로드</button>
+          </div>
+          <div class="att-filter-bar" id="att-filter-bar" style="display:none;">
+            <input type="search" id="att-search" placeholder="이름·교번 검색" oninput="onAttSearchInput(this.value)">
+            <div class="filter-chips" id="att-status-chips"></div>
+            <span class="filter-info" id="att-filter-info"></span>
           </div>
           <div class="att-table-wrap">
             <table class="att-table" id="att-table">

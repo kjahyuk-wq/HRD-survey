@@ -196,6 +196,12 @@ function collapseDayStatus(sessRecords, sessionCount) {
   const lateRec = recs.find(r => r.status === 'late');
   if (lateRec) return { status: 'late', timeStr: recTime(lateRec) };
 
+  const outRec = recs.find(r => r.status === 'outing');
+  if (outRec) {
+    const arr = recs.find(r => (r.status || 'present') === 'present') || outRec;
+    return { status: 'outing', timeStr: recTime(arr) };
+  }
+
   const allPresent =
     recs.length === sessionCount &&
     recs.every(r => (r.status || 'present') === 'present');
@@ -212,7 +218,7 @@ function aggregateStudent(stu, dates, sessionKeys, attendanceIndex) {
     );
     return { date: d, ...collapseDayStatus(sessRecs, sessionKeys.length) };
   });
-  const c = { present: 0, late: 0, leave: 0, absent: 0 };
+  const c = { present: 0, late: 0, leave: 0, absent: 0, outing: 0 };
   days.forEach(d => { c[d.status] = (c[d.status] || 0) + 1; });
   return { days, counts: c };
 }
@@ -222,6 +228,7 @@ function buildRemark(c) {
   if (c.absent) parts.push(`결석 ${c.absent}회`);
   if (c.leave)  parts.push(`조퇴 ${c.leave}회`);
   if (c.late)   parts.push(`지각 ${c.late}회`);
+  if (c.outing) parts.push(`외출 ${c.outing}회`);
   return parts.join(', ');
 }
 
@@ -340,7 +347,7 @@ function buildSummarySheet(ctx) {
     const base = odd ? S.cellOdd : S.cellEven;
     const baseLeft = odd ? S.cellLeftOdd : S.cellLeftEven;
     const c = stu._counts;
-    const attended = c.present + c.late + c.leave;
+    const attended = c.present + c.late + c.leave + c.outing;
     const rate = totalDays > 0 ? attended / totalDays : 0;
     const isFull = rate >= 1 - 1e-9;
     const rateStyle = isFull
@@ -350,7 +357,7 @@ function buildSummarySheet(ctx) {
     setCell(ws, ref(r, 0), idx + 1, base, 'n');
     setCell(ws, ref(r, 1), stu.name || '', baseLeft);
     setCell(ws, ref(r, 2), totalDays, base, 'n');
-    setCell(ws, ref(r, 3), c.present, base, 'n');
+    setCell(ws, ref(r, 3), c.present + c.outing, base, 'n');  // 외출은 출석으로 집계 (비고에 횟수 표기)
     setCell(ws, ref(r, 4), c.late, c.late > 0 ? S.statusLate : base, 'n');
     setCell(ws, ref(r, 5), c.leave, c.leave > 0 ? S.statusLeave : base, 'n');
     setCell(ws, ref(r, 6), c.absent, c.absent > 0 ? S.statusAbsent : base, 'n');
@@ -512,6 +519,7 @@ function buildWeekSheet(ctx, weekIdx, weekDates) {
       let statusLabel = '출석';
       if (day.status === 'late')   { statusStyle = S.statusLate;   statusLabel = '지각'; attended++; }
       else if (day.status === 'leave') { statusStyle = S.statusLeave; statusLabel = '조퇴'; attended++; }
+      else if (day.status === 'outing') { statusStyle = S.statusLate; statusLabel = '외출'; attended++; }
       else if (day.status === 'absent') { statusStyle = S.statusAbsent; statusLabel = '결석'; }
       else { attended++; }
       setCell(ws, ref(r, cStatus), statusLabel, statusStyle);
