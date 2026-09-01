@@ -24,9 +24,10 @@ OUT_DIR = os.path.join(BASE, "seat-lookup")
 SALT = "djhrd-2026-2-newbie-v1"
 ITER = 200_000
 
-# 체육대회 조 매핑. {교번: "청팀"} 또는 분임→조 규칙이 정해지면 team_of()를 수정.
+# 체육대회 팀: 열정팀·화합팀·소통팀·미래팀 4팀으로 확정.
+# 분임→팀 배정 규칙이 나오면 team_of()를 수정해 반영.
 def team_of(row):
-    return None  # 아직 미정 → 페이지에 "추후 안내" 표시
+    return None  # 배정 규칙 미정 → 페이지에 "추후 안내" 표시
 
 
 def open_workbook(password):
@@ -105,11 +106,17 @@ def main():
     assert len(people) == len(grid), f"인원 {len(people)} ≠ 좌석 {len(grid)}"
     data = encrypt_records(people, wheel)
 
+    # 좌석번호(=교번) → 분임 매핑 (index 0은 미사용)
+    bunim_by_seat = [None] * (len(people) + 1)
+    for p in people:
+        bunim_by_seat[p["eid"]] = p["bunim"]
+
     with open(TEMPLATE, encoding="utf-8") as f:
         html = f.read()
     html = (html
             .replace("__DATA__", json.dumps(data, separators=(",", ":")))
             .replace("__GRID__", json.dumps(grid, separators=(",", ":")))
+            .replace("__BUNIM__", json.dumps(bunim_by_seat, separators=(",", ":")))
             .replace("__SALT__", SALT)
             .replace("__ITER__", str(ITER)))
 

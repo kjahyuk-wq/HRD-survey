@@ -82,6 +82,9 @@
   .map-card { margin-top: 14px; }
   .map-title { font-size: 14px; font-weight: 800; color: #475061; margin-bottom: 4px; }
   .map-hint { font-size: 12px; color: #8a93a5; margin-bottom: 10px; }
+  .map-hint .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
+  .map-hint .dot.me { background: #2563eb; }
+  .map-hint .dot.team { background: #f6c445; }
   .map-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 12px; background: #f7f9fc; border: 1px solid #e6ebf2; }
   .map-scroll svg { display: block; min-width: 620px; width: 100%; height: auto; }
 
@@ -136,7 +139,7 @@
 
     <div class="card map-card" id="mapCard">
       <div class="map-title">대강당 1층 좌석 배치도</div>
-      <div class="map-hint">파란색으로 표시된 자리가 본인 좌석입니다. 좌우로 밀어서 볼 수 있어요.</div>
+      <div class="map-hint"><span class="dot me"></span>내 좌석 &nbsp;<span class="dot team"></span>우리 분임 좌석 · 좌우로 밀어서 볼 수 있어요</div>
       <div class="map-scroll" id="mapScroll"></div>
     </div>
 
@@ -152,6 +155,7 @@
 <script>
 const DATA = __DATA__;
 const GRID = __GRID__;   // [seatNo, row(1-16), col(excel col index)] — 16열은 휠체어석
+const BUNIM = __BUNIM__; // index = 좌석번호(=교번) → 분임 번호
 const SALT = "__SALT__";
 const ITER = __ITER__;
 
@@ -197,7 +201,7 @@ function locationText(seatNo){
 }
 
 /* ── SVG map ── */
-function renderMap(seatNo){
+function renderMap(seatNo, myBunim){
   const U = 15, PAD_L = 34, PAD_T = 46, PAD_B = 14, PAD_R = 12;
   const minC = 5, maxC = 58, maxR = 16;
   const W = PAD_L + (maxC - minC + 1) * U + PAD_R;
@@ -226,6 +230,8 @@ function renderMap(seatNo){
     if(me && n === seatNo){
       s += `<circle class="pulse-ring" cx="${x+sz/2}" cy="${y+sz/2}" r="${sz}" fill="none" stroke="#2563eb"/>`;
       s += `<rect x="${x-1.5}" y="${y-1.5}" width="${sz+3}" height="${sz+3}" rx="3.5" fill="#2563eb"/>`;
+    } else if(myBunim && BUNIM[n] === myBunim){
+      s += `<rect x="${x}" y="${y}" width="${sz}" height="${sz}" rx="2.5" fill="#f6c445"/>`;
     } else {
       s += `<rect x="${x}" y="${y}" width="${sz}" height="${sz}" rx="2.5" fill="#cdd6e4"/>`;
     }
@@ -284,7 +290,7 @@ async function go(){
 
 function render(rec){
   $("rName").textContent = rec.n + " 님";
-  $("rId").innerHTML = `${rec.e}<small>번</small>`;
+  $("rId").innerHTML = `${rec.e}번`;
   $("rBunim").innerHTML = `제${rec.b}분임`;
   const t = $("rTeam");
   if(rec.t){ t.className = "v"; t.innerHTML = `${rec.t}`; }
@@ -294,7 +300,7 @@ function render(rec){
     seat.className = "v"; seat.style.fontSize = ""; seat.textContent = rec.s + "번";
     loc.style.display = "block"; loc.textContent = locationText(rec.s);
     $("mapCard").style.display = "block";
-    renderMap(rec.s);
+    renderMap(rec.s, rec.b);
   } else {
     seat.className = "v"; seat.style.fontSize = "18px"; seat.textContent = "추후 개별 안내";
     loc.style.display = "block";
