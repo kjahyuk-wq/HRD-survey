@@ -16,6 +16,11 @@
       "**/*.py",
       "docs/**"
     ],
+    "redirects": [
+      { "source": "/att", "destination": "/attendance/admin-attendance.html", "type": 302 },
+      { "source": "/scan", "destination": "/attendance/scan.html", "type": 302 },
+      { "source": "/qr", "destination": "/attendance/checkin.html", "type": 302 }
+    ],
     "headers": [
       {
         "source": "**",

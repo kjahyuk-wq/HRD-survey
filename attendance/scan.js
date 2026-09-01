@@ -82,7 +82,10 @@ function initScanner() {
 
 // ── 상태 ──────────────────────────────
 const LATE_GRACE_MIN = 15;   // 세션 시작 + 15분까지는 정상 출석, 초과 시 지각
-const PROCESS_LOCK_MS = 1500; // 결과 표시 후 다음 스캔 허용까지 (success/warning 공통)
+const PROCESS_LOCK_MS = 1500; // 오류/경고 표시 후 다음 스캔 허용까지
+const SUCCESS_LOCK_MS = 700;  // 성공 시엔 짧게 — 연속 스캔 처리량 우선
+// 이 세션에서 이미 처리한 토큰 (옵티미스틱 저장 중 중복 스캔 방지 + 재스캔 즉시 피드백)
+const usedTokenIds = new Set();
 const PROCESS_WATCHDOG_MS = 10000; // Firestore hang 등 비정상 상황 안전 해제
 let isProcessing = false;
 let processWatchdog = null;
@@ -276,6 +279,13 @@ async function onScanSuccess(rawText) {
     return;
   }
 
+  // 같은 세션에서 이미 처리한 QR — Firestore 조회 없이 즉시 응답
+  if (usedTokenIds.has(tokenId)) {
+    showResult('warning', '⚠️', '이미 출석 처리된 교육생입니다', `교번: ${empNo}`);
+    unlockProcessing(PROCESS_LOCK_MS);
+    return;
+  }
+
   // 카메라 인식 직후 즉시 "처리 중..." 표시 — Firestore RTT 동안 무반응처럼 보이는 문제 회피
   showResult('processing', '⏳', '처리 중...', '잠시만 기다려 주세요');
 
@@ -304,6 +314,7 @@ async function onScanSuccess(rawText) {
 
     // 이미 처리됨 확인
     if (token.used) {
+      usedTokenIds.add(tokenId);
       showResult('warning', '⚠️', '이미 출석 처리된 교육생입니다', `${token.name}님 (교번: ${token.empNo})`);
       unlockProcessing(PROCESS_LOCK_MS);
       return;
@@ -329,8 +340,15 @@ async function onScanSuccess(rawText) {
     const nowMin = nowDate.getHours() * 60 + nowDate.getMinutes();
     const status = nowMin > cutoffMin ? 'late' : 'present';
 
-    // 토큰 used 마킹 + 출석 기록 저장을 병렬화 (사내망 RTT 1회 단축)
-    await Promise.all([
+    // 옵티미스틱 처리: 검증이 끝났으므로 성공을 즉시 표시하고 저장은 백그라운드로.
+    // (체감 속도 = Firestore 왕복 2회 → 1회. 저장 실패 시 아래 catch 에서 오류로 전환)
+    usedTokenIds.add(tokenId);
+    const sessionLabel = { single: '', morning: ' (오전)', afternoon: ' (오후)' }[session] || '';
+    const statusBadge = status === 'late' ? ' · 지각' : '';
+    showResult('success', '✅', `${name}님 출석 완료${sessionLabel}${statusBadge}`, `교번: ${empNo} | ${courseName}`);
+    unlockProcessing(SUCCESS_LOCK_MS);
+
+    Promise.all([
       updateDoc(tokenRef, { used: true, usedAt: serverTimestamp() }),
       addDoc(collection(db, 'courses', courseId, 'attendance'), {
         studentId: studentId || null,
@@ -338,13 +356,13 @@ async function onScanSuccess(rawText) {
         checkedAt: serverTimestamp(),
         tokenId
       })
-    ]);
-
-    const sessionLabel = { single: '', morning: ' (오전)', afternoon: ' (오후)' }[session] || '';
-    const statusBadge = status === 'late' ? ' · 지각' : '';
-    showResult('success', '✅', `${name}님 출석 완료${sessionLabel}${statusBadge}`, `교번: ${empNo} | ${courseName}`);
-
-    unlockProcessing(PROCESS_LOCK_MS);
+    ]).catch(e => {
+      // 저장 실패 — 낙관 표시를 되돌리고 재스캔 유도
+      usedTokenIds.delete(tokenId);
+      console.error('출석 저장 실패:', e);
+      showResult('error', '❌', `${name}님 저장 실패 — 다시 스캔해 주세요`, String(e?.message || e));
+      unlockProcessing(PROCESS_LOCK_MS);
+    });
 
   } catch (e) {
     console.error('처리 오류:', e);
