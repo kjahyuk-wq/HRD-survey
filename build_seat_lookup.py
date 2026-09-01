@@ -17,17 +17,20 @@ import openpyxl
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 BASE = os.path.dirname(os.path.abspath(__file__))
-ROSTER_XLSX = os.path.join(BASE, "2026년_제2기_신규자과정_분임편성_및_교육생명단(좌석배려 반영).xlsx")
+ROSTER_XLSX = os.path.join(BASE, "★2026년_제2기_신규자과정_분임편성_및_교육생명단(좌석배려 반영).xlsx")
 TEMPLATE = os.path.join(BASE, "seat-lookup.template.html")
 OUT_DIR = os.path.join(BASE, "seat-lookup")
 
 SALT = "djhrd-2026-2-newbie-v1"
 ITER = 200_000
 
-# 체육대회 팀: 열정팀·화합팀·소통팀·미래팀 4팀으로 확정.
-# 분임→팀 배정 규칙이 나오면 team_of()를 수정해 반영.
+# 체육대회 팀: 명단 엑셀 '체육대회 조' 열(15열) 값 사용 — 열정·화합·소통·미래 4팀.
+# (2026-09-02 기준 1~9분임 열정, 10~18 화합, 19~27 소통, 28~37 미래)
 def team_of(row):
-    return None  # 배정 규칙 미정 → 페이지에 "추후 안내" 표시
+    t = (row.get("team") or "").strip()
+    if not t:
+        return None  # 미배정 → 페이지에 "추후 안내" 표시
+    return t if t.endswith("팀") else f"{t}팀"
 
 
 def open_workbook(password):
@@ -56,6 +59,7 @@ def load_roster(wb):
             "name": str(ws.cell(r, 5).value).strip(),
             "phone": str(ws.cell(r, 9).value).strip(),
             "bunim": int(ws.cell(r, 14).value),  # 분임(집계용)
+            "team": ws.cell(r, 15).value,         # 체육대회 조
         })
     people.sort(key=lambda p: p["eid"])
     return people
