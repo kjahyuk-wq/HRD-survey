@@ -90,7 +90,9 @@
     .filter-chip.danger.active { background: #dc2626; border-color: #dc2626; color: #fff; }
     .filter-chip.danger.active b { color: #fff; }
     .filter-info { font-size: 0.78rem; color: #64748b; margin-left: auto; white-space: nowrap; }
-    .records-tools-bar { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .records-tools { padding: 0.6rem 1rem; }
+    .records-tools-bar { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+    .records-tools-title { font-size: 0.85rem; font-weight: 700; color: #475569; margin-right: 0.3rem; }
 
     /* 엑셀 드롭존 */
     .dropzone {
@@ -184,6 +186,17 @@
       <div id="records-placeholder" class="no-data">교육과정 목록에서 "출석 현황" 버튼을 눌러 진입해 주세요.</div>
 
       <div id="records-area" style="display:none;">
+        <!-- 과정 관리 (출석 설정 / 학생 명단) — 표 위에 배치, 패널은 접힘 -->
+        <div class="section-card records-tools" id="records-tools" style="display:none;">
+          <div class="records-tools-bar">
+            <span class="records-tools-title">과정 관리</span>
+            <button class="panel-toggle-btn edit-toggle" id="config-toggle-rec" onclick="toggleRecordsPanel('config')">출석 설정</button>
+            <button class="panel-toggle-btn stu-toggle" id="students-toggle-rec" onclick="toggleRecordsPanel('students')">학생 명단</button>
+          </div>
+          <div class="att-panel" id="config-panel-rec" style="display:none;"></div>
+          <div class="att-panel" id="students-panel-rec" style="display:none;"></div>
+        </div>
+
         <div class="rate-summary" id="rate-summary" style="display:none;">
           <div class="rate-card"><div class="num" id="rate-total">0</div><div class="label">전체 교육생</div></div>
           <div class="rate-card"><div class="num" id="rate-present">0</div><div class="label">출석</div></div>
@@ -215,16 +228,6 @@
           </div>
         </div>
 
-        <!-- 출석 현황 아래: 출석 설정 / 학생 명단 (신규자 과정 전용 운영 흐름) -->
-        <div class="section-card" id="records-tools" style="display:none;">
-          <div class="section-title" style="margin-bottom:0.6rem;">과정 관리</div>
-          <div class="records-tools-bar">
-            <button class="panel-toggle-btn edit-toggle" id="config-toggle-rec" onclick="toggleRecordsPanel('config')">출석 설정</button>
-            <button class="panel-toggle-btn stu-toggle" id="students-toggle-rec" onclick="toggleRecordsPanel('students')">학생 명단</button>
-          </div>
-          <div class="att-panel" id="config-panel-rec" style="display:none;"></div>
-          <div class="att-panel" id="students-panel-rec" style="display:none;"></div>
-        </div>
       </div>
     </div>
 
