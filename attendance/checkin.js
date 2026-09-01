@@ -18,7 +18,7 @@ const loginByEmpNo = httpsCallable(functions, 'loginByEmpNo');
 // ── 상태 ──────────────────────────────
 let currentUser = null;   // { name, empNo, courseId, courseName, config }
 let countdownTimer = null;
-const QR_TTL_SEC = 300;   // 5분
+const QR_TTL_SEC = 600;   // 10분
 
 // ── 초기화 ──────────────────────────────
 const today = toDateStr(new Date());
@@ -419,7 +419,7 @@ async function issueNewQr(name, empNo, courseId, courseName, session, cacheKey, 
 }
 
 window.reissueQr = async function() {
-  // 옵티미스틱 QR 이 5분 만료 후 백그라운드 검증이 끝나기 전에 버튼이 눌리는 드문 케이스를 위한 fallback.
+  // 옵티미스틱 QR 이 10분 만료 후 백그라운드 검증이 끝나기 전에 버튼이 눌리는 드문 케이스를 위한 fallback.
   // 정상 흐름에서는 proceedWithCourse 가 이미 currentUser 를 채운 상태.
   let cu = currentUser;
   if (!cu) {
