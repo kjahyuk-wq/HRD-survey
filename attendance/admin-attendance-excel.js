@@ -190,16 +190,16 @@ function collapseDayStatus(sessRecords, sessionCount) {
   if (leaveRec) {
     const arr = recs.find(r => (r.status || 'present') !== 'absent' && (r.status || 'present') !== 'leave');
     const arrTime = recTime(arr || leaveRec);
-    return { status: 'leave', timeStr: arrTime ? `${arrTime}→` : '' };
+    return { status: 'leave', timeStr: arrTime ? `${arrTime}→` : '', permit: leaveRec.permit || '' };
   }
 
   const lateRec = recs.find(r => r.status === 'late');
-  if (lateRec) return { status: 'late', timeStr: recTime(lateRec) };
+  if (lateRec) return { status: 'late', timeStr: recTime(lateRec), permit: lateRec.permit || '' };
 
   const outRec = recs.find(r => r.status === 'outing');
   if (outRec) {
     const arr = recs.find(r => (r.status || 'present') === 'present') || outRec;
-    return { status: 'outing', timeStr: recTime(arr) };
+    return { status: 'outing', timeStr: recTime(arr), permit: outRec.permit || '' };
   }
 
   const allPresent =
@@ -223,12 +223,23 @@ function aggregateStudent(stu, dates, sessionKeys, attendanceIndex) {
   return { days, counts: c };
 }
 
-function buildRemark(c) {
+// 해당 상태의 허가/미허가 횟수 표기 — 감점 산정에 필요
+function permitSuffix(days, status) {
+  const sel = (days || []).filter(d => d.status === status);
+  const a = sel.filter(d => d.permit === 'approved').length;
+  const u = sel.filter(d => d.permit === 'unapproved').length;
+  const parts = [];
+  if (a) parts.push(`허가 ${a}`);
+  if (u) parts.push(`미허가 ${u}`);
+  return parts.length ? `(${parts.join('·')})` : '';
+}
+
+function buildRemark(c, days) {
   const parts = [];
   if (c.absent) parts.push(`결석 ${c.absent}회`);
-  if (c.leave)  parts.push(`조퇴 ${c.leave}회`);
-  if (c.late)   parts.push(`지각 ${c.late}회`);
-  if (c.outing) parts.push(`외출 ${c.outing}회`);
+  if (c.leave)  parts.push(`조퇴 ${c.leave}회${permitSuffix(days, 'leave')}`);
+  if (c.late)   parts.push(`지각 ${c.late}회${permitSuffix(days, 'late')}`);
+  if (c.outing) parts.push(`외출 ${c.outing}회${permitSuffix(days, 'outing')}`);
   return parts.join(', ');
 }
 
@@ -362,7 +373,7 @@ function buildSummarySheet(ctx) {
     setCell(ws, ref(r, 5), c.leave, c.leave > 0 ? S.statusLeave : base, 'n');
     setCell(ws, ref(r, 6), c.absent, c.absent > 0 ? S.statusAbsent : base, 'n');
     setCell(ws, ref(r, 7), rate, rateStyle, 'n');
-    setCell(ws, ref(r, 8), buildRemark(c), baseLeft);
+    setCell(ws, ref(r, 8), buildRemark(c, stu._days), baseLeft);
   });
 
   // Signature lines (요약 시트만)
@@ -378,7 +389,7 @@ function buildSummarySheet(ctx) {
   merges.push({ s: { r: R_APPROVER, c: 0 }, e: { r: R_APPROVER, c: COLS - 1 } });
 
   ws['!ref'] = `A1:${ref(rows.length - 1, COLS - 1)}`;
-  ws['!cols'] = [6, 12, 9, 8, 8, 8, 8, 10, 14].map(w => ({ wch: w }));
+  ws['!cols'] = [6, 12, 9, 8, 8, 8, 8, 10, 26].map(w => ({ wch: w }));
   ws['!rows'] = rows;
   ws['!merges'] = merges;
   ws['!margins'] = { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.3, footer: 0.3 };
@@ -517,9 +528,10 @@ function buildWeekSheet(ctx, weekIdx, weekDates) {
       const day = days[i];
       let statusStyle = base;
       let statusLabel = '출석';
-      if (day.status === 'late')   { statusStyle = S.statusLate;   statusLabel = '지각'; attended++; }
-      else if (day.status === 'leave') { statusStyle = S.statusLeave; statusLabel = '조퇴'; attended++; }
-      else if (day.status === 'outing') { statusStyle = S.statusLate; statusLabel = '외출'; attended++; }
+      const pf = day.permit === 'approved' ? '(허가)' : day.permit === 'unapproved' ? '(미허가)' : '';
+      if (day.status === 'late')   { statusStyle = S.statusLate;   statusLabel = '지각' + pf; attended++; }
+      else if (day.status === 'leave') { statusStyle = S.statusLeave; statusLabel = '조퇴' + pf; attended++; }
+      else if (day.status === 'outing') { statusStyle = S.statusLate; statusLabel = '외출' + pf; attended++; }
       else if (day.status === 'absent') { statusStyle = S.statusAbsent; statusLabel = '결석'; }
       else { attended++; }
       setCell(ws, ref(r, cStatus), statusLabel, statusStyle);
@@ -534,9 +546,9 @@ function buildWeekSheet(ctx, weekIdx, weekDates) {
   });
 
   ws['!ref'] = `A1:${ref(rows.length - 1, COLS - 1)}`;
-  // 컬럼 너비: 교번 5.5, 이름 11, [상태 7.5, 시각 13]×N, 주간출석률 9.5
+  // 컬럼 너비: 교번 5.5, 이름 11, [상태 12(허가 표기 포함), 시각 13]×N, 주간출석률 9.5
   const cols = [{ wch: 5.5 }, { wch: 11 }];
-  for (let i = 0; i < N; i++) cols.push({ wch: 7.5 }, { wch: 13 });
+  for (let i = 0; i < N; i++) cols.push({ wch: 12 }, { wch: 13 });
   cols.push({ wch: 9.5 });
   ws['!cols'] = cols;
   ws['!rows'] = rows;

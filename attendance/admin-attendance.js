@@ -874,13 +874,16 @@ function renderAttendanceTable(date) {
       const opts = statusOpts.map(([v, l]) =>
         `<option value="${v}"${statusVal === v ? ' selected' : ''}>${l}</option>`
       ).join('');
+      // 허가/미허가는 지각·조퇴·외출에만 해당 (출석·미출석은 비활성)
+      const permitNA = statusVal === 'absent' || statusVal === 'present';
+      if (permitNA) permitVal = '';
       const popts = permitOpts.map(([v, l]) =>
         `<option value="${v}"${permitVal === v ? ' selected' : ''}>${l}</option>`
       ).join('');
       return `
         <td><input type="time" id="time_${key}" value="${timeVal}" class="edit-time" onchange="markRowChanged('${stu.empNo}')"></td>
-        <td><select id="status_${key}" class="edit-status" onchange="markRowChanged('${stu.empNo}')">${opts}</select></td>
-        <td><select id="permit_${key}" class="edit-status edit-permit" onchange="markRowChanged('${stu.empNo}')">${popts}</select></td>`;
+        <td><select id="status_${key}" class="edit-status" onchange="onAttStatusChange('${stu.empNo}','${key}')">${opts}</select></td>
+        <td><select id="permit_${key}" class="edit-status edit-permit"${permitNA ? ' disabled' : ''} onchange="markRowChanged('${stu.empNo}')">${popts}</select></td>`;
     }).join('');
 
     return `<tr id="row_${stu.empNo}" data-empno="${escapeHtml(String(stu.empNo))}" data-name="${escapeHtml(stu.name)}" data-date="${date}">
@@ -961,6 +964,18 @@ window.jumpToAbsent = function() {
   attStatusFilter = 'absent';
   applyAttFilter();
   document.getElementById('records-card')?.scrollIntoView({ behavior: 'smooth' });
+};
+
+// 상태 변경 시: 지각·조퇴·외출일 때만 허가 선택 활성화
+window.onAttStatusChange = function(empNo, key) {
+  const st = document.getElementById(`status_${key}`)?.value;
+  const p = document.getElementById(`permit_${key}`);
+  if (p) {
+    const na = st === 'absent' || st === 'present';
+    p.disabled = na;
+    if (na) p.value = '';
+  }
+  markRowChanged(empNo);
 };
 
 window.markRowChanged = function(empNo) {
