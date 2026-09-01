@@ -68,7 +68,12 @@ onAuthStateChanged(auth, user => {
   document.getElementById('login-screen').style.display = isAdmin ? 'none' : 'block';
   document.getElementById('dashboard').style.display = isAdmin ? 'block' : 'none';
   if (isAdmin) {
-    loadCourseList();
+    loadCourseList().then(courses => {
+      // 첫 로그인 시 진행중인 신규자 과정의 출석 현황을 바로 표시
+      if (autoEntered || !Array.isArray(courses)) return;
+      const target = courses.find(c => c.active && isNewbieCourse(c));
+      if (target) { autoEntered = true; enterRecords(target.id, target.name); }
+    });
   } else {
     const pwEl = document.getElementById('admin-pw');
     if (pwEl) pwEl.value = '';
@@ -89,7 +94,24 @@ window.backToCourses = function() {
 };
 
 // ── 교육과정 카드 리스트 ──────────────────────────────
+// 이 출결 관리는 신규자 과정 전용: 신규자 과정만 기본 표시, 나머지는 접어 둠 (기능은 유지)
+const NEWBIE_TYPES = ['rookie', 'newcomer'];
+function isNewbieCourse(c) {
+  return NEWBIE_TYPES.includes(c.type) || /신규자/.test(c.name || '');
+}
+let autoEntered = false;
 let closedCoursesExpanded = false;
+let otherCoursesExpanded = false;
+
+window.toggleOtherCourses = function() {
+  otherCoursesExpanded = !otherCoursesExpanded;
+  const list = document.getElementById('other-courses-list');
+  const arrow = document.getElementById('other-toggle-arrow');
+  const label = document.getElementById('other-toggle-label');
+  if (list) list.style.display = otherCoursesExpanded ? 'block' : 'none';
+  if (arrow) arrow.textContent = otherCoursesExpanded ? '▲' : '▼';
+  if (label) label.textContent = label.textContent.replace(/보기|숨기기/, otherCoursesExpanded ? '숨기기' : '보기');
+};
 
 window.toggleClosedCourses = function() {
   closedCoursesExpanded = !closedCoursesExpanded;
@@ -121,6 +143,7 @@ window.loadCourseList = async function() {
         active: data.active !== false,
         startDate: data.startDate || null,
         endDate: data.endDate || null,
+        type: data.type || '',
       };
     });
 
@@ -140,14 +163,33 @@ window.loadCourseList = async function() {
 
     if (!courses.length) {
       emptyEl.style.display = 'block';
-      return;
+      return [];
     }
 
     courses.forEach((c, idx) => { c.idx = idx; });
 
     const activeCourses = courses.filter(c => c.active);
     const closedCourses = courses.filter(c => !c.active);
-    let html = activeCourses.map(renderCourseCard).join('');
+    const newbieActive = activeCourses.filter(isNewbieCourse);
+    const otherActive = activeCourses.filter(c => !isNewbieCourse(c));
+    countEl.textContent = `신규자 ${newbieActive.length}개`;
+
+    let html = newbieActive.map(renderCourseCard).join('');
+    if (!newbieActive.length) {
+      html += '<div class="no-data">진행중인 신규자 과정이 없습니다.</div>';
+    }
+    if (otherActive.length > 0) {
+      const arrow = otherCoursesExpanded ? '▲' : '▼';
+      const label = otherCoursesExpanded ? '숨기기' : '보기';
+      html += `
+        <div class="closed-courses-toggle" id="other-courses-toggle" onclick="toggleOtherCourses()">
+          <span id="other-toggle-arrow">${arrow}</span>
+          <span id="other-toggle-label">신규자 외 진행중 과정 ${otherActive.length}개 ${label}</span>
+        </div>
+        <div id="other-courses-list" style="display:${otherCoursesExpanded ? 'block' : 'none'};">
+          ${otherActive.map(renderCourseCard).join('')}
+        </div>`;
+    }
     if (closedCourses.length > 0) {
       const arrow = closedCoursesExpanded ? '▲' : '▼';
       const label = closedCoursesExpanded ? '숨기기' : '보기';
@@ -177,8 +219,10 @@ window.loadCourseList = async function() {
         if (metaEl) metaEl.textContent = '요약 불러오기 실패';
       }
     });
+    return courses;
   } catch (e) {
     loading.textContent = '불러오기 실패: ' + e.message;
+    return [];
   }
 };
 
@@ -309,6 +353,38 @@ window.togglePanel = async function(courseId, idx, mode, courseName) {
     initDropzone();
     await loadAttendanceStudents();
   }
+};
+
+// ── 출석 현황 화면 하단의 출석 설정 / 학생 명단 패널 ──────────
+// togglePanel 과 달리 현재 과정 컨텍스트(출석 기록·날짜 탭)를 초기화하지 않는다.
+window.toggleRecordsPanel = async function(mode) {
+  const other = mode === 'config' ? 'students' : 'config';
+  const panel = document.getElementById(`${mode}-panel-rec`);
+  const btn = document.getElementById(`${mode}-toggle-rec`);
+  if (!panel || !currentCourseId) return;
+
+  if (panel.style.display !== 'none' && panel.innerHTML) {
+    panel.style.display = 'none'; panel.innerHTML = '';
+    btn?.classList.remove('active');
+    return;
+  }
+  const otherPanel = document.getElementById(`${other}-panel-rec`);
+  if (otherPanel) { otherPanel.style.display = 'none'; otherPanel.innerHTML = ''; }
+  document.getElementById(`${other}-toggle-rec`)?.classList.remove('active');
+
+  if (mode === 'config') {
+    panel.innerHTML = renderConfigPanelHtml();
+    panel.style.display = 'block';
+    btn?.classList.add('active');
+    await loadConfig();
+  } else {
+    panel.innerHTML = renderStudentsPanelHtml();
+    panel.style.display = 'block';
+    btn?.classList.add('active');
+    initDropzone();
+    await loadAttendanceStudents();
+  }
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 };
 
 // ── 출석 설정 패널 HTML ──────────────────────────────
@@ -503,6 +579,17 @@ window.enterRecords = async function(courseId, courseName) {
   document.getElementById('records-area').style.display = 'block';
 
   switchMainTab('records');
+
+  // 하단 출석 설정 / 학생 명단 패널 초기화
+  const tools = document.getElementById('records-tools');
+  if (tools) {
+    tools.style.display = 'block';
+    ['config', 'students'].forEach(m => {
+      const p = document.getElementById(`${m}-panel-rec`);
+      if (p) { p.style.display = 'none'; p.innerHTML = ''; }
+      document.getElementById(`${m}-toggle-rec`)?.classList.remove('active');
+    });
+  }
 
   // 출석 설정 + 학생 + 출석 현황 모두 로드
   allAttendance = [];
@@ -726,6 +813,10 @@ window.saveConfig = async function() {
   try {
     await setDoc(doc(db, 'courses', currentCourseId, 'attendanceConfig', 'config'), config);
     currentConfig = config;
+    if (document.getElementById('main-tab-records')?.style.display !== 'none') {
+      renderDateTabBar();   // 수업일·세션 변경을 출석 현황에 즉시 반영
+      updateSummary();
+    }
     status.style.display = 'block';
     status.style.color = '#16a34a';
     status.textContent = '✅ 설정이 저장되었습니다.';
@@ -1135,6 +1226,17 @@ const registerOne = httpsCallable(functions, 'registerAttendanceStudent');
 const registerMany = httpsCallable(functions, 'registerAttendanceStudents');
 
 window.loadAttendanceStudents = async function() {
+  await loadAttendanceStudentsPanel();
+  // 출석 현황 화면에서 명단이 바뀌면 표·요약도 함께 갱신
+  if (currentCourseId && document.getElementById('att-stu-tbody')
+      && document.getElementById('main-tab-records')?.style.display !== 'none') {
+    await loadStudents();
+    if (currentDateTab) renderAttendanceTable(currentDateTab);
+    updateSummary();
+  }
+};
+
+async function loadAttendanceStudentsPanel() {
   const tbody = document.getElementById('att-stu-tbody');
   const cnt = document.getElementById('att-stu-count');
   if (!tbody) return;

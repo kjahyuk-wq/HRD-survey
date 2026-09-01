@@ -90,6 +90,7 @@
     .filter-chip.danger.active { background: #dc2626; border-color: #dc2626; color: #fff; }
     .filter-chip.danger.active b { color: #fff; }
     .filter-info { font-size: 0.78rem; color: #64748b; margin-left: auto; white-space: nowrap; }
+    .records-tools-bar { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 
     /* 엑셀 드롭존 */
     .dropzone {
@@ -212,6 +213,17 @@
               </tbody>
             </table>
           </div>
+        </div>
+
+        <!-- 출석 현황 아래: 출석 설정 / 학생 명단 (신규자 과정 전용 운영 흐름) -->
+        <div class="section-card" id="records-tools" style="display:none;">
+          <div class="section-title" style="margin-bottom:0.6rem;">과정 관리</div>
+          <div class="records-tools-bar">
+            <button class="panel-toggle-btn edit-toggle" id="config-toggle-rec" onclick="toggleRecordsPanel('config')">출석 설정</button>
+            <button class="panel-toggle-btn stu-toggle" id="students-toggle-rec" onclick="toggleRecordsPanel('students')">학생 명단</button>
+          </div>
+          <div class="att-panel" id="config-panel-rec" style="display:none;"></div>
+          <div class="att-panel" id="students-panel-rec" style="display:none;"></div>
         </div>
       </div>
     </div>
