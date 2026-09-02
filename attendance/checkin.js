@@ -36,7 +36,100 @@ function showScreen(id) {
   if (logoutBtn) {
     logoutBtn.style.display = id === 'screen-login-empno' ? 'none' : 'inline-block';
   }
+  // 내 출석 현황 카드: 로그인 후 화면에서만 표시
+  const attCard = document.getElementById('my-att-card');
+  if (attCard) {
+    attCard.style.display = MY_ATT_SCREENS.has(id) ? 'block' : 'none';
+  }
 }
+
+// ── 내 출석 현황 (교육생 본인 기록 조회) ──────────────────────────
+const MY_ATT_SCREENS = new Set(['screen-qr', 'screen-already', 'screen-no-class', 'screen-no-session']);
+const STATUS_LABEL = {
+  present: ['출석', 'ok'], late: ['지각', 'warn'], leave: ['조퇴', 'warn'],
+  outing: ['외출', 'warn'], absent: ['미출석', 'bad'],
+};
+let myAttArgs = null;
+
+function classDates(config) {
+  const yr = new Date().getFullYear();
+  const excluded = new Set(config.excludedHolidays || []);
+  const holidays = new Set([
+    ...(config.customHolidays || []),
+    ...getBuiltinHolidays(yr), ...getBuiltinHolidays(yr + 1),
+  ].filter(d => !excluded.has(d)));
+  return [...(config.scheduleDates || [])].filter(d => !holidays.has(d)).sort();
+}
+const WD = ['일', '월', '화', '수', '목', '금', '토'];
+function shortDate(d) {
+  const [y, m, dd] = d.split('-').map(Number);
+  return `${m}/${dd}(${WD[new Date(y, m - 1, dd).getDay()]})`;
+}
+function recTimeText(rec) {
+  if (!rec) return '';
+  if (rec.manual) return rec.manualTime || '';
+  return rec.checkedAt ? formatTime(rec.checkedAt) : '';
+}
+
+async function loadMyAttendance(courseId, config, empNo) {
+  myAttArgs = { courseId, config, empNo };
+  const body = document.getElementById('my-att-body');
+  const range = document.getElementById('my-att-range');
+  if (!body) return;
+  const dates = classDates(config);
+  if (!dates.length) { body.innerHTML = '<div class="my-att-empty">등록된 수업일이 없습니다.</div>'; return; }
+  range.textContent = `${shortDate(dates[0])} ~ ${shortDate(dates[dates.length - 1])}`;
+  body.innerHTML = '<div class="my-att-empty">불러오는 중…</div>';
+
+  try {
+    const keys = [String(empNo)];
+    if (/^\d+$/.test(String(empNo))) keys.push(Number(empNo));
+    const snap = await getDocs(query(
+      collection(db, 'courses', courseId, 'attendance'),
+      where('empNo', 'in', keys)
+    ));
+    // 같은 날·세션에 QR 기록과 관리자 수정 기록이 모두 있으면 관리자 수정(manual) 우선
+    const idx = new Map();
+    snap.docs.forEach(d => {
+      const r = d.data();
+      const k = `${r.date}_${r.session}`;
+      const cur = idx.get(k);
+      if (!cur || (r.manual && !cur.manual)) idx.set(k, r);
+    });
+
+    const sessions = config.dailySessions === 2 ? ['morning', 'afternoon'] : ['single'];
+    const sessName = { single: '', morning: '오전', afternoon: '오후' };
+    const rows = dates.map(d => {
+      const cells = sessions.map(sess => {
+        const rec = idx.get(`${d}_${sess}`);
+        let label, cls, time = '';
+        if (rec) {
+          const st = rec.status || (rec.manual ? 'absent' : 'present');
+          [label, cls] = STATUS_LABEL[st] || [st, ''];
+          time = recTimeText(rec);
+        } else if (d < today) { [label, cls] = ['미출석', 'bad']; }
+        else if (d === today) { [label, cls] = ['아직 안 찍음', 'todo']; }
+        else { [label, cls] = ['예정', 'future']; }
+        const pre = sessName[sess] ? `<span class="my-att-sess">${sessName[sess]}</span>` : '';
+        return `<span class="my-att-cell">${pre}<span class="my-att-badge ${cls}">${label}</span>${time ? `<span class="my-att-time">${escapeHtml(time)}</span>` : ''}</span>`;
+      }).join('');
+      return `<div class="my-att-row${d === today ? ' today' : ''}"><span class="my-att-date">${shortDate(d)}</span>${cells}</div>`;
+    });
+    const done = dates.filter(d => d <= today).length;
+    const attended = dates.filter(d => d <= today && sessions.every(sess => {
+      const r = idx.get(`${d}_${sess}`);
+      return r && (r.status || (r.manual ? 'absent' : 'present')) !== 'absent';
+    })).length;
+    body.innerHTML = rows.join('')
+      + `<div class="my-att-sum">지금까지 <strong>${done}일</strong> 중 <strong>${attended}일</strong> 출석</div>`;
+  } catch (e) {
+    console.warn('내 출석 현황 로드 실패', e);
+    body.innerHTML = '<div class="my-att-empty">출석 현황을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.</div>';
+  }
+}
+window.reloadMyAttendance = function() {
+  if (myAttArgs) loadMyAttendance(myAttArgs.courseId, myAttArgs.config, myAttArgs.empNo);
+};
 
 // ── 로그아웃 ──────────────────────────────
 window.doLogout = async function() {
@@ -177,21 +270,27 @@ async function proceedWithCandidates(name, rawCandidates) {
     ]);
     if (!configSnap.exists()) return null;
     const config = configSnap.data();
-    if (!(config.scheduleDates || []).includes(today)) return null;
     return {
       courseId: c.courseId,
       courseName: courseSnap.data()?.name || c.courseId,
       config,
       studentDocId: c.studentDocId,
       empNo: c.empNo,
+      todayClass: (config.scheduleDates || []).includes(today),
     };
   }));
-  const candidates = settled.filter(Boolean);
+  const withConfig = settled.filter(Boolean);
+  const candidates = withConfig.filter(c => c.todayClass);
 
   if (!candidates.length) {
     showScreen('screen-no-class');
     document.getElementById('no-class-title').textContent = `${name}님, 오늘은 수업 일정이 없습니다`;
     document.getElementById('no-class-desc').textContent = '오늘은 등록된 교육 일정이 아닙니다.';
+    // 수업일이 아니어도 지난 출석 현황은 확인 가능 (가장 최근 수업일이 있는 과정)
+    const hist = withConfig
+      .filter(c => (c.config.scheduleDates || []).length)
+      .sort((a, b) => (b.config.scheduleDates.slice(-1)[0] || '').localeCompare(a.config.scheduleDates.slice(-1)[0] || ''))[0];
+    if (hist) loadMyAttendance(hist.courseId, hist.config, hist.empNo);
     return;
   }
 
@@ -230,6 +329,7 @@ function getDailySessionLabel(config) {
 // ── 과정 결정 후 처리 ──────────────────────────────
 async function proceedWithCourse(name, candidate) {
   const { courseId, courseName, config, empNo } = candidate;
+  loadMyAttendance(courseId, config, empNo);  // 내 출석 현황 (비동기, 화면 전환과 무관)
 
   // ── 기기 잠금 확인 (과정별) ──────────────────────────────
   const deviceLockKey = `device_locked_${courseId}_${today}`;
