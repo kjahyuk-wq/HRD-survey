@@ -1,7 +1,8 @@
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { defineSecret } = require('firebase-functions/params');
 const { initializeApp } = require('firebase-admin/app');
-const { getFirestore, FieldValue } = require('firebase-admin/firestore');
+const { getFirestore, FieldValue, Timestamp } = require('firebase-admin/firestore');
+const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { getAuth } = require('firebase-admin/auth');
 const crypto = require('crypto');
 
@@ -646,5 +647,38 @@ exports.registerAttendanceStudent = onCall(
 
     const docRef = await courseRef.collection('attendance_students').add(docData);
     return { id: docRef.id };
+  }
+);
+
+// ─────────────────────────────────────────────────────────────
+// 연락처(암호화 전화번호) 자동 삭제
+// 관리자가 attendanceConfig/phone_key.purgeAt (Timestamp) 로 예약한 시각이 지나면
+// 해당 과정의 attendance_students.phone_enc 를 모두 지우고 phone_key 문서도 삭제한다.
+// 10분 간격 폴링 (한국시간 기준) — 과정 수가 적어 collectionGroup 인덱스 없이 과정별 조회.
+// ─────────────────────────────────────────────────────────────
+exports.purgeExpiredPhones = onSchedule(
+  { schedule: 'every 10 minutes', timeZone: 'Asia/Seoul', region: REGION, memory: '256MiB' },
+  async () => {
+    const now = Timestamp.now();
+    const courses = await db.collection('courses').get();
+    for (const c of courses.docs) {
+      const keyRef = c.ref.collection('attendanceConfig').doc('phone_key');
+      const keySnap = await keyRef.get();
+      if (!keySnap.exists) continue;
+      const purgeAt = keySnap.get('purgeAt');
+      if (!purgeAt || typeof purgeAt.toMillis !== 'function' || purgeAt.toMillis() > now.toMillis()) continue;
+
+      const students = await c.ref.collection('attendance_students').get();
+      let batch = db.batch(), ops = 0, purged = 0;
+      for (const s of students.docs) {
+        if (s.get('phone_enc') === undefined) continue;
+        batch.update(s.ref, { phone_enc: FieldValue.delete(), phone_updatedAt: FieldValue.delete() });
+        ops++; purged++;
+        if (ops >= 400) { await batch.commit(); batch = db.batch(); ops = 0; }
+      }
+      if (ops) await batch.commit();
+      await keyRef.delete();
+      console.log(`[purgeExpiredPhones] course=${c.id} purgedPhones=${purged} purgeAt=${purgeAt.toDate().toISOString()}`);
+    }
   }
 );

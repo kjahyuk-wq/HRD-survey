@@ -1,7 +1,7 @@
 import { db, auth, functions } from './firebase-config.js';
 import {
   collection, getDocs, getDoc,
-  doc, setDoc, deleteDoc, updateDoc, deleteField, serverTimestamp,
+  doc, setDoc, deleteDoc, updateDoc, deleteField, serverTimestamp, Timestamp,
   getCountFromServer, query, where, writeBatch
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import {
@@ -240,6 +240,8 @@ function renderCourseCard({ id, name, active, idx, startDate, endDate }) {
          onclick="togglePanel('${cid}', ${idx}, 'config', '${safeName}')">출석 설정</button>
        <button class="panel-toggle-btn stu-toggle" id="students-toggle-${idx}"
          onclick="togglePanel('${cid}', ${idx}, 'students', '${safeName}')">학생 명단</button>
+       <button class="panel-toggle-btn stu-toggle" id="phones-toggle-${idx}"
+         onclick="togglePanel('${cid}', ${idx}, 'phones', '${safeName}')">연락처</button>
        <button class="panel-toggle-btn" onclick="enterRecords('${cid}', '${safeName}')">출석 현황 →</button>
        <button class="course-close-btn" onclick="toggleCourseActive('${cid}', true, this)">종료</button>`
     : `<button class="panel-toggle-btn" onclick="enterRecords('${cid}', '${safeName}')">출석 현황 →</button>
@@ -248,7 +250,8 @@ function renderCourseCard({ id, name, active, idx, startDate, endDate }) {
 
   const panelsHtml = active
     ? `<div class="att-panel" id="config-panel-${idx}" style="display:none;"></div>
-       <div class="att-panel" id="students-panel-${idx}" style="display:none;"></div>`
+       <div class="att-panel" id="students-panel-${idx}" style="display:none;"></div>
+       <div class="att-panel" id="phones-panel-${idx}" style="display:none;"></div>`
     : '';
 
   return `
@@ -352,13 +355,18 @@ window.togglePanel = async function(courseId, idx, mode, courseName) {
     targetBtn?.classList.add('active');
     initDropzone();
     await loadAttendanceStudents();
+  } else if (mode === 'phones') {
+    targetPanel.innerHTML = renderPhonesPanelHtml();
+    targetPanel.style.display = 'block';
+    targetBtn?.classList.add('active');
+    await refreshPhoneKeyStatus();
   }
 };
 
 // ── 출석 현황 화면 하단의 출석 설정 / 학생 명단 패널 ──────────
 // togglePanel 과 달리 현재 과정 컨텍스트(출석 기록·날짜 탭)를 초기화하지 않는다.
+const RECORDS_PANEL_MODES = ['config', 'students', 'phones'];
 window.toggleRecordsPanel = async function(mode) {
-  const other = mode === 'config' ? 'students' : 'config';
   const panel = document.getElementById(`${mode}-panel-rec`);
   const btn = document.getElementById(`${mode}-toggle-rec`);
   if (!panel || !currentCourseId) return;
@@ -368,24 +376,62 @@ window.toggleRecordsPanel = async function(mode) {
     btn?.classList.remove('active');
     return;
   }
-  const otherPanel = document.getElementById(`${other}-panel-rec`);
-  if (otherPanel) { otherPanel.style.display = 'none'; otherPanel.innerHTML = ''; }
-  document.getElementById(`${other}-toggle-rec`)?.classList.remove('active');
+  for (const m of RECORDS_PANEL_MODES) {
+    if (m === mode) continue;
+    const op = document.getElementById(`${m}-panel-rec`);
+    if (op) { op.style.display = 'none'; op.innerHTML = ''; }
+    document.getElementById(`${m}-toggle-rec`)?.classList.remove('active');
+  }
 
+  panel.style.display = 'block';
+  btn?.classList.add('active');
   if (mode === 'config') {
     panel.innerHTML = renderConfigPanelHtml();
-    panel.style.display = 'block';
-    btn?.classList.add('active');
     await loadConfig();
-  } else {
+  } else if (mode === 'students') {
     panel.innerHTML = renderStudentsPanelHtml();
-    panel.style.display = 'block';
-    btn?.classList.add('active');
     initDropzone();
     await loadAttendanceStudents();
+  } else {
+    panel.innerHTML = renderPhonesPanelHtml();
+    await refreshPhoneKeyStatus();
   }
   panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 };
+
+// ── 연락처 패널 HTML ──────────────────────────────
+function renderPhonesPanelHtml() {
+  return `
+    <div class="att-panel-section" id="phone-section">
+      <h4>📞 연락처(전화번호) 등록
+        <span style="font-weight:400;color:#94a3b8;font-size:0.78rem;">브라우저에서 암호화된 뒤 저장 · 열람 암호 없이는 서버에서도 볼 수 없음</span>
+      </h4>
+      <div id="phone-key-status" style="font-size:0.8rem;color:#64748b;margin-bottom:0.6rem;">확인 중…</div>
+      <div class="two-col">
+        <div class="time-group"><label>열람 암호</label>
+          <input type="password" id="phone-pass-set" autocomplete="off" placeholder="연락처 열람 시 입력할 암호"></div>
+        <div class="time-group" id="phone-pass-confirm-wrap"><label>열람 암호 확인</label>
+          <input type="password" id="phone-pass-confirm" autocomplete="off" placeholder="한 번 더 입력"></div>
+      </div>
+      <div class="date-input-row">
+        <input type="file" id="phone-file" accept=".xlsx,.xls" style="flex:1;min-width:200px;font-size:0.82rem;">
+        <button class="btn btn-primary btn-sm" id="phone-upload-btn" onclick="uploadPhones()">엑셀에서 연락처 등록</button>
+        <button class="btn btn-secondary btn-sm" onclick="deleteAllPhones()" style="color:#dc2626;">연락처 전체 삭제</button>
+      </div>
+      <div class="date-input-row" style="margin-top:0.6rem;align-items:center;">
+        <label style="font-size:0.8rem;font-weight:600;color:#64748b;white-space:nowrap;">🗓 자동 삭제 일시</label>
+        <input type="datetime-local" id="phone-purge-at" style="padding:0.45rem 0.6rem;border:1.5px solid #cbd5e1;border-radius:8px;font-size:0.82rem;">
+        <button class="btn btn-secondary btn-sm" onclick="savePhonePurgeAt()">삭제 예약 저장</button>
+      </div>
+      <div id="phone-purge-status" style="font-size:0.8rem;color:#64748b;margin-top:0.35rem;"></div>
+      <p style="font-size:0.78rem;color:#94a3b8;margin-top:0.45rem;line-height:1.6;">
+        엑셀에서 <strong>교번</strong>과 <strong>핸드폰(전화/연락처)</strong> 헤더가 있는 시트를 자동으로 찾아, 교번이 일치하는 등록 학생에게만 저장합니다.
+        열람 암호는 어디에도 저장되지 않으므로 <strong>잊으면 복구할 수 없고</strong>, 전체 삭제 후 다시 등록해야 합니다.
+      </p>
+      <div id="phone-upload-status" style="font-size:0.85rem;margin-top:0.5rem;white-space:pre-line;"></div>
+    </div>
+  `;
+}
 
 // ── 출석 설정 패널 HTML ──────────────────────────────
 function renderConfigPanelHtml() {
@@ -568,28 +614,6 @@ function renderStudentsPanelHtml() {
       </div>
     </div>
 
-    <div class="att-panel-section" id="phone-section">
-      <h4>📞 연락처(전화번호) 등록
-        <span style="font-weight:400;color:#94a3b8;font-size:0.78rem;">브라우저에서 암호화된 뒤 저장 · 열람 암호 없이는 서버에서도 볼 수 없음</span>
-      </h4>
-      <div id="phone-key-status" style="font-size:0.8rem;color:#64748b;margin-bottom:0.6rem;">확인 중…</div>
-      <div class="two-col">
-        <div class="time-group"><label>열람 암호</label>
-          <input type="password" id="phone-pass-set" autocomplete="off" placeholder="연락처 열람 시 입력할 암호"></div>
-        <div class="time-group" id="phone-pass-confirm-wrap"><label>열람 암호 확인</label>
-          <input type="password" id="phone-pass-confirm" autocomplete="off" placeholder="한 번 더 입력"></div>
-      </div>
-      <div class="date-input-row">
-        <input type="file" id="phone-file" accept=".xlsx,.xls" style="flex:1;min-width:200px;font-size:0.82rem;">
-        <button class="btn btn-primary btn-sm" id="phone-upload-btn" onclick="uploadPhones()">엑셀에서 연락처 등록</button>
-        <button class="btn btn-secondary btn-sm" onclick="deleteAllPhones()" style="color:#dc2626;">연락처 전체 삭제</button>
-      </div>
-      <p style="font-size:0.78rem;color:#94a3b8;margin-top:0.45rem;line-height:1.6;">
-        엑셀에서 <strong>교번</strong>과 <strong>핸드폰(전화/연락처)</strong> 헤더가 있는 시트를 자동으로 찾아, 교번이 일치하는 등록 학생에게만 저장합니다.
-        열람 암호는 어디에도 저장되지 않으므로 <strong>잊으면 복구할 수 없고</strong>, 전체 삭제 후 다시 등록해야 합니다.
-      </p>
-      <div id="phone-upload-status" style="font-size:0.85rem;margin-top:0.5rem;white-space:pre-line;"></div>
-    </div>
   `;
 }
 
@@ -607,7 +631,7 @@ window.enterRecords = async function(courseId, courseName) {
   const tools = document.getElementById('records-tools');
   if (tools) {
     tools.style.display = 'block';
-    ['config', 'students'].forEach(m => {
+    ['config', 'students', 'phones'].forEach(m => {
       const p = document.getElementById(`${m}-panel-rec`);
       if (p) { p.style.display = 'none'; p.innerHTML = ''; }
       document.getElementById(`${m}-toggle-rec`)?.classList.remove('active');
@@ -1165,10 +1189,25 @@ function parsePhoneSheet(wb) {
   return [];
 }
 
+// datetime-local 값(브라우저 로컬 = 한국시간) ↔ Timestamp
+const toLocalInput = d => {
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+const fmtKst = d => d.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'numeric', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit' });
+function readPurgeInput() {
+  const v = document.getElementById('phone-purge-at')?.value;
+  if (!v) return null;
+  const d = new Date(v);
+  return isNaN(d) ? null : Timestamp.fromDate(d);
+}
+
 async function refreshPhoneKeyStatus() {
   const el = document.getElementById('phone-key-status');
   if (!el || !currentCourseId) return;
   const wrap = document.getElementById('phone-pass-confirm-wrap');
+  const purgeEl = document.getElementById('phone-purge-status');
+  const purgeInput = document.getElementById('phone-purge-at');
   try {
     const kd = await fetchPhoneKeyDoc();
     await loadStudents();
@@ -1180,8 +1219,46 @@ async function refreshPhoneKeyStatus() {
       el.textContent = '아직 등록된 연락처가 없습니다. 열람 암호를 정한 뒤 엑셀을 올려주세요.';
       if (wrap) wrap.style.display = '';
     }
+    // 자동 삭제 예약 표시 + 입력값 프리필 (예약값 → 없으면 과정 종료일 18:00)
+    if (purgeInput && kd?.purgeAt?.toDate) {
+      const d = kd.purgeAt.toDate();
+      purgeInput.value = toLocalInput(d);
+      if (purgeEl) {
+        const past = d.getTime() <= Date.now();
+        purgeEl.innerHTML = past
+          ? `⏳ 예약 시각(${fmtKst(d)})이 지나 자동 삭제가 곧 실행됩니다 (10분 이내).`
+          : `🗓 자동 삭제 예약: <strong>${fmtKst(d)}</strong> (한국시간) — 이 시각에 연락처와 열람 암호가 서버에서 자동 삭제됩니다.`;
+      }
+    } else if (purgeInput) {
+      if (!purgeInput.value) {
+        try {
+          const cs = await getDoc(doc(db, 'courses', currentCourseId));
+          const end = cs.exists() ? cs.data().endDate : null;
+          if (end && /^\d{4}-\d{2}-\d{2}$/.test(end)) purgeInput.value = `${end}T18:00`;
+        } catch (_) {}
+      }
+      if (purgeEl) purgeEl.textContent = kd
+        ? '자동 삭제가 예약되어 있지 않습니다. 일시를 정하고 "삭제 예약 저장"을 누르세요.'
+        : '연락처 등록 시 아래 일시로 자동 삭제가 함께 예약됩니다.';
+    }
   } catch (e) { el.textContent = '상태 확인 실패: ' + e.message; }
 }
+
+window.savePhonePurgeAt = async function() {
+  const st = document.getElementById('phone-upload-status');
+  const setStatus = (m, c = '#64748b') => { st.textContent = m; st.style.color = c; };
+  if (!currentCourseId) return;
+  try {
+    const kd = await fetchPhoneKeyDoc();
+    if (!kd) return setStatus('연락처를 먼저 등록해야 삭제 예약을 저장할 수 있습니다.', '#dc2626');
+    const ts = readPurgeInput();
+    if (!ts) return setStatus('자동 삭제 일시를 입력해 주세요.', '#dc2626');
+    await setDoc(doc(db, 'courses', currentCourseId, 'attendanceConfig', 'phone_key'),
+      { purgeAt: ts, updatedAt: serverTimestamp() }, { merge: true });
+    setStatus(`✅ 자동 삭제 예약 저장: ${fmtKst(ts.toDate())}`, '#16a34a');
+    await refreshPhoneKeyStatus();
+  } catch (e) { setStatus('예약 저장 실패: ' + e.message, '#dc2626'); }
+};
 
 window.uploadPhones = async function() {
   const st = document.getElementById('phone-upload-status');
@@ -1227,8 +1304,9 @@ window.uploadPhones = async function() {
       await batch.commit();
     }
     if (!kd) {
+      const purgeAt = readPurgeInput();
       await setDoc(doc(db, 'courses', currentCourseId, 'attendanceConfig', 'phone_key'),
-        { check: await phoneEncrypt(bits, PHONE_CHECK_TEXT), updatedAt: serverTimestamp() });
+        { check: await phoneEncrypt(bits, PHONE_CHECK_TEXT), ...(purgeAt ? { purgeAt } : {}), updatedAt: serverTimestamp() });
     }
     // 이 탭에서 바로 열람 가능하게
     phoneKeyBits = bits;
