@@ -92,6 +92,14 @@
     .filter-info { font-size: 0.78rem; color: #64748b; margin-left: auto; white-space: nowrap; }
     .records-tools { padding: 0.6rem 1rem; }
     .records-tools-bar { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+    .phone-chip {
+      display: inline-block; margin-left: 0.45rem; padding: 0.05rem 0.45rem;
+      font-size: 0.78rem; color: #475569; background: #f1f5f9; border-radius: 6px;
+      cursor: pointer; white-space: nowrap; letter-spacing: 0.01em;
+    }
+    .phone-chip:hover { background: #e2e8f0; }
+    .phone-chip.revealed { color: #1d4ed8; background: #dbeafe; font-weight: 600; text-decoration: none; }
+    .filter-chip.phone-toggle.active { background: #16a34a; border-color: #16a34a; color: #fff; }
     .records-tools-title { font-size: 0.85rem; font-weight: 700; color: #475569; margin-right: 0.3rem; }
 
     /* 엑셀 드롭존 */
@@ -216,6 +224,14 @@
           <div class="att-filter-bar" id="att-filter-bar" style="display:none;">
             <input type="search" id="att-search" placeholder="이름·교번 검색" oninput="onAttSearchInput(this.value)">
             <div class="filter-chips" id="att-status-chips"></div>
+            <button class="filter-chip phone-toggle" id="phone-toggle-btn" onclick="togglePhoneView()">🔒 연락처 보기</button>
+            <span id="phone-unlock-form" style="display:none;align-items:center;gap:0.35rem;">
+              <input type="password" id="phone-pass" placeholder="열람 암호" autocomplete="off"
+                style="padding:0.35rem 0.6rem;border:1.5px solid #cbd5e1;border-radius:8px;font-size:0.82rem;width:120px;"
+                onkeydown="if(event.key==='Enter')unlockPhones()">
+              <button class="btn btn-primary btn-sm" onclick="unlockPhones()" style="padding:0.3rem 0.6rem;font-size:0.78rem;">확인</button>
+              <span id="phone-unlock-msg" style="font-size:0.75rem;color:#dc2626;"></span>
+            </span>
             <span class="filter-info" id="att-filter-info"></span>
           </div>
           <div class="att-table-wrap">

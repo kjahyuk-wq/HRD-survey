@@ -1,7 +1,7 @@
 import { db, auth, functions } from './firebase-config.js';
 import {
   collection, getDocs, getDoc,
-  doc, setDoc, deleteDoc, serverTimestamp,
+  doc, setDoc, deleteDoc, updateDoc, deleteField, serverTimestamp,
   getCountFromServer, query, where, writeBatch
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import {
@@ -567,6 +567,29 @@ function renderStudentsPanelHtml() {
         </table>
       </div>
     </div>
+
+    <div class="att-panel-section" id="phone-section">
+      <h4>📞 연락처(전화번호) 등록
+        <span style="font-weight:400;color:#94a3b8;font-size:0.78rem;">브라우저에서 암호화된 뒤 저장 · 열람 암호 없이는 서버에서도 볼 수 없음</span>
+      </h4>
+      <div id="phone-key-status" style="font-size:0.8rem;color:#64748b;margin-bottom:0.6rem;">확인 중…</div>
+      <div class="two-col">
+        <div class="time-group"><label>열람 암호</label>
+          <input type="password" id="phone-pass-set" autocomplete="off" placeholder="연락처 열람 시 입력할 암호"></div>
+        <div class="time-group" id="phone-pass-confirm-wrap"><label>열람 암호 확인</label>
+          <input type="password" id="phone-pass-confirm" autocomplete="off" placeholder="한 번 더 입력"></div>
+      </div>
+      <div class="date-input-row">
+        <input type="file" id="phone-file" accept=".xlsx,.xls" style="flex:1;min-width:200px;font-size:0.82rem;">
+        <button class="btn btn-primary btn-sm" id="phone-upload-btn" onclick="uploadPhones()">엑셀에서 연락처 등록</button>
+        <button class="btn btn-secondary btn-sm" onclick="deleteAllPhones()" style="color:#dc2626;">연락처 전체 삭제</button>
+      </div>
+      <p style="font-size:0.78rem;color:#94a3b8;margin-top:0.45rem;line-height:1.6;">
+        엑셀에서 <strong>교번</strong>과 <strong>핸드폰(전화/연락처)</strong> 헤더가 있는 시트를 자동으로 찾아, 교번이 일치하는 등록 학생에게만 저장합니다.
+        열람 암호는 어디에도 저장되지 않으므로 <strong>잊으면 복구할 수 없고</strong>, 전체 삭제 후 다시 등록해야 합니다.
+      </p>
+      <div id="phone-upload-status" style="font-size:0.85rem;margin-top:0.5rem;white-space:pre-line;"></div>
+    </div>
   `;
 }
 
@@ -597,6 +620,8 @@ window.enterRecords = async function(courseId, courseName) {
   currentDateTab = null;
   await loadConfig();
   await loadStudents();
+  loadPhoneKeyFromSession();
+  await decryptAllPhones();
   await loadAttendanceRecords();
 };
 
@@ -979,7 +1004,7 @@ function renderAttendanceTable(date) {
 
     return `<tr id="row_${stu.empNo}" data-empno="${escapeHtml(String(stu.empNo))}" data-name="${escapeHtml(stu.name)}" data-date="${date}">
       <td>${escapeHtml(String(stu.empNo))}</td>
-      <td>${escapeHtml(stu.name)}</td>
+      <td>${escapeHtml(stu.name)}${phoneChipHtml(stu.empNo)}</td>
       ${cells}
       <td><button class="btn btn-secondary btn-sm" id="savebtn_${stu.empNo}" onclick="saveStudentManual(this)" style="padding:0.25rem 0.6rem;font-size:0.78rem;">저장</button></td>
     </tr>`;
@@ -991,7 +1016,261 @@ function renderAttendanceTable(date) {
   document.getElementById('att-filter-bar').style.display = 'flex';
   document.getElementById('att-search').value = attSearchQuery;
   applyAttFilter();
+  updatePhoneToggleUI();
 }
+
+// ── 연락처(전화번호) 암호화 열람 ──────────────────────────
+// 전화번호는 브라우저에서 AES-256-GCM 으로 암호화되어 attendance_students.phone_enc 에만 저장된다.
+// 키는 관리자가 정한 '열람 암호'에서 PBKDF2(150k) 로 파생 (과정별 salt). 서버/DB 에는 평문도 암호도 없다.
+// 검증 문서: attendanceConfig/phone_key { check: enc("phone-key-ok") } — 암호 오입력 판별용.
+const PHONE_KDF_ITER = 150000;
+const PHONE_CHECK_TEXT = 'phone-key-ok';
+let phoneKeyBits = null;          // Uint8Array(32) — 이 탭에서의 열람 키 (sessionStorage 에 보관, 탭 닫으면 소멸)
+const phoneCache = new Map();     // empNo(string) → 평문 전화번호
+
+const b64enc = u8 => btoa(String.fromCharCode(...u8));
+const b64dec = str => Uint8Array.from(atob(str), ch => ch.charCodeAt(0));
+
+async function derivePhoneKeyBits(pass, courseId) {
+  const enc = new TextEncoder();
+  const base = await crypto.subtle.importKey('raw', enc.encode(pass.normalize('NFKC')), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt: enc.encode('djhrd-att-phone-v1:' + courseId), iterations: PHONE_KDF_ITER },
+    base, 256);
+  return new Uint8Array(bits);
+}
+const phoneAesKey = bits => crypto.subtle.importKey('raw', bits, 'AES-GCM', false, ['encrypt', 'decrypt']);
+
+async function phoneEncrypt(bits, text) {
+  const key = await phoneAesKey(bits);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(text)));
+  const out = new Uint8Array(12 + ct.length); out.set(iv); out.set(ct, 12);
+  return b64enc(out);
+}
+async function phoneDecrypt(bits, b64) {
+  try {
+    const key = await phoneAesKey(bits);
+    const raw = b64dec(b64);
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: raw.slice(0, 12) }, key, raw.slice(12));
+    return new TextDecoder().decode(pt);
+  } catch (_) { return null; }
+}
+const phoneSessionKey = () => `att_phonekey_${currentCourseId}`;
+function loadPhoneKeyFromSession() {
+  phoneKeyBits = null;
+  try { const v = sessionStorage.getItem(phoneSessionKey()); if (v) phoneKeyBits = b64dec(v); } catch (_) {}
+}
+async function fetchPhoneKeyDoc() {
+  const snap = await getDoc(doc(db, 'courses', currentCourseId, 'attendanceConfig', 'phone_key'));
+  return snap.exists() ? snap.data() : null;
+}
+async function verifyPhonePass(pass) {
+  const kd = await fetchPhoneKeyDoc();
+  if (!kd) return { ok: false, reason: 'none' };
+  const bits = await derivePhoneKeyBits(pass, currentCourseId);
+  const pt = await phoneDecrypt(bits, kd.check);
+  return pt === PHONE_CHECK_TEXT ? { ok: true, bits } : { ok: false, reason: 'wrong' };
+}
+async function decryptAllPhones() {
+  phoneCache.clear();
+  if (!phoneKeyBits) return;
+  await Promise.all(allStudents.map(async s => {
+    if (!s.phone_enc) return;
+    const pt = await phoneDecrypt(phoneKeyBits, s.phone_enc);
+    if (pt) phoneCache.set(String(s.empNo).trim(), pt);
+  }));
+}
+function formatPhone(p) {
+  const d = String(p).replace(/\D/g, '');
+  if (d.length === 11) return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
+  if (d.length === 10) return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+  return String(p);
+}
+function phoneChipHtml(empNo) {
+  if (!phoneKeyBits) return '';
+  const p = phoneCache.get(String(empNo).trim());
+  if (!p) return '';
+  const f = formatPhone(p);
+  const masked = f.replace(/^(\d{3})-(\d{3,4})-(\d{4})$/, '$1-••••-$3');
+  return `<span class="phone-chip" data-full="${escapeAttr(f)}" onclick="revealPhone(this)" title="누르면 번호가 표시됩니다">${escapeHtml(masked)}</span>`;
+}
+window.revealPhone = function(el) {
+  const f = el.dataset.full || '';
+  el.outerHTML = `<a class="phone-chip revealed" href="tel:${f.replace(/\D/g, '')}" title="전화 걸기">📞 ${escapeHtml(f)}</a>`;
+};
+function updatePhoneToggleUI() {
+  const btn = document.getElementById('phone-toggle-btn');
+  if (!btn) return;
+  btn.textContent = phoneKeyBits ? `🔓 연락처 숨기기 (${phoneCache.size}명)` : '🔒 연락처 보기';
+  btn.classList.toggle('active', !!phoneKeyBits);
+}
+window.togglePhoneView = function() {
+  if (phoneKeyBits) {
+    phoneKeyBits = null; phoneCache.clear();
+    try { sessionStorage.removeItem(phoneSessionKey()); } catch (_) {}
+    updatePhoneToggleUI();
+    if (currentDateTab) renderAttendanceTable(currentDateTab);
+    return;
+  }
+  const form = document.getElementById('phone-unlock-form');
+  const open = form.style.display === 'none';
+  form.style.display = open ? 'inline-flex' : 'none';
+  if (open) document.getElementById('phone-pass')?.focus();
+};
+window.unlockPhones = async function() {
+  const input = document.getElementById('phone-pass');
+  const msg = document.getElementById('phone-unlock-msg');
+  const pass = input.value;
+  if (!pass) return;
+  msg.textContent = '확인 중…';
+  try {
+    const r = await verifyPhonePass(pass);
+    if (!r.ok) {
+      msg.textContent = r.reason === 'none'
+        ? '등록된 연락처가 없습니다. 과정 관리 → 학생 명단 → 연락처 등록에서 먼저 올려주세요.'
+        : '열람 암호가 틀립니다.';
+      return;
+    }
+    phoneKeyBits = r.bits;
+    try { sessionStorage.setItem(phoneSessionKey(), b64enc(phoneKeyBits)); } catch (_) {}
+    input.value = ''; msg.textContent = '';
+    document.getElementById('phone-unlock-form').style.display = 'none';
+    await decryptAllPhones();
+    updatePhoneToggleUI();
+    if (currentDateTab) renderAttendanceTable(currentDateTab);
+  } catch (e) { msg.textContent = '오류: ' + e.message; }
+};
+
+// 엑셀에서 교번·전화번호 열 자동 탐지 (헤더 행이 상단 15행 안에 있으면 됨)
+function parsePhoneSheet(wb) {
+  const isEmp = h => /교번|직원번호|empno/i.test(h);
+  const isPhone = h => /핸드폰|휴대|전화|연락처|phone/i.test(h);
+  for (const name of wb.SheetNames) {
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: '' });
+    for (let hi = 0; hi < Math.min(rows.length, 15); hi++) {
+      const hdr = rows[hi].map(v => String(v).trim());
+      const ei = hdr.findIndex(isEmp), pi = hdr.findIndex(isPhone);
+      if (ei < 0 || pi < 0) continue;
+      const out = [];
+      for (const r of rows.slice(hi + 1)) {
+        const emp = String(r[ei] ?? '').trim().replace(/\.0$/, '');
+        const digits = String(r[pi] ?? '').replace(/\D/g, '');
+        if (!emp || digits.length < 9) continue;
+        out.push({ empNo: emp, phone: formatPhone(digits) });
+      }
+      if (out.length) return out;
+    }
+  }
+  return [];
+}
+
+async function refreshPhoneKeyStatus() {
+  const el = document.getElementById('phone-key-status');
+  if (!el || !currentCourseId) return;
+  const wrap = document.getElementById('phone-pass-confirm-wrap');
+  try {
+    const kd = await fetchPhoneKeyDoc();
+    await loadStudents();
+    const n = allStudents.filter(x => x.phone_enc).length;
+    if (kd) {
+      el.innerHTML = `🔐 열람 암호 설정됨 · 연락처 등록 <strong>${n}명</strong>. 추가·갱신하려면 <strong>같은 열람 암호</strong>를 입력하고 엑셀을 올리세요.`;
+      if (wrap) wrap.style.display = 'none';
+    } else {
+      el.textContent = '아직 등록된 연락처가 없습니다. 열람 암호를 정한 뒤 엑셀을 올려주세요.';
+      if (wrap) wrap.style.display = '';
+    }
+  } catch (e) { el.textContent = '상태 확인 실패: ' + e.message; }
+}
+
+window.uploadPhones = async function() {
+  const st = document.getElementById('phone-upload-status');
+  const setStatus = (m, c = '#64748b') => { st.textContent = m; st.style.color = c; };
+  const file = document.getElementById('phone-file').files[0];
+  const pass = document.getElementById('phone-pass-set').value;
+  const confirmEl = document.getElementById('phone-pass-confirm');
+  if (!currentCourseId) return setStatus('과정을 먼저 선택해 주세요.', '#dc2626');
+  if (!file) return setStatus('엑셀 파일을 선택해 주세요.', '#dc2626');
+  if (!pass || pass.length < 4) return setStatus('열람 암호는 4자 이상으로 입력해 주세요.', '#dc2626');
+  const btn = document.getElementById('phone-upload-btn');
+  btn.disabled = true;
+  try {
+    let bits;
+    const kd = await fetchPhoneKeyDoc();
+    if (kd) {
+      const r = await verifyPhonePass(pass);
+      if (!r.ok) throw new Error('기존 열람 암호와 다릅니다. 같은 암호를 입력하거나, "연락처 전체 삭제" 후 새 암호로 등록하세요.');
+      bits = r.bits;
+    } else {
+      if ((confirmEl?.value || '') !== pass) throw new Error('열람 암호 확인이 일치하지 않습니다.');
+      bits = await derivePhoneKeyBits(pass, currentCourseId);
+    }
+    setStatus('엑셀 읽는 중…');
+    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+    const parsed = parsePhoneSheet(wb);
+    if (!parsed.length) throw new Error('교번·핸드폰 열을 찾지 못했습니다. 헤더에 "교번"과 "핸드폰/전화/연락처"가 있어야 합니다.');
+
+    const snap = await getDocs(collection(db, 'courses', currentCourseId, 'attendance_students'));
+    const byEmp = new Map(snap.docs.map(d => [String(d.data().empNo).trim(), d.id]));
+    setStatus(`암호화 중… (${parsed.length}건)`);
+    const updates = [], unmatched = [];
+    for (const { empNo, phone } of parsed) {
+      const id = byEmp.get(empNo);
+      if (!id) { unmatched.push(empNo); continue; }
+      updates.push({ id, enc: await phoneEncrypt(bits, phone) });
+    }
+    for (let i = 0; i < updates.length; i += 400) {
+      const batch = writeBatch(db);
+      updates.slice(i, i + 400).forEach(u =>
+        batch.update(doc(db, 'courses', currentCourseId, 'attendance_students', u.id),
+          { phone_enc: u.enc, phone_updatedAt: serverTimestamp() }));
+      await batch.commit();
+    }
+    if (!kd) {
+      await setDoc(doc(db, 'courses', currentCourseId, 'attendanceConfig', 'phone_key'),
+        { check: await phoneEncrypt(bits, PHONE_CHECK_TEXT), updatedAt: serverTimestamp() });
+    }
+    // 이 탭에서 바로 열람 가능하게
+    phoneKeyBits = bits;
+    try { sessionStorage.setItem(phoneSessionKey(), b64enc(bits)); } catch (_) {}
+    document.getElementById('phone-pass-set').value = '';
+    if (confirmEl) confirmEl.value = '';
+    document.getElementById('phone-file').value = '';
+    setStatus(`✅ ${updates.length}명 연락처 등록 완료`
+      + (unmatched.length ? `\n명단에 없는 교번 ${unmatched.length}건은 건너뜀: ${unmatched.slice(0, 20).join(', ')}${unmatched.length > 20 ? ' …' : ''}` : ''),
+      '#16a34a');
+    await refreshPhoneKeyStatus();
+    await decryptAllPhones();
+    updatePhoneToggleUI();
+    if (currentDateTab) renderAttendanceTable(currentDateTab);
+  } catch (e) {
+    setStatus('실패: ' + e.message, '#dc2626');
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+window.deleteAllPhones = async function() {
+  if (!currentCourseId) return;
+  if (!confirm('이 과정의 등록된 연락처를 모두 삭제할까요?\n열람 암호도 함께 초기화됩니다.')) return;
+  const st = document.getElementById('phone-upload-status');
+  try {
+    const snap = await getDocs(collection(db, 'courses', currentCourseId, 'attendance_students'));
+    const targets = snap.docs.filter(d => d.data().phone_enc);
+    for (let i = 0; i < targets.length; i += 400) {
+      const batch = writeBatch(db);
+      targets.slice(i, i + 400).forEach(d => batch.update(d.ref, { phone_enc: deleteField(), phone_updatedAt: deleteField() }));
+      await batch.commit();
+    }
+    await deleteDoc(doc(db, 'courses', currentCourseId, 'attendanceConfig', 'phone_key')).catch(() => {});
+    phoneKeyBits = null; phoneCache.clear();
+    try { sessionStorage.removeItem(phoneSessionKey()); } catch (_) {}
+    st.textContent = `🗑 ${targets.length}명 연락처 삭제 완료`; st.style.color = '#64748b';
+    await refreshPhoneKeyStatus();
+    updatePhoneToggleUI();
+    if (currentDateTab) renderAttendanceTable(currentDateTab);
+  } catch (e) { st.textContent = '삭제 실패: ' + e.message; st.style.color = '#dc2626'; }
+};
 
 // ── 출석 현황 필터/검색 ──────────────────────────
 let attStatusFilter = 'all';
@@ -1227,10 +1506,12 @@ const registerMany = httpsCallable(functions, 'registerAttendanceStudents');
 
 window.loadAttendanceStudents = async function() {
   await loadAttendanceStudentsPanel();
+  await refreshPhoneKeyStatus();
   // 출석 현황 화면에서 명단이 바뀌면 표·요약도 함께 갱신
   if (currentCourseId && document.getElementById('att-stu-tbody')
       && document.getElementById('main-tab-records')?.style.display !== 'none') {
     await loadStudents();
+    await decryptAllPhones();
     if (currentDateTab) renderAttendanceTable(currentDateTab);
     updateSummary();
   }
