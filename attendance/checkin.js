@@ -471,7 +471,16 @@ function sessionName(session) {
   return { single: '출석', morning: '오전 출석', afternoon: '오후 출석' }[session] || '출석';
 }
 
-// ── UUID 생성 (HTTP 환경 호환) ──────────────────────────────
+// ── QR 토큰 ID 생성 (HTTP 환경 호환) ──────────────────────────────
+// 12자 hex(48bit 난수). QR 페이로드가 토큰 ID 하나뿐이라 QR 버전 1(21×21 모듈)로 떨어져
+// 기존 JSON+UUID(88자, 41×41 모듈) 대비 모듈이 약 2배 커진다 → 저화소·고정초점 카메라 인식률 개선.
+function generateTokenId() {
+  const arr = new Uint8Array(6);
+  crypto.getRandomValues(arr);
+  return [...arr].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// (구) UUID 생성 — 현재 미사용, 호환 참고용
 function generateUUID() {
   const arr = new Uint8Array(16);
   crypto.getRandomValues(arr);
@@ -484,7 +493,7 @@ function generateUUID() {
 
 // ── QR 발급 ──────────────────────────────
 async function issueNewQr(name, empNo, courseId, courseName, session, cacheKey, config) {
-  const tokenId = generateUUID();
+  const tokenId = generateTokenId();
   const now = new Date();
   const expiresAt = new Date(now.getTime() + QR_TTL_SEC * 1000);
 
@@ -545,18 +554,15 @@ window.reissueQr = async function() {
 function showQrScreen(name, empNo, session, tokenId, expiresAtMs) {
   showScreen('screen-qr');
 
-  // QR 내용
-  const qrPayload = JSON.stringify({ t: tokenId, e: empNo, s: session, d: today });
-
-  // QR 생성 (qrious)
-  new QRious({
-    element: document.getElementById('qr-canvas'),
-    value: qrPayload,
-    size: 280,
-    foreground: '#0a0a0a',
-    background: '#ffffff',
-    level: 'M'
-  });
+  // QR 내용 = 토큰 ID만. 교번·세션·날짜는 스캐너가 Firestore 토큰 문서에서 읽는다.
+  // (페이로드를 최소화해 QR 모듈을 키움 — 키오스크 카메라 인식률)
+  const qrCanvas = document.getElementById('qr-canvas');
+  if (typeof window.renderQrCanvas === 'function') {
+    window.renderQrCanvas(qrCanvas, tokenId);
+  } else {
+    new QRious({ element: qrCanvas, value: tokenId, size: 280,
+      foreground: '#0a0a0a', background: '#ffffff', level: 'M' });
+  }
 
   document.getElementById('expired-overlay').style.display = 'none';
 

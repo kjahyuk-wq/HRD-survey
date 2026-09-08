@@ -84,8 +84,8 @@ function initScanner() {
 const LATE_GRACE_MIN = 15;   // 세션 시작 + 15분까지는 정상 출석, 초과 시 지각
 const PROCESS_LOCK_MS = 1500; // 오류/경고 표시 후 다음 스캔 허용까지
 const SUCCESS_LOCK_MS = 700;  // 성공 시엔 짧게 — 연속 스캔 처리량 우선
-// 이 세션에서 이미 처리한 토큰 (옵티미스틱 저장 중 중복 스캔 방지 + 재스캔 즉시 피드백)
-const usedTokenIds = new Set();
+// 이 세션에서 이미 처리한 토큰 → 표시 라벨 (옵티미스틱 저장 중 중복 스캔 방지 + 재스캔 즉시 피드백)
+const usedTokenIds = new Map();
 const PROCESS_WATCHDOG_MS = 10000; // Firestore hang 등 비정상 상황 안전 해제
 let isProcessing = false;
 let processWatchdog = null;
@@ -210,19 +210,26 @@ async function startScanner(facing) {
     }
 
     const cameraId = pickCameraId(facing);
-    const source = cameraId ? cameraId : { facingMode: facing };
+    // videoConstraints 를 직접 지정하면 html5-qrcode 는 카메라 선택도 이 객체로 처리한다.
+    // 해상도 제약이 없으면 브라우저가 640×480 정도로 열 수 있어 저화소 전면 카메라에서
+    // QR 모듈이 몇 픽셀로 뭉개짐 → 가능한 최대 해상도를 요청 (ideal 이라 미지원 기기도 안전).
+    const videoConstraints = {
+      ...(cameraId ? { deviceId: { exact: cameraId } } : { facingMode: facing }),
+      width: { ideal: 1920 },
+      height: { ideal: 1440 },
+    };
 
     await html5Qr.start(
-      source,
+      cameraId ? cameraId : { facingMode: facing },
       {
         fps: 15,  // 10 → 15: 같은 시간에 더 많은 프레임을 디코드 시도 (인식률 향상)
         qrbox: (vw, vh) => {
           const m = Math.floor(Math.min(vw, vh) * 0.85);
           return { width: m, height: m };
         },
-        aspectRatio: 1.0,
+        videoConstraints,
         // 지원 브라우저(Chrome/Edge 등)에서 네이티브 BarcodeDetector 사용 — ZXing JS 보다
-        // 훨씬 빠르고 인식률 높음. 미지원 브라우저는 자동으로 기본 디코더 폴백.
+        // 훨씬 빠르고 인식률 높음. 미지원 브라우저(iPad Safari 등)는 자동으로 기본 디코더 폴백.
         experimentalFeatures: { useBarCodeDetectorIfSupported: true }
       },
       onScanSuccess,
@@ -255,33 +262,28 @@ async function onScanSuccess(rawText) {
   if (isProcessing) return;
   lockProcessing();
 
-  let payload;
-  try {
-    payload = JSON.parse(rawText);
-  } catch {
+  // QR 페이로드 형식
+  //  - 신형: 토큰 ID 문자열만 (12자 hex). 교번·세션·날짜는 Firestore 토큰 문서에서 읽는다.
+  //  - 구형: JSON {t,e,s,d} (배포 전 발급된 QR 호환 — 최대 10분)
+  //  - 과도기: 구형 스냅샷이 신형 렌더러로 그려진 bare UUID (36자)
+  const parsed = parseQrPayload(String(rawText || '').trim());
+  if (!parsed) {
     showResult('error', '❌', '잘못된 QR 코드입니다', '인식할 수 없는 형식입니다.');
     unlockProcessing(PROCESS_LOCK_MS);
     return;
   }
+  const tokenId = parsed.tokenId;
 
-  const { t: tokenId, e: empNo, s: session, d: date } = payload;
-
-  if (!tokenId || !empNo || !session || !date) {
-    showResult('error', '❌', '등록되지 않은 QR입니다', '필수 정보가 누락된 QR 코드입니다.');
-    unlockProcessing(PROCESS_LOCK_MS);
-    return;
-  }
-
-  // 날짜 확인
-  if (date !== today) {
-    showResult('error', '❌', '날짜가 맞지 않는 QR입니다', `이 QR은 ${date}용입니다.`);
+  // 구형 JSON 은 QR 자체에 날짜가 있으므로 Firestore 조회 전 즉시 거부 가능
+  if (parsed.date && parsed.date !== today) {
+    showResult('error', '❌', '날짜가 맞지 않는 QR입니다', `이 QR은 ${parsed.date}용입니다.`);
     unlockProcessing(PROCESS_LOCK_MS);
     return;
   }
 
   // 같은 세션에서 이미 처리한 QR — Firestore 조회 없이 즉시 응답
   if (usedTokenIds.has(tokenId)) {
-    showResult('warning', '⚠️', '이미 출석 처리된 교육생입니다', `교번: ${empNo}`);
+    showResult('warning', '⚠️', '이미 출석 처리된 교육생입니다', usedTokenIds.get(tokenId) || '');
     unlockProcessing(PROCESS_LOCK_MS);
     return;
   }
@@ -300,6 +302,15 @@ async function onScanSuccess(rawText) {
     }
 
     const token = tokenSnap.data();
+    const empNo = token.empNo || parsed.empNo || '';
+    const session = token.session || parsed.session || 'single';
+
+    // 날짜 확인 (신형 QR 은 토큰 문서의 날짜로 판단)
+    if (token.date && token.date !== today) {
+      showResult('error', '❌', '날짜가 맞지 않는 QR입니다', `이 QR은 ${token.date}용입니다.`);
+      unlockProcessing(PROCESS_LOCK_MS);
+      return;
+    }
 
     // 만료 확인
     const expiresAt = token.expiresAt instanceof Timestamp
@@ -314,7 +325,7 @@ async function onScanSuccess(rawText) {
 
     // 이미 처리됨 확인
     if (token.used) {
-      usedTokenIds.add(tokenId);
+      usedTokenIds.set(tokenId, `${token.name}님 (교번: ${token.empNo})`);
       showResult('warning', '⚠️', '이미 출석 처리된 교육생입니다', `${token.name}님 (교번: ${token.empNo})`);
       unlockProcessing(PROCESS_LOCK_MS);
       return;
@@ -342,7 +353,7 @@ async function onScanSuccess(rawText) {
 
     // 옵티미스틱 처리: 검증이 끝났으므로 성공을 즉시 표시하고 저장은 백그라운드로.
     // (체감 속도 = Firestore 왕복 2회 → 1회. 저장 실패 시 아래 catch 에서 오류로 전환)
-    usedTokenIds.add(tokenId);
+    usedTokenIds.set(tokenId, `${name}님 (교번: ${empNo})`);
     const sessionLabel = { single: '', morning: ' (오전)', afternoon: ' (오후)' }[session] || '';
     const statusBadge = status === 'late' ? ' · 지각' : '';
     showResult('success', '✅', `${name}님 출석 완료${sessionLabel}${statusBadge}`, `교번: ${empNo} | ${courseName}`);
@@ -369,6 +380,23 @@ async function onScanSuccess(rawText) {
     showResult('error', '❌', '처리 중 오류가 발생했습니다', String(e?.message || e));
     unlockProcessing(PROCESS_LOCK_MS);
   }
+}
+
+// QR 문자열 → { tokenId, empNo?, session?, date? } | null
+function parseQrPayload(raw) {
+  if (!raw) return null;
+  if (raw[0] === '{') {
+    try {
+      const p = JSON.parse(raw);
+      if (!p || !p.t) return null;
+      return { tokenId: String(p.t), empNo: p.e, session: p.s, date: p.d };
+    } catch { return null; }
+  }
+  // 12자 hex(신형) 또는 36자 UUID(과도기)
+  if (/^[0-9a-f]{12}$/i.test(raw) || /^[0-9a-f-]{36}$/i.test(raw)) {
+    return { tokenId: raw.toLowerCase() };
+  }
+  return null;
 }
 
 function getCurrentSessionKey() {

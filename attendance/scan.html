@@ -112,6 +112,16 @@
       font-size: 0.7rem;
     }
 
+    /* 거리 안내 (전면 카메라는 고정초점이라 너무 가까이 대면 흐려짐) */
+    .scan-hint {
+      text-align: center;
+      font-size: 0.95rem;
+      color: #cbd5e1;
+      margin: 0.7rem 0 0.2rem;
+      line-height: 1.5;
+    }
+    .scan-hint b { color: #fbbf24; }
+
     /* html5-qrcode 오버라이드 */
     #qr-reader { background: #000 !important; border-radius: 16px !important; overflow: hidden; }
     #qr-reader video { width: 100% !important; border-radius: 16px; }
@@ -175,6 +185,9 @@
 
   <!-- QR 스캐너 -->
   <div id="qr-reader"></div>
+  <div class="scan-hint">
+    📱 화면 밝기를 <b>최대</b>로 올리고, 카메라에서 <b>한 뼘(약 30cm)</b> 떨어져 QR을 비춰 주세요
+  </div>
 
   <!-- 스캔 결과 (화면 중앙 오버레이) -->
   <div id="scan-result" class="scan-result">
@@ -195,6 +208,6 @@
 </div>
 
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-<script type="module" src="scan.js?v=8"></script>
+<script type="module" src="scan.js?v=9"></script>
 </body>
 </html>
