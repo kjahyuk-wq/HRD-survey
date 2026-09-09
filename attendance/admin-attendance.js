@@ -15,7 +15,7 @@ import {
 import { exportAttendanceWorkbook } from './admin-attendance-excel.js';
 import {
   TIERS, PENALTY_TABLE, STATUS_META, HOUR_STATUSES, DAY_STATUSES, PERMIT_META, REASON_CODES,
-  computeTier, findLeave, resolveEffective, computePenalties
+  computeTier, findLeave, resolveEffective, computePenalties, hoursBetween, timeOptions
 } from './attendance-rules.js';
 
 // 관리자 세션은 탭이 닫히면 로그아웃되도록 SESSION persistence 사용
@@ -1977,8 +1977,9 @@ function leaveBadgeHtml(eff) {
     const type = STATUS_META[eff.status]?.label || eff.status;
     const permit = PERMIT_META[eff.permit]?.label || '';
     const reason = reasonShortLabel(eff.leave.reasonCode);
-    const cls = eff.permit === 'approved' ? 'approved' : eff.permit === 'unapproved' ? 'unapproved' : 'pending';
-    return `<span class="leave-badge ${cls}" title="허가원 등록됨${eff.leave.memo ? ' — ' + escapeAttr(eff.leave.memo) : ''}">📄 ${escapeHtml(type)}·${escapeHtml(permit)}${reason ? ' · ' + escapeHtml(reason) : ''}</span>`;
+    const cls = eff.permit === 'approved' ? 'approved' : (eff.permit === 'unapproved' || eff.permit === 'none') ? 'unapproved' : 'pending';
+    const time = leaveTimeText(eff.leave);
+    return `<span class="leave-badge ${cls}" title="허가원 등록됨${eff.leave.memo ? ' — ' + escapeAttr(eff.leave.memo) : ''}">📄 ${escapeHtml(type)}·${escapeHtml(permit)}${time ? ' · ' + time : ''}${reason ? ' · ' + escapeHtml(reason) : ''}</span>`;
   }
   if (eff.note) return `<span class="leave-badge info">📄 ${escapeHtml(eff.note)}</span>`;
   return '';
@@ -1991,6 +1992,8 @@ function renderLeavesPanelHtml() {
   const typeOpts = ['absent', 'overnight', 'late', 'leave', 'outing', 'skip']
     .map(k => `<option value="${k}">${STATUS_META[k].label}</option>`).join('');
   const reasonOpts = REASON_CODES.map(([c, l]) => `<option value="${c}">${c}호. ${escapeHtml(l)}</option>`).join('');
+  const timeOpts = '<option value="">—</option>' + timeOptions([currentConfig?.morningStart, currentConfig?.afternoonStart, currentConfig?.afternoonEnd])
+    .map(t => `<option value="${t}">${t}</option>`).join('');
   return `
     <div class="att-panel-section">
       <h4>📄 허가원 등록
@@ -2009,8 +2012,16 @@ function renderLeavesPanelHtml() {
           <label>세션</label>
           <select id="leave-sess"><option value="all">하루 전체</option><option value="morning">오전만</option><option value="afternoon">오후만</option></select>
         </div>
+        <div class="time-group" id="leave-time-group" style="display:none;grid-column:span 2;">
+          <label id="leave-time-label">시각 <span class="hint">10분 단위</span></label>
+          <div style="display:flex;gap:0.4rem;align-items:center;">
+            <select id="leave-time-from" onchange="onLeaveTimeChange()">${timeOpts}</select>
+            <span style="color:#94a3b8;">~</span>
+            <select id="leave-time-to" onchange="onLeaveTimeChange()">${timeOpts}</select>
+          </div>
+        </div>
         <div class="time-group" id="leave-hours-group" style="display:none;">
-          <label>시간 (일당) <span class="hint">1시간 미만은 1시간</span></label>
+          <label>시간 수 (일당) <span class="hint">자동 계산, 수정 가능</span></label>
           <input type="number" id="leave-hours" min="1" step="1" placeholder="예: 2">
         </div>
         <div class="time-group"><label>사유 (제8조③ 각 호)</label><select id="leave-reason">${reasonOpts}</select></div>
@@ -2020,6 +2031,7 @@ function renderLeavesPanelHtml() {
             <option value="pending">심사중 (결재 전)</option>
             <option value="approved">허가</option>
             <option value="unapproved">미허가 (허가원 제출했으나 불허)</option>
+            <option value="none">무단 (허가원 미제출 — 기록만)</option>
           </select>
         </div>
         <div class="time-group" style="grid-column:1/-1;"><label>메모</label><input type="text" id="leave-memo" placeholder="세부 사유, 연락 내용 등"></div>
@@ -2044,11 +2056,55 @@ function renderLeavesPanelHtml() {
     </div>`;
 }
 
-window.onLeaveTypeChange = function() {
+// 세션 시작/종료 시각 (config 기준)
+function sessionBounds() {
+  const start = currentConfig?.morningStart || '09:00';
+  const end = dailySessions === 2 ? (currentConfig?.afternoonEnd || '18:00') : (currentConfig?.afternoonEnd || currentConfig?.morningEnd || '18:00');
+  return { start, end };
+}
+
+window.onLeaveTypeChange = function(keepTimes = false) {
   const t = document.getElementById('leave-type')?.value;
+  const isHour = HOUR_STATUSES.includes(t);
   const g = document.getElementById('leave-hours-group');
-  if (g) g.style.display = HOUR_STATUSES.includes(t) ? 'block' : 'none';
+  const tg = document.getElementById('leave-time-group');
+  if (g) g.style.display = isHour ? 'block' : 'none';
+  if (tg) tg.style.display = isHour ? 'block' : 'none';
+  if (!isHour) return;
+  const label = document.getElementById('leave-time-label');
+  const from = document.getElementById('leave-time-from');
+  const to = document.getElementById('leave-time-to');
+  const { start, end } = sessionBounds();
+  const hints = {
+    late: '지각 — 수업 시작 ~ 도착 예정 시각',
+    leave: '조퇴 — 떠나는 시각 ~ 수업 종료',
+    outing: '외출 — 나가는 시각 ~ 돌아오는 시각',
+    skip: '결강 — 빠지는 수업 시작 ~ 종료',
+  };
+  if (label) label.innerHTML = `${hints[t] || '시각'} <span class="hint">10분 단위</span>`;
+  if (!keepTimes && from && to) {
+    from.value = t === 'late' ? start : '';
+    to.value = t === 'leave' ? end : '';
+    onLeaveTimeChange();
+  }
 };
+
+// 시각 선택 → 시간 수 자동 계산
+window.onLeaveTimeChange = function() {
+  const from = document.getElementById('leave-time-from')?.value;
+  const to = document.getElementById('leave-time-to')?.value;
+  const h = hoursBetween(from, to);
+  const el = document.getElementById('leave-hours');
+  if (el && h != null) el.value = h;
+};
+
+function leaveTimeText(l) {
+  if (!l) return '';
+  if (l.timeFrom && l.timeTo) return `${l.timeFrom}~${l.timeTo}`;
+  if (l.type === 'late' && l.timeTo) return `${l.timeTo} 도착`;
+  if (l.type === 'leave' && l.timeFrom) return `${l.timeFrom} 조퇴`;
+  return l.timeFrom || l.timeTo || '';
+}
 window.onLeaveFromChange = function() {
   const from = document.getElementById('leave-from')?.value;
   const to = document.getElementById('leave-to');
@@ -2075,7 +2131,8 @@ window.resetLeaveForm = function() {
   editingLeaveId = null;
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
   set('leave-empno', ''); set('leave-type', 'absent'); set('leave-from', todayStr); set('leave-to', '');
-  set('leave-sess', 'all'); set('leave-hours', ''); set('leave-reason', '2'); set('leave-decision', 'pending'); set('leave-memo', '');
+  set('leave-sess', 'all'); set('leave-hours', ''); set('leave-time-from', ''); set('leave-time-to', '');
+  set('leave-reason', '2'); set('leave-decision', 'pending'); set('leave-memo', '');
   onLeaveTypeChange();
   const btn = document.getElementById('leave-save-btn'); if (btn) btn.textContent = '허가원 등록';
   const c = document.getElementById('leave-cancel-btn'); if (c) c.style.display = 'none';
@@ -2091,10 +2148,14 @@ window.saveLeave = async function() {
   if (!dateFrom) { setLeaveStatus('시작일을 입력해 주세요.', false); return; }
   if (dateTo < dateFrom) dateTo = dateFrom;
   const sessions = dailySessions === 2 ? (document.getElementById('leave-sess').value || 'all') : 'all';
+  const isHour = HOUR_STATUSES.includes(type);
+  const timeFrom = isHour ? (document.getElementById('leave-time-from').value || '') : '';
+  const timeTo = isHour ? (document.getElementById('leave-time-to').value || '') : '';
+  if (timeFrom && timeTo && timeTo <= timeFrom) { setLeaveStatus('종료 시각이 시작 시각보다 늦어야 합니다.', false); return; }
   const hoursRaw = document.getElementById('leave-hours').value;
-  const hours = HOUR_STATUSES.includes(type) ? Math.max(1, Math.ceil(Number(hoursRaw) || 1)) : null;
+  const hours = isHour ? Math.max(1, Math.ceil(Number(hoursRaw) || hoursBetween(timeFrom, timeTo) || 1)) : null;
   const data = {
-    empNo: String(stu.empNo), name: stu.name, type, dateFrom, dateTo, sessions, hours,
+    empNo: String(stu.empNo), name: stu.name, type, dateFrom, dateTo, sessions, hours, timeFrom, timeTo,
     reasonCode: document.getElementById('leave-reason').value,
     decision: document.getElementById('leave-decision').value,
     memo: document.getElementById('leave-memo').value.trim(),
@@ -2132,9 +2193,10 @@ window.editLeave = function(id) {
   const set = (k, v) => { const el = document.getElementById(k); if (el) el.value = v ?? ''; };
   set('leave-empno', l.empNo); set('leave-type', l.type || 'absent');
   set('leave-from', l.dateFrom || ''); set('leave-to', (l.dateTo && l.dateTo !== l.dateFrom) ? l.dateTo : '');
-  set('leave-sess', l.sessions || 'all'); set('leave-hours', l.hours ?? '');
+  set('leave-sess', l.sessions || 'all');
   set('leave-reason', l.reasonCode || '7'); set('leave-decision', l.decision || 'pending'); set('leave-memo', l.memo || '');
-  onLeaveTypeChange();
+  onLeaveTypeChange(true);
+  set('leave-time-from', l.timeFrom || ''); set('leave-time-to', l.timeTo || ''); set('leave-hours', l.hours ?? '');
   document.getElementById('leave-save-btn').textContent = '수정 저장';
   document.getElementById('leave-cancel-btn').style.display = '';
   document.getElementById('leave-empno')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -2157,7 +2219,7 @@ window.deleteLeave = async function(id) {
 };
 
 function decisionChip(d) {
-  const map = { approved: ['허가', 'approved'], unapproved: ['미허가', 'unapproved'], pending: ['심사중', 'pending'] };
+  const map = { approved: ['허가', 'approved'], unapproved: ['미허가', 'unapproved'], none: ['무단', 'unapproved'], pending: ['심사중', 'pending'] };
   const [l, c] = map[d] || ['심사중', 'pending'];
   return `<span class="leave-badge ${c}" style="display:inline-block;margin:0;">${l}</span>`;
 }
@@ -2186,7 +2248,7 @@ function renderLeaveList() {
       <td>${escapeHtml(l.name || '')}</td>
       <td>${escapeHtml(STATUS_META[l.type]?.label || l.type || '')}</td>
       <td style="white-space:nowrap;">${period}${sessLabel[l.sessions] || ''}</td>
-      <td>${l.hours != null ? l.hours + 'h' : '-'}</td>
+      <td style="white-space:nowrap;">${leaveTimeText(l) ? escapeHtml(leaveTimeText(l)) + '<br>' : ''}${l.hours != null ? `<span class="hint" style="margin:0;">${l.hours}h</span>` : (leaveTimeText(l) ? '' : '-')}</td>
       <td style="font-size:0.78rem;">${l.reasonCode ? l.reasonCode + '호 ' : ''}${escapeHtml(reasonShortLabel(l.reasonCode))}</td>
       <td>${decisionChip(l.decision)}</td>
       <td style="font-size:0.78rem;color:#64748b;max-width:200px;">${escapeHtml(l.memo || '')}</td>

@@ -89,11 +89,30 @@ export function findLeave(leaves, empNo, date, session) {
   return best;
 }
 
-// 허가원 decision → permit 값
+// 허가원 decision → permit 값 ('none' = 무단: 허가원 없이 결근·지각 등을 기록만 해 둔 경우)
 export function leavePermit(leave) {
   const d = leave?.decision;
-  if (d === 'approved' || d === 'unapproved' || d === 'pending') return d;
+  if (d === 'approved' || d === 'unapproved' || d === 'pending' || d === 'none') return d;
   return 'pending';
+}
+
+// 'HH:MM' ~ 'HH:MM' 사이 시간 수 (1시간 미만 → 1, 별표1 비고1). 값이 없거나 역순이면 null
+export function hoursBetween(from, to) {
+  if (!from || !to) return null;
+  const [fh, fm] = from.split(':').map(Number);
+  const [th, tm] = to.split(':').map(Number);
+  if (![fh, fm, th, tm].every(Number.isFinite)) return null;
+  const diff = (th * 60 + tm) - (fh * 60 + fm);
+  if (diff <= 0) return null;
+  return Math.max(1, Math.ceil(diff / 60));
+}
+
+// 09:00 ~ 18:00, 10분 단위 시각 목록 (필요 시 extra 시각 포함)
+export function timeOptions(extra = []) {
+  const set = new Set();
+  for (let m = 9 * 60; m <= 18 * 60; m += 10) set.add(`${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`);
+  extra.filter(Boolean).forEach(t => set.add(t));
+  return [...set].sort();
 }
 
 // ── 유효 근태 계산 (한 학생·날짜·세션) ─────────────────────
