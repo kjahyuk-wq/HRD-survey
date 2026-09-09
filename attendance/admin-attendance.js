@@ -1977,6 +1977,12 @@ function reasonShortLabel(code) {
   const hit = REASON_CODES.find(([c]) => c === String(code || ''));
   return hit ? hit[1].split(' (')[0] : '';
 }
+// 사유 '무단' 선택 시 결정도 '무단'으로 자동 설정
+window.onLeaveReasonChange = function() {
+  const r = document.getElementById('leave-reason')?.value;
+  const d = document.getElementById('leave-decision');
+  if (r === '0' && d) d.value = 'none';
+};
 
 // 출석 현황 표의 상태 셀 아래 배지
 function leaveBadgeHtml(eff) {
@@ -1984,7 +1990,7 @@ function leaveBadgeHtml(eff) {
   if (eff.source === 'leave' && eff.leave) {
     const type = STATUS_META[eff.status]?.label || eff.status;
     const permit = PERMIT_META[eff.permit]?.label || '';
-    const reason = reasonShortLabel(eff.leave.reasonCode);
+    const reason = String(eff.leave.reasonCode) === '0' ? '' : reasonShortLabel(eff.leave.reasonCode);
     const cls = eff.permit === 'approved' ? 'approved' : (eff.permit === 'unapproved' || eff.permit === 'none') ? 'unapproved' : 'pending';
     const time = leaveTimeText(eff.leave);
     return `<span class="leave-badge ${cls}" title="허가원 등록됨${eff.leave.memo ? ' — ' + escapeAttr(eff.leave.memo) : ''}">📄 ${escapeHtml(type)}·${escapeHtml(permit)}${time ? ' · ' + time : ''}${reason ? ' · ' + escapeHtml(reason) : ''}</span>`;
@@ -1999,7 +2005,7 @@ function renderLeavesPanelHtml() {
     .map(s => `<option value="${escapeAttr(String(s.empNo))}">${escapeHtml(s.name)}</option>`).join('');
   const typeOpts = ['absent', 'overnight', 'late', 'leave', 'outing', 'skip']
     .map(k => `<option value="${k}">${STATUS_META[k].label}</option>`).join('');
-  const reasonOpts = REASON_CODES.map(([c, l]) => `<option value="${c}">${c}호. ${escapeHtml(l)}</option>`).join('');
+  const reasonOpts = REASON_CODES.map(([c, l]) => `<option value="${c}">${c === '0' ? '' : c + '호. '}${escapeHtml(l)}</option>`).join('');
   const timeOpts = '<option value="">—</option>' + timeOptions([currentConfig?.morningStart, currentConfig?.afternoonStart, currentConfig?.afternoonEnd], lunchWindow())
     .map(t => `<option value="${t}">${t}</option>`).join('');
   return `
@@ -2032,7 +2038,7 @@ function renderLeavesPanelHtml() {
           <label>시간 수 (일당) <span class="hint">자동 계산, 수정 가능</span></label>
           <input type="number" id="leave-hours" min="1" step="1" placeholder="예: 2">
         </div>
-        <div class="time-group"><label>사유 (제8조③ 각 호)</label><select id="leave-reason">${reasonOpts}</select></div>
+        <div class="time-group"><label>사유 (제8조③ 각 호)</label><select id="leave-reason" onchange="onLeaveReasonChange()">${reasonOpts}</select></div>
         <div class="time-group">
           <label>결정</label>
           <select id="leave-decision">
@@ -2257,7 +2263,7 @@ function renderLeaveList() {
       <td>${escapeHtml(STATUS_META[l.type]?.label || l.type || '')}</td>
       <td style="white-space:nowrap;">${period}${sessLabel[l.sessions] || ''}</td>
       <td style="white-space:nowrap;">${leaveTimeText(l) ? escapeHtml(leaveTimeText(l)) + '<br>' : ''}${l.hours != null ? `<span class="hint" style="margin:0;">${l.hours}h</span>` : (leaveTimeText(l) ? '' : '-')}</td>
-      <td style="font-size:0.78rem;">${l.reasonCode ? l.reasonCode + '호 ' : ''}${escapeHtml(reasonShortLabel(l.reasonCode))}</td>
+      <td style="font-size:0.78rem;">${l.reasonCode && l.reasonCode !== '0' ? l.reasonCode + '호 ' : ''}${escapeHtml(reasonShortLabel(l.reasonCode))}</td>
       <td>${decisionChip(l.decision)}</td>
       <td style="font-size:0.78rem;color:#64748b;max-width:200px;">${escapeHtml(l.memo || '')}</td>
       <td style="white-space:nowrap;">
