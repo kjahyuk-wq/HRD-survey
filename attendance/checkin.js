@@ -47,7 +47,8 @@ function showScreen(id) {
 const MY_ATT_SCREENS = new Set(['screen-qr', 'screen-already', 'screen-no-class', 'screen-no-session']);
 const STATUS_LABEL = {
   present: ['출석', 'ok'], late: ['지각', 'warn'], leave: ['조퇴', 'warn'],
-  outing: ['외출', 'warn'], absent: ['미출석', 'bad'],
+  outing: ['외출', 'warn'], skip: ['결강', 'warn'], overnight: ['외박', 'bad'],
+  absent: ['미출석', 'bad'],
 };
 let myAttArgs = null;
 

@@ -62,6 +62,31 @@
     .edit-status:focus { outline: none; border-color: var(--dj-blue); }
     .absent-row td { color: #dc2626; }
     .absent-row td:first-child { font-weight: 600; }
+    /* 허가원이 있어 연락이 필요 없는 행 */
+    tr.leave-row td { color: #166534; }
+    .leave-badge {
+      display: block; margin-top: 0.25rem; font-size: 0.68rem; font-weight: 600;
+      padding: 0.1rem 0.4rem; border-radius: 6px; white-space: nowrap; width: fit-content;
+    }
+    .leave-badge.approved { background: #dcfce7; color: #166534; }
+    .leave-badge.unapproved { background: #fee2e2; color: #991b1b; }
+    .leave-badge.pending { background: #fef3c7; color: #92400e; }
+    .leave-badge.info { background: #e0f2fe; color: #075985; }
+    .edit-hours { width: 52px; padding: 0.28rem 0.3rem; border: 1.5px solid #cbd5e1; border-radius: 6px; font-size: 0.82rem; box-sizing: border-box; }
+    .edit-hours:focus { outline: none; border-color: var(--dj-blue); }
+    .edit-hours:disabled, .edit-status:disabled { background: #f1f5f9; color: #94a3b8; }
+    .filter-chip.good b { color: #16a34a; }
+    .filter-chip.good.active { background: #16a34a; border-color: #16a34a; color: #fff; }
+    .filter-chip.good.active b { color: #fff; }
+    /* 허가원 / 감점 패널 */
+    .leave-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.7rem; }
+    .time-group select { width: 100%; padding: 0.55rem 0.8rem; border: 1.5px solid #cbd5e1; border-radius: 8px; font-size: 0.92rem; background: #fff; }
+    .time-group select:focus { outline: none; border-color: var(--dj-blue); }
+    .hint { font-weight: 400; color: #94a3b8; font-size: 0.76rem; margin-left: 0.3rem; }
+    .penalty-row { cursor: pointer; }
+    .penalty-row.ok td { color: #94a3b8; }
+    .penalty-total { font-weight: 700; color: #1e3a8a; white-space: nowrap; }
+    .penalty-warn { color: #dc2626; font-size: 0.75rem; }
     tr.row-changed td { background: #fffbeb !important; }
     .edit-permit { min-width: 64px; }
     .edit-permit:disabled { opacity: 0.45; background: #f1f5f9; cursor: not-allowed; }
@@ -201,16 +226,21 @@
             <button class="panel-toggle-btn edit-toggle" id="config-toggle-rec" onclick="toggleRecordsPanel('config')">출석 설정</button>
             <button class="panel-toggle-btn stu-toggle" id="students-toggle-rec" onclick="toggleRecordsPanel('students')">학생 명단</button>
             <button class="panel-toggle-btn stu-toggle" id="phones-toggle-rec" onclick="toggleRecordsPanel('phones')">📞 연락처</button>
+            <button class="panel-toggle-btn stu-toggle" id="leaves-toggle-rec" onclick="toggleRecordsPanel('leaves')">📄 허가원</button>
+            <button class="panel-toggle-btn stu-toggle" id="penalty-toggle-rec" onclick="toggleRecordsPanel('penalty')">⚖️ 근태·감점</button>
           </div>
           <div class="att-panel" id="config-panel-rec" style="display:none;"></div>
           <div class="att-panel" id="students-panel-rec" style="display:none;"></div>
           <div class="att-panel" id="phones-panel-rec" style="display:none;"></div>
+          <div class="att-panel" id="leaves-panel-rec" style="display:none;"></div>
+          <div class="att-panel" id="penalty-panel-rec" style="display:none;"></div>
         </div>
 
         <div class="rate-summary" id="rate-summary" style="display:none;">
           <div class="rate-card"><div class="num" id="rate-total">0</div><div class="label">전체 교육생</div></div>
           <div class="rate-card"><div class="num" id="rate-present">0</div><div class="label">출석</div></div>
-          <div class="rate-card highlight" onclick="jumpToAbsent()" style="cursor:pointer;" title="클릭하면 미출석 명단만 표시합니다"><div class="num" id="rate-absent">0</div><div class="label">미출석 ▼</div></div>
+          <div class="rate-card highlight" onclick="jumpToAbsent()" style="cursor:pointer;" title="클릭하면 허가원 없이 미출석인 교육생(연락 필요)만 표시합니다"><div class="num" id="rate-absent">0</div><div class="label">미출석 ▼</div></div>
+          <div class="rate-card" title="선택한 날짜에 허가원이 등록된 교육생 수"><div class="num" id="rate-leaves" style="color:#16a34a;">0</div><div class="label">📄 허가원</div></div>
           <div class="rate-card"><div class="num" id="rate-pct">0%</div><div class="label">출석률</div></div>
         </div>
 

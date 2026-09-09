@@ -183,8 +183,12 @@ function recTime(rec) {
 //   - 그 외 혼합                            → absent (TODO: 조퇴 UI 추가 시 분기 보강)
 function collapseDayStatus(sessRecords, sessionCount) {
   const recs = sessRecords.filter(Boolean);
-  const allAbsent = recs.length === 0 || recs.every(r => (r.status || 'present') === 'absent');
-  if (allAbsent) return { status: 'absent', timeStr: '' };
+  const isAbs = r => ['absent', 'overnight'].includes(r.status || 'present');
+  const allAbsent = recs.length === 0 || recs.every(isAbs);
+  if (allAbsent) {
+    const ab = recs.find(isAbs);
+    return { status: 'absent', timeStr: '', permit: ab?.permit || '' };
+  }
 
   const leaveRec = recs.find(r => r.status === 'leave');
   if (leaveRec) {
@@ -200,6 +204,12 @@ function collapseDayStatus(sessRecords, sessionCount) {
   if (outRec) {
     const arr = recs.find(r => (r.status || 'present') === 'present') || outRec;
     return { status: 'outing', timeStr: recTime(arr), permit: outRec.permit || '' };
+  }
+
+  const skipRec = recs.find(r => r.status === 'skip');
+  if (skipRec) {
+    const arr = recs.find(r => (r.status || 'present') === 'present') || skipRec;
+    return { status: 'skip', timeStr: recTime(arr), permit: skipRec.permit || '' };
   }
 
   const allPresent =
@@ -218,7 +228,7 @@ function aggregateStudent(stu, dates, sessionKeys, attendanceIndex) {
     );
     return { date: d, ...collapseDayStatus(sessRecs, sessionKeys.length) };
   });
-  const c = { present: 0, late: 0, leave: 0, absent: 0, outing: 0 };
+  const c = { present: 0, late: 0, leave: 0, absent: 0, outing: 0, skip: 0 };
   days.forEach(d => { c[d.status] = (c[d.status] || 0) + 1; });
   return { days, counts: c };
 }
@@ -228,18 +238,21 @@ function permitSuffix(days, status) {
   const sel = (days || []).filter(d => d.status === status);
   const a = sel.filter(d => d.permit === 'approved').length;
   const u = sel.filter(d => d.permit === 'unapproved').length;
+  const n = sel.filter(d => d.permit === 'none').length;
   const parts = [];
   if (a) parts.push(`허가 ${a}`);
   if (u) parts.push(`미허가 ${u}`);
+  if (n) parts.push(`무단 ${n}`);
   return parts.length ? `(${parts.join('·')})` : '';
 }
 
 function buildRemark(c, days) {
   const parts = [];
-  if (c.absent) parts.push(`결석 ${c.absent}회`);
+  if (c.absent) parts.push(`결석 ${c.absent}회${permitSuffix(days, 'absent')}`);
   if (c.leave)  parts.push(`조퇴 ${c.leave}회${permitSuffix(days, 'leave')}`);
   if (c.late)   parts.push(`지각 ${c.late}회${permitSuffix(days, 'late')}`);
   if (c.outing) parts.push(`외출 ${c.outing}회${permitSuffix(days, 'outing')}`);
+  if (c.skip)   parts.push(`결강 ${c.skip}회${permitSuffix(days, 'skip')}`);
   return parts.join(', ');
 }
 
@@ -417,7 +430,7 @@ function buildWeekSheet(ctx, weekIdx, weekDates) {
   pushRow(6); // spacer
 
   // Row 3~4: 주차 단위 KPI
-  let weekPresent = 0, weekLate = 0, weekLeave = 0, weekAbsent = 0;
+  let weekPresent = 0, weekLate = 0, weekLeave = 0, weekAbsent = 0, weekOther = 0;
   const studentWeekDays = students.map(stu => {
     const days = weekDates.map(d => {
       const sessRecs = sessionKeys.map(s =>
@@ -429,12 +442,13 @@ function buildWeekSheet(ctx, weekIdx, weekDates) {
       if (d.status === 'present') weekPresent++;
       else if (d.status === 'late') weekLate++;
       else if (d.status === 'leave') weekLeave++;
+      else if (d.status === 'outing' || d.status === 'skip') weekOther++;
       else weekAbsent++;
     });
     return days;
   });
   const weekTotal = students.length * N;
-  const weekRate = weekTotal > 0 ? (weekPresent + weekLate + weekLeave) / weekTotal : 0;
+  const weekRate = weekTotal > 0 ? (weekPresent + weekLate + weekLeave + weekOther) / weekTotal : 0;
 
   const R_KPI_LBL = pushRow(22);
   const R_KPI_VAL = pushRow(26);
@@ -528,11 +542,12 @@ function buildWeekSheet(ctx, weekIdx, weekDates) {
       const day = days[i];
       let statusStyle = base;
       let statusLabel = '출석';
-      const pf = day.permit === 'approved' ? '(허가)' : day.permit === 'unapproved' ? '(미허가)' : '';
+      const pf = day.permit === 'approved' ? '(허가)' : day.permit === 'unapproved' ? '(미허가)' : day.permit === 'none' ? '(무단)' : '';
       if (day.status === 'late')   { statusStyle = S.statusLate;   statusLabel = '지각' + pf; attended++; }
       else if (day.status === 'leave') { statusStyle = S.statusLeave; statusLabel = '조퇴' + pf; attended++; }
       else if (day.status === 'outing') { statusStyle = S.statusLate; statusLabel = '외출' + pf; attended++; }
-      else if (day.status === 'absent') { statusStyle = S.statusAbsent; statusLabel = '결석'; }
+      else if (day.status === 'skip') { statusStyle = S.statusLate; statusLabel = '결강' + pf; attended++; }
+      else if (day.status === 'absent') { statusStyle = S.statusAbsent; statusLabel = '결석' + pf; }
       else { attended++; }
       setCell(ws, ref(r, cStatus), statusLabel, statusStyle);
       setCell(ws, ref(r, cTime), day.timeStr, day.timeStr ? base : (day.status === 'absent' ? base : base));

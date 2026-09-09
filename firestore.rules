@@ -104,6 +104,12 @@ service cloud.firestore {
         allow read: if isAuthenticated();
         allow create, update, delete: if isAdmin();
       }
+
+      // 허가원(사전 결석·지각·조퇴·외출·결강 신청) 대장: 관리자 전용.
+      // 교육생 화면·키오스크는 읽지 않는다 (출석 체크 흐름과 무관).
+      match /leave_requests/{leaveId} {
+        allow read, create, update, delete: if isAdmin();
+      }
     }
 
     // ───────────── QR 토큰 (top-level) ─────────────

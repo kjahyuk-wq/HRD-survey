@@ -13,6 +13,10 @@ import {
   escapeHtml, escapeAttr, formatTime, formatFullDate, formatShortDate, getBuiltinHolidays, toDateStr
 } from './utils.js';
 import { exportAttendanceWorkbook } from './admin-attendance-excel.js';
+import {
+  TIERS, PENALTY_TABLE, STATUS_META, HOUR_STATUSES, DAY_STATUSES, PERMIT_META, REASON_CODES,
+  computeTier, findLeave, resolveEffective, computePenalties
+} from './attendance-rules.js';
 
 // 관리자 세션은 탭이 닫히면 로그아웃되도록 SESSION persistence 사용
 setPersistence(auth, browserSessionPersistence).catch(() => {});
@@ -27,6 +31,8 @@ let scheduleDates = [];
 let customHolidays = [];
 let excludedHolidays = [];
 let dailySessions = 1;
+let allLeaves = [];          // 허가원 대장 (courses/{id}/leave_requests)
+let editingLeaveId = null;   // 허가원 수정 중인 문서 id
 const todayStr = toDateStr(new Date());
 
 // ── 관리자 인증 ──────────────────────────────
@@ -365,7 +371,7 @@ window.togglePanel = async function(courseId, idx, mode, courseName) {
 
 // ── 출석 현황 화면 하단의 출석 설정 / 학생 명단 패널 ──────────
 // togglePanel 과 달리 현재 과정 컨텍스트(출석 기록·날짜 탭)를 초기화하지 않는다.
-const RECORDS_PANEL_MODES = ['config', 'students', 'phones'];
+const RECORDS_PANEL_MODES = ['config', 'students', 'phones', 'leaves', 'penalty'];
 window.toggleRecordsPanel = async function(mode) {
   const panel = document.getElementById(`${mode}-panel-rec`);
   const btn = document.getElementById(`${mode}-toggle-rec`);
@@ -392,6 +398,13 @@ window.toggleRecordsPanel = async function(mode) {
     panel.innerHTML = renderStudentsPanelHtml();
     initDropzone();
     await loadAttendanceStudents();
+  } else if (mode === 'leaves') {
+    panel.innerHTML = renderLeavesPanelHtml();
+    await loadLeaves();
+    renderLeaveList();
+  } else if (mode === 'penalty') {
+    panel.innerHTML = renderPenaltyPanelHtml();
+    renderPenaltyTable();
   } else {
     panel.innerHTML = renderPhonesPanelHtml();
     await refreshPhoneKeyStatus();
@@ -631,7 +644,7 @@ window.enterRecords = async function(courseId, courseName) {
   const tools = document.getElementById('records-tools');
   if (tools) {
     tools.style.display = 'block';
-    ['config', 'students', 'phones'].forEach(m => {
+    RECORDS_PANEL_MODES.forEach(m => {
       const p = document.getElementById(`${m}-panel-rec`);
       if (p) { p.style.display = 'none'; p.innerHTML = ''; }
       document.getElementById(`${m}-toggle-rec`)?.classList.remove('active');
@@ -905,6 +918,7 @@ window.loadAttendanceRecords = async function() {
   try {
     const snap = await getDocs(collection(db, 'courses', currentCourseId, 'attendance'));
     allAttendance = snap.docs.map(d => ({ ...d.data(), _id: d.id }));
+    await loadLeaves();
     rebuildAttendanceIndex();
     renderDateTabBar();
     updateSummary();
@@ -974,59 +988,60 @@ function renderAttendanceTable(date) {
 
   const sessions = dailySessions === 2 ? ['morning', 'afternoon'] : ['single'];
 
+  const sessHead = pfx => `<th>${pfx}시각</th><th>${pfx}상태</th><th>${pfx}허가</th><th style="width:52px" title="시간 단위 근태(지각·조퇴·외출·결강)의 시간 수 — 감점 산정용">시간</th>`;
   if (dailySessions === 2) {
     thead.innerHTML = `<tr>
       <th style="width:72px">교번</th><th>이름</th>
-      <th>오전 시각</th><th>오전 상태</th><th>오전 허가</th>
-      <th>오후 시각</th><th>오후 상태</th><th>오후 허가</th>
+      ${sessHead('오전 ')}${sessHead('오후 ')}
       <th style="width:56px">저장</th>
     </tr>`;
   } else {
     thead.innerHTML = `<tr>
       <th style="width:72px">교번</th><th>이름</th>
-      <th>출석 시각</th><th>상태</th><th>허가</th>
+      ${sessHead('')}
       <th style="width:56px">저장</th>
     </tr>`;
   }
 
   const statusOpts = [
-    ['absent', '미출석'], ['present', '출석'], ['late', '지각'], ['leave', '조퇴'], ['outing', '외출']
+    ['absent', '미출석/결석'], ['present', '출석'], ['late', '지각'], ['leave', '조퇴'],
+    ['outing', '외출'], ['skip', '결강'], ['overnight', '외박']
   ];
   const permitOpts = [
-    ['', '—'], ['approved', '허가'], ['unapproved', '미허가']
+    ['', '—'], ['approved', '허가'], ['unapproved', '미허가'], ['none', '무단'], ['pending', '심사중']
   ];
 
   tbody.innerHTML = students.map(stu => {
+    let rowHasLeave = false;
     const cells = sessions.map(sess => {
-      const rec = attendanceIndex.get(`${stu.empNo}_${date}_${sess}`);
-      let timeVal = '', statusVal = 'absent', permitVal = '';
-      if (rec) {
-        if (rec.manual) {
-          timeVal = rec.manualTime || '';
-          statusVal = rec.status || 'absent';
-        } else {
-          timeVal = rec.checkedAt ? formatTime(rec.checkedAt) : '';
-          statusVal = rec.status || 'present';
-        }
-        permitVal = rec.permit || '';
-      }
       const key = `${stu.empNo}_${date}_${sess}`;
+      const rec = attendanceIndex.get(key);
+      const leave = findLeave(allLeaves, stu.empNo, date, sess);
+      if (leave) rowHasLeave = true;
+      // 유효 근태: 관리자 수동 기록 > 허가원 > QR 기록 > 없음
+      const eff = resolveEffective({ rec, leave, date, today: todayStr });
+      let timeVal = '';
+      if (rec) timeVal = rec.manual ? (rec.manualTime || '') : (rec.checkedAt ? formatTime(rec.checkedAt) : '');
+      const statusVal = eff.status || 'absent';
+      // 허가 구분은 출석을 제외한 모든 상태에 기록 (결석도 허가/미허가/무단 구분 — 별표1)
+      const permitNA = statusVal === 'present';
+      const permitVal = permitNA ? '' : (eff.permit || '');
+      const hoursNA = !HOUR_STATUSES.includes(statusVal);
+      const hoursVal = hoursNA || eff.hours == null ? '' : eff.hours;
       const opts = statusOpts.map(([v, l]) =>
         `<option value="${v}"${statusVal === v ? ' selected' : ''}>${l}</option>`
       ).join('');
-      // 허가/미허가는 지각·조퇴·외출에만 해당 (출석·미출석은 비활성)
-      const permitNA = statusVal === 'absent' || statusVal === 'present';
-      if (permitNA) permitVal = '';
       const popts = permitOpts.map(([v, l]) =>
         `<option value="${v}"${permitVal === v ? ' selected' : ''}>${l}</option>`
       ).join('');
       return `
         <td><input type="time" id="time_${key}" value="${timeVal}" class="edit-time" onchange="markRowChanged('${stu.empNo}')"></td>
-        <td><select id="status_${key}" class="edit-status" onchange="onAttStatusChange('${stu.empNo}','${key}')">${opts}</select></td>
-        <td><select id="permit_${key}" class="edit-status edit-permit"${permitNA ? ' disabled' : ''} onchange="markRowChanged('${stu.empNo}')">${popts}</select></td>`;
+        <td><select id="status_${key}" class="edit-status" onchange="onAttStatusChange('${stu.empNo}','${key}')">${opts}</select>${leaveBadgeHtml(eff)}</td>
+        <td><select id="permit_${key}" class="edit-status edit-permit"${permitNA ? ' disabled' : ''} onchange="markRowChanged('${stu.empNo}')">${popts}</select></td>
+        <td><input type="number" min="1" step="1" id="hours_${key}" value="${hoursVal}" class="edit-hours" placeholder="h"${hoursNA ? ' disabled' : ''} onchange="markRowChanged('${stu.empNo}')"></td>`;
     }).join('');
 
-    return `<tr id="row_${stu.empNo}" data-empno="${escapeHtml(String(stu.empNo))}" data-name="${escapeHtml(stu.name)}" data-date="${date}">
+    return `<tr id="row_${stu.empNo}" data-empno="${escapeHtml(String(stu.empNo))}" data-name="${escapeHtml(stu.name)}" data-date="${date}" data-leave="${rowHasLeave ? 1 : 0}">
       <td>${escapeHtml(String(stu.empNo))}</td>
       <td>${escapeHtml(stu.name)}${phoneChipHtml(stu.empNo)}</td>
       ${cells}
@@ -1354,9 +1369,10 @@ window.deleteAllPhones = async function() {
 let attStatusFilter = 'all';
 let attSearchQuery = '';
 const ATT_FILTER_CHIPS = [
-  ['all', '전체'], ['absent', '미출석'], ['present', '출석'],
-  ['late', '지각'], ['leave', '조퇴'], ['outing', '외출']
+  ['all', '전체'], ['needcall', '📞 연락 필요'], ['absent', '미출석'], ['present', '출석'],
+  ['late', '지각'], ['leave', '조퇴'], ['outing', '외출'], ['skip', '결강'], ['leavereq', '📄 허가원']
 ];
+const ATT_STATUS_KEYS = ['absent', 'present', 'late', 'leave', 'outing', 'skip'];
 
 function attRows() {
   return [...document.querySelectorAll('#att-tbody tr[data-empno]')];
@@ -1364,18 +1380,33 @@ function attRows() {
 function rowStatuses(row) {
   return [...row.querySelectorAll('select.edit-status:not(.edit-permit)')].map(s => s.value);
 }
+// 연락 필요 = 결석·외박 상태인데 허가 구분(허가원)이 전혀 없는 세션이 하나라도 있는 행
+function rowFlags(row) {
+  const sels = [...row.querySelectorAll('select.edit-status:not(.edit-permit)')];
+  const needcall = sels.some(s => {
+    if (!DAY_STATUSES.includes(s.value)) return false;
+    const p = document.getElementById(`permit_${s.id.slice('status_'.length)}`);
+    return !p || !p.value;
+  });
+  return { needcall, leavereq: row.dataset.leave === '1' };
+}
 
 function updateAttChips() {
   const rows = attRows();
-  const counts = { all: rows.length, absent: 0, present: 0, late: 0, leave: 0, outing: 0 };
+  const counts = { all: rows.length, needcall: 0, leavereq: 0 };
+  ATT_STATUS_KEYS.forEach(k => { counts[k] = 0; });
   rows.forEach(row => {
-    const sts = new Set(rowStatuses(row));
-    for (const k of ['absent', 'present', 'late', 'leave', 'outing'])
-      if (sts.has(k)) counts[k]++;
-    row.classList.toggle('absent-row', rowStatuses(row).every(s => s === 'absent'));
+    const sts = rowStatuses(row);
+    const set = new Set(sts.map(s => s === 'overnight' ? 'absent' : s));
+    for (const k of ATT_STATUS_KEYS) if (set.has(k)) counts[k]++;
+    const f = rowFlags(row);
+    if (f.needcall) counts.needcall++;
+    if (f.leavereq) counts.leavereq++;
+    row.classList.toggle('absent-row', sts.every(s => DAY_STATUSES.includes(s)));
+    row.classList.toggle('leave-row', f.leavereq && !f.needcall);
   });
   document.getElementById('att-status-chips').innerHTML = ATT_FILTER_CHIPS.map(([k, l]) =>
-    `<button class="filter-chip${k === attStatusFilter ? ' active' : ''}${k === 'absent' ? ' danger' : ''}"
+    `<button class="filter-chip${k === attStatusFilter ? ' active' : ''}${k === 'absent' || k === 'needcall' ? ' danger' : ''}${k === 'leavereq' ? ' good' : ''}"
       onclick="setAttStatusFilter('${k}')">${l} <b>${counts[k]}</b></button>`
   ).join('');
 }
@@ -1396,7 +1427,11 @@ window.applyAttFilter = function() {
   let visible = 0;
   attRows().forEach(row => {
     const matchQ = !q || String(row.dataset.empno).includes(q) || row.dataset.name.includes(q);
-    const matchS = attStatusFilter === 'all' || rowStatuses(row).includes(attStatusFilter);
+    let matchS;
+    if (attStatusFilter === 'all') matchS = true;
+    else if (attStatusFilter === 'needcall' || attStatusFilter === 'leavereq') matchS = rowFlags(row)[attStatusFilter];
+    else if (attStatusFilter === 'absent') matchS = rowStatuses(row).some(s => DAY_STATUSES.includes(s));
+    else matchS = rowStatuses(row).includes(attStatusFilter);
     const show = matchQ && matchS;
     row.style.display = show ? '' : 'none';
     if (show) visible++;
@@ -1409,19 +1444,26 @@ window.applyAttFilter = function() {
 // 요약 카드 "미출석" 클릭 → 미출석 필터로 바로 이동
 window.jumpToAbsent = function() {
   if (!currentDateTab) return;
-  attStatusFilter = 'absent';
+  attStatusFilter = 'needcall';
   applyAttFilter();
   document.getElementById('records-card')?.scrollIntoView({ behavior: 'smooth' });
 };
 
 // 상태 변경 시: 지각·조퇴·외출일 때만 허가 선택 활성화
+// 상태 변경 시: 출석이면 허가 구분 비활성, 시간 단위 근태(지각·조퇴·외출·결강)만 시간 입력 활성
 window.onAttStatusChange = function(empNo, key) {
   const st = document.getElementById(`status_${key}`)?.value;
   const p = document.getElementById(`permit_${key}`);
+  const h = document.getElementById(`hours_${key}`);
   if (p) {
-    const na = st === 'absent' || st === 'present';
+    const na = st === 'present';
     p.disabled = na;
     if (na) p.value = '';
+  }
+  if (h) {
+    const na = !HOUR_STATUSES.includes(st);
+    h.disabled = na;
+    if (na) h.value = '';
   }
   markRowChanged(empNo);
 };
@@ -1454,14 +1496,16 @@ window.saveStudentManual = async function(btnEl) {
       const manualTime = document.getElementById(`time_${key}`)?.value || '';
       const status = document.getElementById(`status_${key}`)?.value || 'absent';
       const permit = document.getElementById(`permit_${key}`)?.value || '';
+      const hoursRaw = document.getElementById(`hours_${key}`)?.value;
+      const hours = HOUR_STATUSES.includes(status) && hoursRaw ? Math.max(1, Math.ceil(Number(hoursRaw))) : null;
       const docId = `manual_${empNo}_${date}_${sess}`;
 
       await setDoc(doc(db, 'courses', currentCourseId, 'attendance', docId), {
-        empNo, name, date, session: sess, status, manualTime, permit,
+        empNo, name, date, session: sess, status, manualTime, permit, hours,
         manual: true, courseId: currentCourseId, updatedAt: serverTimestamp()
       });
 
-      const newRec = { empNo, name, date, session: sess, status, manualTime, permit, manual: true, courseId: currentCourseId, _id: docId };
+      const newRec = { empNo, name, date, session: sess, status, manualTime, permit, hours, manual: true, courseId: currentCourseId, _id: docId };
       const idx = allAttendance.findIndex(a => a._id === docId);
       if (idx >= 0) allAttendance[idx] = newRec;
       else allAttendance.push(newRec);
@@ -1520,6 +1564,18 @@ function updateSummary() {
   document.getElementById('rate-present').textContent = presentCount;
   document.getElementById('rate-absent').textContent = absentCount;
   document.getElementById('rate-pct').textContent = `${pct}%`;
+
+  // 허가원 — 선택한 날짜에 허가원이 등록된 교육생 수 (날짜 미선택 시 전체 건수)
+  const leavesEl = document.getElementById('rate-leaves');
+  if (leavesEl) {
+    if (currentDateTab) {
+      leavesEl.textContent = allStudents.filter(stu =>
+        sessions.some(sess => findLeave(allLeaves, stu.empNo, currentDateTab, sess))
+      ).length;
+    } else {
+      leavesEl.textContent = allLeaves.length;
+    }
+  }
 }
 
 // ── 엑셀 다운로드 ──────────────────────────────
@@ -1891,4 +1947,431 @@ window.clearAttStudentFile = function(ev) {
   document.getElementById('att-stu-dropzone')?.classList.remove('has-file');
   const f = document.getElementById('att-stu-dz-filename');
   if (f) f.textContent = '';
+};
+
+
+// ═══════════════════════════════════════════════════════════════
+// 허가원 대장 (courses/{courseId}/leave_requests) — 학칙 제8조③
+// 사전에 등록해 두면 당일 출석 현황에 배지로 표시되고 '연락 필요' 명단에서 제외된다.
+// ═══════════════════════════════════════════════════════════════
+async function loadLeaves() {
+  if (!currentCourseId) { allLeaves = []; return; }
+  try {
+    const snap = await getDocs(collection(db, 'courses', currentCourseId, 'leave_requests'));
+    allLeaves = snap.docs.map(d => ({ ...d.data(), id: d.id }));
+  } catch (e) {
+    console.error('허가원 로드 오류:', e);
+    allLeaves = [];
+  }
+}
+
+function reasonShortLabel(code) {
+  const hit = REASON_CODES.find(([c]) => c === String(code || ''));
+  return hit ? hit[1].split(' (')[0] : '';
+}
+
+// 출석 현황 표의 상태 셀 아래 배지
+function leaveBadgeHtml(eff) {
+  if (!eff) return '';
+  if (eff.source === 'leave' && eff.leave) {
+    const type = STATUS_META[eff.status]?.label || eff.status;
+    const permit = PERMIT_META[eff.permit]?.label || '';
+    const reason = reasonShortLabel(eff.leave.reasonCode);
+    const cls = eff.permit === 'approved' ? 'approved' : eff.permit === 'unapproved' ? 'unapproved' : 'pending';
+    return `<span class="leave-badge ${cls}" title="허가원 등록됨${eff.leave.memo ? ' — ' + escapeAttr(eff.leave.memo) : ''}">📄 ${escapeHtml(type)}·${escapeHtml(permit)}${reason ? ' · ' + escapeHtml(reason) : ''}</span>`;
+  }
+  if (eff.note) return `<span class="leave-badge info">📄 ${escapeHtml(eff.note)}</span>`;
+  return '';
+}
+
+function renderLeavesPanelHtml() {
+  const stuOpts = [...allStudents]
+    .sort((a, b) => String(a.empNo).localeCompare(String(b.empNo), undefined, { numeric: true }))
+    .map(s => `<option value="${escapeAttr(String(s.empNo))}">${escapeHtml(s.name)}</option>`).join('');
+  const typeOpts = ['absent', 'overnight', 'late', 'leave', 'outing', 'skip']
+    .map(k => `<option value="${k}">${STATUS_META[k].label}</option>`).join('');
+  const reasonOpts = REASON_CODES.map(([c, l]) => `<option value="${c}">${c}호. ${escapeHtml(l)}</option>`).join('');
+  return `
+    <div class="att-panel-section">
+      <h4>📄 허가원 등록
+        <span class="hint">학칙 제8조③ — 미리 등록해 두면 해당 날짜 출석 현황에 표시되고 '📞 연락 필요'에서 빠집니다.</span>
+      </h4>
+      <div class="leave-form">
+        <div class="time-group">
+          <label>교육생 (교번)</label>
+          <input list="leave-stu-list" id="leave-empno" placeholder="교번 입력 또는 선택" autocomplete="off">
+          <datalist id="leave-stu-list">${stuOpts}</datalist>
+        </div>
+        <div class="time-group"><label>유형</label><select id="leave-type" onchange="onLeaveTypeChange()">${typeOpts}</select></div>
+        <div class="time-group"><label>시작일</label><input type="date" id="leave-from" value="${todayStr}" onchange="onLeaveFromChange()"></div>
+        <div class="time-group"><label>종료일 <span class="hint">(하루면 비워도 됨)</span></label><input type="date" id="leave-to"></div>
+        <div class="time-group" id="leave-sess-group" style="display:${dailySessions === 2 ? 'block' : 'none'};">
+          <label>세션</label>
+          <select id="leave-sess"><option value="all">하루 전체</option><option value="morning">오전만</option><option value="afternoon">오후만</option></select>
+        </div>
+        <div class="time-group" id="leave-hours-group" style="display:none;">
+          <label>시간 (일당) <span class="hint">1시간 미만은 1시간</span></label>
+          <input type="number" id="leave-hours" min="1" step="1" placeholder="예: 2">
+        </div>
+        <div class="time-group"><label>사유 (제8조③ 각 호)</label><select id="leave-reason">${reasonOpts}</select></div>
+        <div class="time-group">
+          <label>결정</label>
+          <select id="leave-decision">
+            <option value="pending">심사중 (결재 전)</option>
+            <option value="approved">허가</option>
+            <option value="unapproved">미허가 (허가원 제출했으나 불허)</option>
+          </select>
+        </div>
+        <div class="time-group" style="grid-column:1/-1;"><label>메모</label><input type="text" id="leave-memo" placeholder="세부 사유, 연락 내용 등"></div>
+      </div>
+      <div class="save-row">
+        <button class="btn btn-secondary btn-sm" id="leave-cancel-btn" onclick="resetLeaveForm()" style="display:none;">취소</button>
+        <button class="btn btn-primary" id="leave-save-btn" onclick="saveLeave()">허가원 등록</button>
+      </div>
+      <div id="leave-save-status" style="text-align:right;font-size:0.82rem;margin-top:0.4rem;min-height:1.2em;"></div>
+    </div>
+
+    <div class="att-panel-section">
+      <h4>등록된 허가원 <span class="hint" id="leave-count"></span></h4>
+      <div class="att-table-wrap">
+        <table class="att-table" id="leave-table">
+          <thead><tr>
+            <th style="width:64px">교번</th><th>이름</th><th>유형</th><th>기간</th><th>시간</th><th>사유</th><th>결정</th><th>메모</th><th style="width:96px"></th>
+          </tr></thead>
+          <tbody id="leave-tbody"><tr><td colspan="9" class="loading">불러오는 중...</td></tr></tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+window.onLeaveTypeChange = function() {
+  const t = document.getElementById('leave-type')?.value;
+  const g = document.getElementById('leave-hours-group');
+  if (g) g.style.display = HOUR_STATUSES.includes(t) ? 'block' : 'none';
+};
+window.onLeaveFromChange = function() {
+  const from = document.getElementById('leave-from')?.value;
+  const to = document.getElementById('leave-to');
+  if (to && from && to.value && to.value < from) to.value = from;
+};
+
+function resolveStudentInput(raw) {
+  const v = String(raw || '').trim();
+  if (!v) return null;
+  let hit = allStudents.find(s => String(s.empNo).trim() === v);
+  if (hit) return hit;
+  const byName = allStudents.filter(s => s.name === v);
+  return byName.length === 1 ? byName[0] : null;
+}
+
+function setLeaveStatus(msg, ok) {
+  const el = document.getElementById('leave-save-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = ok ? '#16a34a' : '#dc2626';
+}
+
+window.resetLeaveForm = function() {
+  editingLeaveId = null;
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  set('leave-empno', ''); set('leave-type', 'absent'); set('leave-from', todayStr); set('leave-to', '');
+  set('leave-sess', 'all'); set('leave-hours', ''); set('leave-reason', '2'); set('leave-decision', 'pending'); set('leave-memo', '');
+  onLeaveTypeChange();
+  const btn = document.getElementById('leave-save-btn'); if (btn) btn.textContent = '허가원 등록';
+  const c = document.getElementById('leave-cancel-btn'); if (c) c.style.display = 'none';
+  setLeaveStatus('', true);
+};
+
+window.saveLeave = async function() {
+  const stu = resolveStudentInput(document.getElementById('leave-empno')?.value);
+  if (!stu) { setLeaveStatus('교육생을 찾을 수 없습니다. 학생 명단의 교번을 입력해 주세요.', false); return; }
+  const type = document.getElementById('leave-type').value;
+  const dateFrom = document.getElementById('leave-from').value;
+  let dateTo = document.getElementById('leave-to').value || dateFrom;
+  if (!dateFrom) { setLeaveStatus('시작일을 입력해 주세요.', false); return; }
+  if (dateTo < dateFrom) dateTo = dateFrom;
+  const sessions = dailySessions === 2 ? (document.getElementById('leave-sess').value || 'all') : 'all';
+  const hoursRaw = document.getElementById('leave-hours').value;
+  const hours = HOUR_STATUSES.includes(type) ? Math.max(1, Math.ceil(Number(hoursRaw) || 1)) : null;
+  const data = {
+    empNo: String(stu.empNo), name: stu.name, type, dateFrom, dateTo, sessions, hours,
+    reasonCode: document.getElementById('leave-reason').value,
+    decision: document.getElementById('leave-decision').value,
+    memo: document.getElementById('leave-memo').value.trim(),
+    courseId: currentCourseId, updatedAt: serverTimestamp(),
+  };
+  const btn = document.getElementById('leave-save-btn');
+  btn.disabled = true;
+  try {
+    if (editingLeaveId) {
+      await updateDoc(doc(db, 'courses', currentCourseId, 'leave_requests', editingLeaveId), data);
+    } else {
+      const ref = doc(collection(db, 'courses', currentCourseId, 'leave_requests'));
+      await setDoc(ref, { ...data, createdAt: serverTimestamp() });
+    }
+    setLeaveStatus(`${stu.name}님 허가원 ${editingLeaveId ? '수정' : '등록'} 완료`, true);
+    const wasEditing = !!editingLeaveId;
+    resetLeaveForm();
+    setLeaveStatus(`${stu.name}님 허가원 ${wasEditing ? '수정' : '등록'} 완료`, true);
+    await loadLeaves();
+    renderLeaveList();
+    if (currentDateTab) renderAttendanceTable(currentDateTab);
+    updateSummary();
+  } catch (e) {
+    console.error('허가원 저장 오류:', e);
+    setLeaveStatus('저장 실패: ' + e.message, false);
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+window.editLeave = function(id) {
+  const l = allLeaves.find(x => x.id === id);
+  if (!l) return;
+  editingLeaveId = id;
+  const set = (k, v) => { const el = document.getElementById(k); if (el) el.value = v ?? ''; };
+  set('leave-empno', l.empNo); set('leave-type', l.type || 'absent');
+  set('leave-from', l.dateFrom || ''); set('leave-to', (l.dateTo && l.dateTo !== l.dateFrom) ? l.dateTo : '');
+  set('leave-sess', l.sessions || 'all'); set('leave-hours', l.hours ?? '');
+  set('leave-reason', l.reasonCode || '7'); set('leave-decision', l.decision || 'pending'); set('leave-memo', l.memo || '');
+  onLeaveTypeChange();
+  document.getElementById('leave-save-btn').textContent = '수정 저장';
+  document.getElementById('leave-cancel-btn').style.display = '';
+  document.getElementById('leave-empno')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+};
+
+window.deleteLeave = async function(id) {
+  const l = allLeaves.find(x => x.id === id);
+  if (!l) return;
+  if (!confirm(`${l.name}(${l.empNo}) ${l.dateFrom}${l.dateTo && l.dateTo !== l.dateFrom ? '~' + l.dateTo : ''} 허가원을 삭제할까요?`)) return;
+  try {
+    await deleteDoc(doc(db, 'courses', currentCourseId, 'leave_requests', id));
+    if (editingLeaveId === id) resetLeaveForm();
+    await loadLeaves();
+    renderLeaveList();
+    if (currentDateTab) renderAttendanceTable(currentDateTab);
+    updateSummary();
+  } catch (e) {
+    alert('삭제 실패: ' + e.message);
+  }
+};
+
+function decisionChip(d) {
+  const map = { approved: ['허가', 'approved'], unapproved: ['미허가', 'unapproved'], pending: ['심사중', 'pending'] };
+  const [l, c] = map[d] || ['심사중', 'pending'];
+  return `<span class="leave-badge ${c}" style="display:inline-block;margin:0;">${l}</span>`;
+}
+
+function renderLeaveList() {
+  const tbody = document.getElementById('leave-tbody');
+  const cnt = document.getElementById('leave-count');
+  if (!tbody) return;
+  const rows = [...allLeaves].sort((a, b) =>
+    (b.dateFrom || '').localeCompare(a.dateFrom || '') ||
+    String(a.empNo).localeCompare(String(b.empNo), undefined, { numeric: true })
+  );
+  if (cnt) cnt.textContent = rows.length ? `${rows.length}건` : '';
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="9" class="loading">등록된 허가원이 없습니다.</td></tr>';
+    return;
+  }
+  const sessLabel = { all: '', morning: ' (오전)', afternoon: ' (오후)' };
+  tbody.innerHTML = rows.map(l => {
+    const period = (l.dateTo && l.dateTo !== l.dateFrom)
+      ? `${formatShortDate(l.dateFrom)} ~ ${formatShortDate(l.dateTo)}`
+      : formatShortDate(l.dateFrom || '');
+    const isPast = (l.dateTo || l.dateFrom) < todayStr;
+    return `<tr style="${isPast ? 'opacity:0.6;' : ''}">
+      <td>${escapeHtml(String(l.empNo))}</td>
+      <td>${escapeHtml(l.name || '')}</td>
+      <td>${escapeHtml(STATUS_META[l.type]?.label || l.type || '')}</td>
+      <td style="white-space:nowrap;">${period}${sessLabel[l.sessions] || ''}</td>
+      <td>${l.hours != null ? l.hours + 'h' : '-'}</td>
+      <td style="font-size:0.78rem;">${l.reasonCode ? l.reasonCode + '호 ' : ''}${escapeHtml(reasonShortLabel(l.reasonCode))}</td>
+      <td>${decisionChip(l.decision)}</td>
+      <td style="font-size:0.78rem;color:#64748b;max-width:200px;">${escapeHtml(l.memo || '')}</td>
+      <td style="white-space:nowrap;">
+        <button class="btn btn-secondary btn-sm" style="padding:0.2rem 0.5rem;font-size:0.75rem;" onclick="editLeave('${l.id}')">수정</button>
+        <button class="btn btn-danger btn-sm" style="padding:0.2rem 0.5rem;font-size:0.75rem;" onclick="deleteLeave('${l.id}')">삭제</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 근태 감점 집계 — 학칙 제11조① [별표 1] + 제10조 퇴교 사유 경고
+// ═══════════════════════════════════════════════════════════════
+function classDatesSorted() {
+  const holidays = getAllHolidays();
+  return scheduleDates.filter(d => !holidays.includes(d)).sort();
+}
+
+function effectiveTier() {
+  const override = currentConfig?.penaltyTier;
+  if (override && TIERS[override]) return override;
+  return computeTier(classDatesSorted());
+}
+
+function getEffectiveFor(empNo, date, sess) {
+  const rec = attendanceIndex.get(`${empNo}_${date}_${sess}`);
+  const leave = findLeave(allLeaves, empNo, date, sess);
+  return resolveEffective({ rec, leave, date, today: todayStr });
+}
+
+function fmtNum(n) {
+  if (n == null || Number.isNaN(n)) return '0';
+  return String(Math.round(n * 100) / 100);
+}
+
+function renderPenaltyPanelHtml() {
+  const auto = computeTier(classDatesSorted());
+  const cur = currentConfig?.penaltyTier || '';
+  const tierOpts = [['', `자동 판정 (${TIERS[auto].label})`], ...Object.entries(TIERS).map(([k, v]) => [k, v.label])]
+    .map(([k, l]) => `<option value="${k}"${cur === k ? ' selected' : ''}>${l}</option>`).join('');
+  return `
+    <div class="att-panel-section">
+      <h4>⚖️ 근태 감점 집계 <span class="hint">학칙 제11조① [별표 1] 감점 기준표 (2025.1.17.) · 제10조 퇴교 사유 경고</span></h4>
+      <div style="display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap;margin-bottom:0.6rem;">
+        <label style="font-size:0.82rem;font-weight:600;color:#64748b;">과정 구분</label>
+        <select id="penalty-tier" class="edit-status" style="min-width:220px;" onchange="setPenaltyTier(this.value)">${tierOpts}</select>
+        <span id="penalty-tier-info" style="font-size:0.78rem;color:#94a3b8;"></span>
+        <span style="flex:1"></span>
+        <button class="btn btn-secondary btn-sm" onclick="renderPenaltyTable()">다시 계산</button>
+        <button class="btn btn-secondary btn-sm" onclick="exportPenaltyExcel()">엑셀 다운로드</button>
+      </div>
+      <div class="holiday-info" id="penalty-rule-info"></div>
+      <div class="att-table-wrap">
+        <table class="att-table" id="penalty-table">
+          <thead><tr>
+            <th style="width:64px">교번</th><th>이름</th>
+            <th title="결석·외박 (일)">결석·외박<br><span class="hint">허가 / 허가없음</span></th>
+            <th title="지각·조퇴·외출·결강 (시간)">지각·조퇴·외출·결강<br><span class="hint">허가 / 허가없음 (h)</span></th>
+            <th>등록지연<br><span class="hint">(h)</span></th>
+            <th>감점 합계</th>
+            <th>퇴교 사유 경고</th>
+          </tr></thead>
+          <tbody id="penalty-tbody"><tr><td colspan="7" class="loading">계산 중...</td></tr></tbody>
+        </table>
+      </div>
+      <div style="font-size:0.75rem;color:#94a3b8;margin-top:0.5rem;">행을 누르면 날짜별 상세가 펼쳐집니다.</div>
+    </div>`;
+}
+
+window.setPenaltyTier = async function(v) {
+  if (!currentCourseId) return;
+  try {
+    await setDoc(doc(db, 'courses', currentCourseId, 'attendanceConfig', 'config'), { penaltyTier: v || deleteField() }, { merge: true });
+    currentConfig = { ...(currentConfig || {}), penaltyTier: v || undefined };
+  } catch (e) {
+    alert('과정 구분 저장 실패: ' + e.message);
+  }
+  renderPenaltyTable();
+};
+
+let lastPenaltyResult = null;
+
+function penaltyRuleInfoHtml(tier) {
+  const T = PENALTY_TABLE;
+  return `
+    <b>${TIERS[tier].label}</b> 기준 — 결석·외박: 허가 <b>${T.absentApproved[tier]}점/일</b>, 허가없음 <b>${T.absentUnapproved[tier]}점/일</b> ·
+    지각·조퇴·외출·결강: 허가 <b>${T.hourApproved[tier]}점/시간</b>, 허가없음 <b>${T.hourUnapproved[tier]}점/시간</b> ·
+    등록지연 <b>${T.registrationDelay[tier]}점/시간</b><br>
+    <span style="color:#94a3b8;">
+      · "허가없음"은 미허가·무단·심사중·미기재를 모두 포함합니다 (별표1 비고2). 1시간 미만은 1시간으로 계산 (비고1).<br>
+      · 오늘 이전 수업일에 기록이 전혀 없으면 무단 결석으로 집계됩니다. 오늘은 기록이 있는 경우만 반영합니다.<br>
+      · 입교일(첫 수업일) 지각은 등록지연으로 계산합니다. 시간 미기재 조퇴·외출·결강은 1시간으로 봅니다.
+      ${dailySessions === 2 ? '<br>· 오전/오후 중 한 세션만 결석이면 0.5일로 계산합니다.' : ''}<br>
+      · 퇴교 경고의 불참 비율은 결석일 + 시간단위 합계÷8 을 수업일수로 나눈 근사치이며, 경조사(1호)·업무복귀(4호) 허가 결석은 제외합니다 (제10조 9호 단서).
+    </span>`;
+}
+
+window.renderPenaltyTable = function() {
+  const tbody = document.getElementById('penalty-tbody');
+  if (!tbody) return;
+  const tier = effectiveTier();
+  const info = document.getElementById('penalty-tier-info');
+  if (info) info.textContent = currentConfig?.penaltyTier ? '(수동 지정)' : '(첫 수업일~마지막 수업일 기간으로 자동 판정)';
+  const ruleEl = document.getElementById('penalty-rule-info');
+  if (ruleEl) ruleEl.innerHTML = penaltyRuleInfoHtml(tier);
+
+  const dates = classDatesSorted();
+  const sessionKeys = dailySessions === 2 ? ['morning', 'afternoon'] : ['single'];
+  const students = [...allStudents].sort((a, b) =>
+    String(a.empNo).localeCompare(String(b.empNo), undefined, { numeric: true })
+  );
+  if (!students.length || !dates.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="loading">교육생 명단과 수업일이 있어야 계산할 수 있습니다.</td></tr>';
+    lastPenaltyResult = null;
+    return;
+  }
+  const sessionStarts = {
+    single: currentConfig?.morningStart || '09:00',
+    morning: currentConfig?.morningStart || '09:00',
+    afternoon: currentConfig?.afternoonStart || '13:00',
+  };
+  const result = computePenalties({
+    students, dates, sessionKeys, getEffective: getEffectiveFor, tier, today: todayStr, sessionStarts,
+  });
+  lastPenaltyResult = { tier, dates, result };
+
+  const sessName = { single: '', morning: '오전', afternoon: '오후' };
+  tbody.innerHTML = result.map(r => {
+    const hasIssue = r.total > 0 || r.warnings.length;
+    const detail = r.items.length
+      ? `<table class="att-table" style="margin:0.3rem 0;font-size:0.78rem;">
+          <thead><tr><th>날짜</th><th>세션</th><th>근태</th><th>허가</th><th>시간</th><th>출처</th><th>감점</th></tr></thead>
+          <tbody>${r.items.map(i => `<tr>
+            <td>${formatShortDate(i.date)}</td><td>${sessName[i.session] || '-'}</td>
+            <td>${STATUS_META[i.status]?.label || i.status}${i.status === 'late' && i.date === dates[0] ? ' (등록지연)' : ''}</td>
+            <td>${PERMIT_META[i.permit]?.label || '미기재'}${i.reasonCode ? ' · ' + i.reasonCode + '호' : ''}</td>
+            <td>${i.hours != null ? i.hours + 'h' : '-'}</td>
+            <td>${{ manual: '수동', leave: '허가원', qr: 'QR', none: '기록없음' }[i.source] || i.source}</td>
+            <td>${fmtNum(i.penalty)}</td>
+          </tr>`).join('')}</tbody></table>`
+      : '<span style="color:#94a3b8;font-size:0.8rem;">감점 대상 근태 없음</span>';
+    return `<tr class="penalty-row${hasIssue ? '' : ' ok'}" onclick="togglePenaltyDetail('${escapeAttr(String(r.empNo))}')">
+      <td>${escapeHtml(String(r.empNo))}</td>
+      <td>${escapeHtml(r.name)}</td>
+      <td>${fmtNum(r.absentApprovedDays)} / <b style="color:${r.absentUnapprovedDays ? '#dc2626' : 'inherit'}">${fmtNum(r.absentUnapprovedDays)}</b>${r.absentNoneDays ? ` <span class="hint" style="color:#dc2626;">(무단 ${fmtNum(r.absentNoneDays)})</span>` : ''}</td>
+      <td>${fmtNum(r.hourApproved)} / <b style="color:${r.hourUnapproved ? '#d97706' : 'inherit'}">${fmtNum(r.hourUnapproved)}</b></td>
+      <td>${fmtNum(r.registrationDelayHours)}</td>
+      <td class="penalty-total">${fmtNum(r.total)}점</td>
+      <td class="penalty-warn">${r.warnings.map(escapeHtml).join('<br>')}</td>
+    </tr>
+    <tr class="penalty-detail" id="pdet_${escapeAttr(String(r.empNo))}" style="display:none;"><td colspan="7" style="background:#f8fafc;">${detail}</td></tr>`;
+  }).join('');
+};
+
+window.togglePenaltyDetail = function(empNo) {
+  const el = document.getElementById(`pdet_${empNo}`);
+  if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
+};
+
+window.exportPenaltyExcel = function() {
+  if (!lastPenaltyResult) renderPenaltyTable();
+  if (!lastPenaltyResult || typeof XLSX === 'undefined') { alert('집계 결과가 없습니다.'); return; }
+  const { tier, dates, result } = lastPenaltyResult;
+  const sessName = { single: '', morning: '오전', afternoon: '오후' };
+  const summary = [
+    [`${currentCourseName} 근태 감점 집계`],
+    [`과정 구분: ${TIERS[tier].label}`, `집계일: ${todayStr}`, `수업일: ${dates.length}일`],
+    [],
+    ['교번', '이름', '결석·외박 허가(일)', '결석·외박 허가없음(일)', '무단 결석(일)', '지각·조퇴·외출·결강 허가(h)', '지각·조퇴·외출·결강 허가없음(h)', '등록지연(h)', '감점 합계', '퇴교 사유 경고'],
+    ...result.map(r => [r.empNo, r.name, r.absentApprovedDays, r.absentUnapprovedDays, r.absentNoneDays, r.hourApproved, r.hourUnapproved, r.registrationDelayHours, r.total, r.warnings.join(' / ')]),
+  ];
+  const detail = [
+    ['교번', '이름', '날짜', '세션', '근태', '허가', '사유(호)', '시간', '출처', '감점'],
+    ...result.flatMap(r => r.items.map(i => [
+      r.empNo, r.name, i.date, sessName[i.session] || '', STATUS_META[i.status]?.label || i.status,
+      PERMIT_META[i.permit]?.label || '미기재', i.reasonCode || '', i.hours ?? '', { manual: '수동', leave: '허가원', qr: 'QR', none: '기록없음' }[i.source] || i.source, i.penalty,
+    ])),
+  ];
+  const wb = XLSX.utils.book_new();
+  const ws1 = XLSX.utils.aoa_to_sheet(summary);
+  ws1['!cols'] = [8, 10, 14, 16, 12, 20, 22, 12, 10, 40].map(w => ({ wch: w }));
+  XLSX.utils.book_append_sheet(wb, ws1, '감점 집계');
+  const ws2 = XLSX.utils.aoa_to_sheet(detail);
+  ws2['!cols'] = [8, 10, 12, 6, 8, 8, 8, 6, 8, 8].map(w => ({ wch: w }));
+  XLSX.utils.book_append_sheet(wb, ws2, '상세');
+  XLSX.writeFile(wb, `${currentCourseName || '과정'}_근태감점_${todayStr}.xlsx`);
 };
