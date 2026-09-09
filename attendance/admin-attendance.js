@@ -15,8 +15,16 @@ import {
 import { exportAttendanceWorkbook } from './admin-attendance-excel.js';
 import {
   TIERS, PENALTY_TABLE, STATUS_META, HOUR_STATUSES, DAY_STATUSES, PERMIT_META, REASON_CODES,
-  computeTier, findLeave, resolveEffective, computePenalties, hoursBetween, timeOptions
+  computeTier, findLeave, resolveEffective, computePenalties, hoursBetween, timeOptions, DEFAULT_LUNCH
 } from './attendance-rules.js';
+
+// 점심시간 (출석 설정의 오전 종료 ~ 오후 시작, 기본 12:00~13:00) — 시간 단위 근태 계산에서 제외
+function lunchWindow() {
+  return {
+    start: currentConfig?.morningEnd || DEFAULT_LUNCH.start,
+    end: currentConfig?.afternoonStart || DEFAULT_LUNCH.end,
+  };
+}
 
 // 관리자 세션은 탭이 닫히면 로그아웃되도록 SESSION persistence 사용
 setPersistence(auth, browserSessionPersistence).catch(() => {});
@@ -1992,7 +2000,7 @@ function renderLeavesPanelHtml() {
   const typeOpts = ['absent', 'overnight', 'late', 'leave', 'outing', 'skip']
     .map(k => `<option value="${k}">${STATUS_META[k].label}</option>`).join('');
   const reasonOpts = REASON_CODES.map(([c, l]) => `<option value="${c}">${c}호. ${escapeHtml(l)}</option>`).join('');
-  const timeOpts = '<option value="">—</option>' + timeOptions([currentConfig?.morningStart, currentConfig?.afternoonStart, currentConfig?.afternoonEnd])
+  const timeOpts = '<option value="">—</option>' + timeOptions([currentConfig?.morningStart, currentConfig?.afternoonStart, currentConfig?.afternoonEnd], lunchWindow())
     .map(t => `<option value="${t}">${t}</option>`).join('');
   return `
     <div class="att-panel-section">
@@ -2013,7 +2021,7 @@ function renderLeavesPanelHtml() {
           <select id="leave-sess"><option value="all">하루 전체</option><option value="morning">오전만</option><option value="afternoon">오후만</option></select>
         </div>
         <div class="time-group" id="leave-time-group" style="display:none;grid-column:span 2;">
-          <label id="leave-time-label">시각 <span class="hint">10분 단위</span></label>
+          <label id="leave-time-label">시각 <span class="hint">10분 단위 · 점심시간 제외</span></label>
           <div style="display:flex;gap:0.4rem;align-items:center;">
             <select id="leave-time-from" onchange="onLeaveTimeChange()">${timeOpts}</select>
             <span style="color:#94a3b8;">~</span>
@@ -2081,7 +2089,7 @@ window.onLeaveTypeChange = function(keepTimes = false) {
     outing: '외출 — 나가는 시각 ~ 돌아오는 시각',
     skip: '결강 — 빠지는 수업 시작 ~ 종료',
   };
-  if (label) label.innerHTML = `${hints[t] || '시각'} <span class="hint">10분 단위</span>`;
+  if (label) label.innerHTML = `${hints[t] || '시각'} <span class="hint">10분 단위 · 점심 ${lunchWindow().start}~${lunchWindow().end} 제외</span>`;
   if (!keepTimes && from && to) {
     from.value = t === 'late' ? start : '';
     to.value = t === 'leave' ? end : '';
@@ -2093,7 +2101,7 @@ window.onLeaveTypeChange = function(keepTimes = false) {
 window.onLeaveTimeChange = function() {
   const from = document.getElementById('leave-time-from')?.value;
   const to = document.getElementById('leave-time-to')?.value;
-  const h = hoursBetween(from, to);
+  const h = hoursBetween(from, to, lunchWindow());
   const el = document.getElementById('leave-hours');
   if (el && h != null) el.value = h;
 };
@@ -2153,7 +2161,7 @@ window.saveLeave = async function() {
   const timeTo = isHour ? (document.getElementById('leave-time-to').value || '') : '';
   if (timeFrom && timeTo && timeTo <= timeFrom) { setLeaveStatus('종료 시각이 시작 시각보다 늦어야 합니다.', false); return; }
   const hoursRaw = document.getElementById('leave-hours').value;
-  const hours = isHour ? Math.max(1, Math.ceil(Number(hoursRaw) || hoursBetween(timeFrom, timeTo) || 1)) : null;
+  const hours = isHour ? Math.max(1, Math.ceil(Number(hoursRaw) || hoursBetween(timeFrom, timeTo, lunchWindow()) || 1)) : null;
   const data = {
     empNo: String(stu.empNo), name: stu.name, type, dateFrom, dateTo, sessions, hours, timeFrom, timeTo,
     reasonCode: document.getElementById('leave-reason').value,
@@ -2341,7 +2349,8 @@ function penaltyRuleInfoHtml(tier) {
     <span style="color:#94a3b8;">
       · "허가없음"은 미허가·무단·심사중·미기재를 모두 포함합니다 (별표1 비고2). 1시간 미만은 1시간으로 계산 (비고1).<br>
       · 오늘 이전 수업일에 기록이 전혀 없으면 무단 결석으로 집계됩니다. 오늘은 기록이 있는 경우만 반영합니다.<br>
-      · 입교일(첫 수업일) 지각은 등록지연으로 계산합니다. 시간 미기재 조퇴·외출·결강은 1시간으로 봅니다.
+      · 입교일(첫 수업일) 지각은 등록지연으로 계산합니다. 시간 미기재 조퇴·외출·결강은 1시간으로 봅니다.<br>
+      · 점심시간 ${lunchWindow().start}~${lunchWindow().end} 은 시간 계산에서 제외합니다.
       ${dailySessions === 2 ? '<br>· 오전/오후 중 한 세션만 결석이면 0.5일로 계산합니다.' : ''}<br>
       · 퇴교 경고의 불참 비율은 결석일 + 시간단위 합계÷8 을 수업일수로 나눈 근사치이며, 경조사(1호)·업무복귀(4호) 허가 결석은 제외합니다 (제10조 9호 단서).
     </span>`;
@@ -2372,7 +2381,7 @@ window.renderPenaltyTable = function() {
     afternoon: currentConfig?.afternoonStart || '13:00',
   };
   const result = computePenalties({
-    students, dates, sessionKeys, getEffective: getEffectiveFor, tier, today: todayStr, sessionStarts,
+    students, dates, sessionKeys, getEffective: getEffectiveFor, tier, today: todayStr, sessionStarts, lunch: lunchWindow(),
   });
   lastPenaltyResult = { tier, dates, result };
 

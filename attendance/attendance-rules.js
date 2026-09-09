@@ -58,6 +58,25 @@ export const REASON_CODES = [
 // 제10조 9호 단서: 1호·4호 사유는 퇴교 판정용 불참시간에 포함하지 않음
 export const EXPEL_EXEMPT_REASONS = new Set(['1', '4']);
 
+// 점심시간 — 시간 단위 근태 계산에서 제외 (기본 12:00~13:00, 출석 설정의 오전 종료/오후 시작으로 대체 가능)
+export const DEFAULT_LUNCH = { start: '12:00', end: '13:00' };
+
+function toMin(t) {
+  if (!t || typeof t !== 'string') return NaN;
+  const [h, m] = t.split(':').map(Number);
+  return Number.isFinite(h) ? h * 60 + (m || 0) : NaN;
+}
+// from~to 분 수에서 점심시간과 겹치는 분을 뺀 값
+export function minutesExcludingLunch(fromMin, toMin_, lunch = DEFAULT_LUNCH) {
+  if (!Number.isFinite(fromMin) || !Number.isFinite(toMin_) || toMin_ <= fromMin) return 0;
+  const ls = toMin(lunch?.start ?? DEFAULT_LUNCH.start), le = toMin(lunch?.end ?? DEFAULT_LUNCH.end);
+  let total = toMin_ - fromMin;
+  if (Number.isFinite(ls) && Number.isFinite(le) && le > ls) {
+    total -= Math.max(0, Math.min(toMin_, le) - Math.max(fromMin, ls));
+  }
+  return Math.max(0, total);
+}
+
 // ── 과정 구분 자동 판정: 첫 수업일 ~ 마지막 수업일 달력 기간 ──
 export function computeTier(scheduleDates) {
   const ds = [...(scheduleDates || [])].filter(Boolean).sort();
@@ -97,20 +116,21 @@ export function leavePermit(leave) {
 }
 
 // 'HH:MM' ~ 'HH:MM' 사이 시간 수 (1시간 미만 → 1, 별표1 비고1). 값이 없거나 역순이면 null
-export function hoursBetween(from, to) {
-  if (!from || !to) return null;
-  const [fh, fm] = from.split(':').map(Number);
-  const [th, tm] = to.split(':').map(Number);
-  if (![fh, fm, th, tm].every(Number.isFinite)) return null;
-  const diff = (th * 60 + tm) - (fh * 60 + fm);
-  if (diff <= 0) return null;
+export function hoursBetween(from, to, lunch = DEFAULT_LUNCH) {
+  const f = toMin(from), t = toMin(to);
+  if (!Number.isFinite(f) || !Number.isFinite(t) || t <= f) return null;
+  const diff = minutesExcludingLunch(f, t, lunch);
   return Math.max(1, Math.ceil(diff / 60));
 }
 
 // 09:00 ~ 18:00, 10분 단위 시각 목록 (필요 시 extra 시각 포함)
-export function timeOptions(extra = []) {
+export function timeOptions(extra = [], lunch = DEFAULT_LUNCH) {
   const set = new Set();
-  for (let m = 9 * 60; m <= 18 * 60; m += 10) set.add(`${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`);
+  const ls = toMin(lunch?.start ?? DEFAULT_LUNCH.start), le = toMin(lunch?.end ?? DEFAULT_LUNCH.end);
+  for (let m = 9 * 60; m <= 18 * 60; m += 10) {
+    if (m > ls && m < le) continue; // 점심시간 안쪽은 선택 불가
+    set.add(`${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`);
+  }
   extra.filter(Boolean).forEach(t => set.add(t));
   return [...set].sort();
 }
@@ -171,7 +191,7 @@ function numOrNull(v) {
 }
 
 // 시각(HH:MM 또는 Date/ms) → 세션 시작 대비 지각 시간 (1시간 미만은 1시간, 별표1 비고 1)
-export function lateHours(timeVal, sessionStart) {
+export function lateHours(timeVal, sessionStart, lunch = DEFAULT_LUNCH) {
   if (!timeVal || !sessionStart) return 1;
   let minutes;
   if (typeof timeVal === 'string') {
@@ -188,8 +208,7 @@ export function lateHours(timeVal, sessionStart) {
     if (Number.isNaN(d.getTime())) return 1;
     minutes = d.getHours() * 60 + d.getMinutes();
   }
-  const [sh, sm] = sessionStart.split(':').map(Number);
-  const diff = minutes - (sh * 60 + (sm || 0));
+  const diff = minutesExcludingLunch(toMin(sessionStart), minutes, lunch);
   if (!Number.isFinite(diff) || diff <= 0) return 1;
   return Math.max(1, Math.ceil(diff / 60));
 }
@@ -198,7 +217,7 @@ export function lateHours(timeVal, sessionStart) {
 // students: [{empNo, name}], dates: 수업일(휴강 제외, 오름차순), sessionKeys: ['single'] | ['morning','afternoon']
 // getEffective(empNo, date, sess) → resolveEffective 결과
 // opts: { tier, today, sessionStarts: {single|morning|afternoon: 'HH:MM'} }
-export function computePenalties({ students, dates, sessionKeys, getEffective, tier, today, sessionStarts = {} }) {
+export function computePenalties({ students, dates, sessionKeys, getEffective, tier, today, sessionStarts = {}, lunch = DEFAULT_LUNCH }) {
   const T = PENALTY_TABLE;
   const perSession = sessionKeys.length || 1;
   const firstDate = dates[0];
@@ -239,7 +258,7 @@ export function computePenalties({ students, dates, sessionKeys, getEffective, t
         } else if (HOUR_STATUSES.includes(st)) {
           hours = eff.hours;
           if (hours == null) {
-            hours = st === 'late' ? lateHours(eff.time, sessionStarts[sess] || sessionStarts.single || '09:00') : 1;
+            hours = st === 'late' ? lateHours(eff.time, sessionStarts[sess] || sessionStarts.single || '09:00', lunch) : 1;
           }
           hours = Number.isFinite(hours) ? Math.max(1, Math.ceil(hours)) : 1;
           if (st === 'late' && d === firstDate) {
