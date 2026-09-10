@@ -2032,12 +2032,12 @@ function renderLeavesPanelHtml() {
         </div>
         <div class="time-group"><label>유형</label><select id="leave-type" onchange="onLeaveTypeChange()">${typeOpts}</select></div>
         <div class="time-group"><label>시작일</label><input type="date" id="leave-from" value="${todayStr}" onchange="onLeaveFromChange()"></div>
-        <div class="time-group"><label>종료일 <span class="hint">(하루면 비워도 됨)</span></label><input type="date" id="leave-to"></div>
+        <div class="time-group"><label>종료일 <span class="hint">하루면 비워둠</span></label><input type="date" id="leave-to"></div>
         <div class="time-group" id="leave-sess-group" style="display:${dailySessions === 2 ? 'block' : 'none'};">
           <label>세션</label>
           <select id="leave-sess"><option value="all">하루 전체</option><option value="morning">오전만</option><option value="afternoon">오후만</option></select>
         </div>
-        <div class="time-group" id="leave-time-group" style="display:none;grid-column:span 2;">
+        <div class="time-group" id="leave-time-group" style="display:none;grid-column:1/-1;">
           <label id="leave-time-label">시각 <span class="hint">10분 단위 · 점심시간 제외</span></label>
           <div style="display:flex;gap:0.4rem;align-items:center;">
             <select id="leave-time-from" onchange="onLeaveTimeChange()">${timeOpts}</select>
@@ -2217,7 +2217,7 @@ window.editLeave = function(id) {
   editingLeaveId = id;
   const set = (k, v) => { const el = document.getElementById(k); if (el) el.value = v ?? ''; };
   set('leave-empno', l.empNo); set('leave-type', l.type || 'absent');
-  set('leave-from', l.dateFrom || ''); set('leave-to', (l.dateTo && l.dateTo !== l.dateFrom) ? l.dateTo : '');
+  set('leave-from', l.dateFrom || ''); set('leave-to', l.dateTo || l.dateFrom || '');
   set('leave-sess', l.sessions || 'all');
   set('leave-reason', l.reasonCode || '7'); set('leave-decision', l.decision || 'pending'); set('leave-memo', l.memo || '');
   onLeaveTypeChange(true);

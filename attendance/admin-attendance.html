@@ -35,7 +35,8 @@
     .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
     @media(max-width:480px) { .two-col { grid-template-columns: 1fr; } }
     .time-group label { display: block; font-size: 0.8rem; font-weight: 600; color: #64748b; margin-bottom: 0.3rem; }
-    .time-group input { width: 100%; padding: 0.55rem 0.8rem; border: 1.5px solid #cbd5e1; border-radius: 8px; font-size: 0.92rem; }
+    .time-group input { width: 100%; padding: 0.55rem 0.8rem; border: 1.5px solid #cbd5e1; border-radius: 8px; font-size: 0.92rem; box-sizing: border-box; min-width: 0; }
+    .time-group input[type="date"] { min-height: 2.6rem; }
     .time-group input:focus { outline: none; border-color: var(--dj-blue); }
 
     .date-input-row { display: flex; gap: 0.5rem; align-items: flex-end; flex-wrap: wrap; margin-top: 0.5rem; }
@@ -80,7 +81,10 @@
     .filter-chip.good.active b { color: #fff; }
     /* 허가원 / 감점 패널 */
     .leave-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.7rem; }
-    .time-group select { width: 100%; padding: 0.55rem 0.8rem; border: 1.5px solid #cbd5e1; border-radius: 8px; font-size: 0.92rem; background: #fff; }
+    .leave-form > * { min-width: 0; }
+    @media (max-width: 600px) { .leave-form { grid-template-columns: 1fr; } }
+    .time-group select { width: 100%; padding: 0.55rem 0.8rem; border: 1.5px solid #cbd5e1; border-radius: 8px; font-size: 0.92rem; background: #fff; box-sizing: border-box; min-width: 0; }
+    #leave-time-group select { flex: 1; }
     .time-group select:focus { outline: none; border-color: var(--dj-blue); }
     .hint { font-weight: 400; color: #94a3b8; font-size: 0.76rem; margin-left: 0.3rem; }
     .penalty-row { cursor: pointer; }
