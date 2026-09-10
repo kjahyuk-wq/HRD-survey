@@ -92,20 +92,34 @@ export function computeTier(scheduleDates) {
 }
 
 // ── 허가원 ↔ 날짜·세션 매칭 ──────────────────────────────
-export function leaveCovers(leave, date, session) {
+// 시간 단위 허가원(지각·조퇴·외출·결강)이 '하루 전체'로 등록된 경우 실제로 해당하는 세션 하나를 고른다.
+// (오전/오후 2회 과정에서 양쪽 세션에 중복 적용돼 시간이 2배로 집계되는 것을 막음)
+//  - 시각이 있으면 시작 시각이 점심 전이면 오전, 이후면 오후 (조퇴는 떠나는 시각 기준)
+//  - 시각이 없으면 지각 → 오전, 조퇴 → 오후, 외출·결강 → 오전
+export function leaveSessionByTime(leave, lunchStart = DEFAULT_LUNCH.start) {
+  const t = leave?.type || 'absent';
+  if (!HOUR_STATUSES.includes(t)) return 'all';
+  const ref = t === 'late' ? (leave.timeFrom || '') : (leave.timeFrom || leave.timeTo || '');
+  if (ref) return ref < lunchStart ? 'morning' : 'afternoon';
+  return t === 'leave' ? 'afternoon' : 'morning';
+}
+
+export function leaveCovers(leave, date, session, lunchStart = DEFAULT_LUNCH.start) {
   if (!leave || !date) return false;
   const from = leave.dateFrom || leave.date;
   const to = leave.dateTo || from;
   if (!(from <= date && date <= to)) return false;
-  const s = leave.sessions || 'all';
-  return s === 'all' || !session || session === 'single' || s === session;
+  if (!session || session === 'single') return true;
+  let s = leave.sessions || 'all';
+  if (s === 'all' && HOUR_STATUSES.includes(leave.type || 'absent')) s = leaveSessionByTime(leave, lunchStart);
+  return s === 'all' || s === session;
 }
 
-export function findLeave(leaves, empNo, date, session) {
+export function findLeave(leaves, empNo, date, session, lunchStart = DEFAULT_LUNCH.start) {
   const k = String(empNo);
   let best = null;
   for (const l of leaves || []) {
-    if (String(l.empNo) !== k || !leaveCovers(l, date, session)) continue;
+    if (String(l.empNo) !== k || !leaveCovers(l, date, session, lunchStart)) continue;
     // 세션 지정 허가원이 전체 허가원보다 우선, 그 다음 최신 순
     if (!best || (best.sessions === 'all' && l.sessions !== 'all')) best = l;
   }
@@ -238,11 +252,17 @@ export function computePenalties({ students, dates, sessionKeys, getEffective, t
       warnings: [],
     };
 
+    const seenLeave = new Set(); // `${date}_${leaveId}` — 시간 단위 허가원은 하루 한 번만 집계
     for (const d of countedDates) {
       for (const sess of sessionKeys) {
         const eff = getEffective(stu.empNo, d, sess) || {};
         const st = eff.status || 'absent';
         if (st === 'present') continue;
+        if (HOUR_STATUSES.includes(st) && eff.source === 'leave' && eff.leave?.id) {
+          const key = `${d}_${eff.leave.id}`;
+          if (seenLeave.has(key)) continue;
+          seenLeave.add(key);
+        }
         // 오늘 날짜에 기록이 전혀 없으면 아직 미출석(진행 중) — 무단결석으로 확정하지 않음
         if (d === today && eff.source === 'none') continue;
 
