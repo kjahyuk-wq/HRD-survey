@@ -15,7 +15,7 @@ import {
 import { exportAttendanceWorkbook } from './admin-attendance-excel.js';
 import {
   TIERS, PENALTY_TABLE, STATUS_META, HOUR_STATUSES, DAY_STATUSES, PERMIT_META, REASON_CODES,
-  computeTier, findLeave, resolveEffective, computePenalties, hoursBetween, timeOptions, DEFAULT_LUNCH
+  computeTier, findLeave, resolveEffective, computePenalties, hoursBetween, timeOptions, DEFAULT_LUNCH, NON_ARTICLE_REASONS
 } from './attendance-rules.js';
 
 // 점심시간 (출석 설정의 오전 종료 ~ 오후 시작, 기본 12:00~13:00) — 시간 단위 근태 계산에서 제외
@@ -1977,11 +1977,13 @@ function reasonShortLabel(code) {
   const hit = REASON_CODES.find(([c]) => c === String(code || ''));
   return hit ? hit[1].split(' (')[0] : '';
 }
-// 사유 '무단' 선택 시 결정도 '무단'으로 자동 설정
+// 사유 '무단'/'미허가' 선택 시 결정도 자동 설정
 window.onLeaveReasonChange = function() {
   const r = document.getElementById('leave-reason')?.value;
   const d = document.getElementById('leave-decision');
-  if (r === '0' && d) d.value = 'none';
+  if (!d) return;
+  if (r === '0') d.value = 'none';
+  else if (r === 'X') d.value = 'unapproved';
 };
 
 // 출석 현황 표의 상태 셀 아래 배지
@@ -1990,7 +1992,7 @@ function leaveBadgeHtml(eff) {
   if (eff.source === 'leave' && eff.leave) {
     const type = STATUS_META[eff.status]?.label || eff.status;
     const permit = PERMIT_META[eff.permit]?.label || '';
-    const reason = String(eff.leave.reasonCode) === '0' ? '' : reasonShortLabel(eff.leave.reasonCode);
+    const reason = NON_ARTICLE_REASONS.has(String(eff.leave.reasonCode)) ? '' : reasonShortLabel(eff.leave.reasonCode);
     const cls = eff.permit === 'approved' ? 'approved' : (eff.permit === 'unapproved' || eff.permit === 'none') ? 'unapproved' : 'pending';
     const time = leaveTimeText(eff.leave);
     return `<span class="leave-badge ${cls}" title="허가원 등록됨${eff.leave.memo ? ' — ' + escapeAttr(eff.leave.memo) : ''}">📄 ${escapeHtml(type)}·${escapeHtml(permit)}${time ? ' · ' + time : ''}${reason ? ' · ' + escapeHtml(reason) : ''}</span>`;
@@ -2005,7 +2007,7 @@ function renderLeavesPanelHtml() {
     .map(s => `<option value="${escapeAttr(String(s.empNo))}">${escapeHtml(s.name)}</option>`).join('');
   const typeOpts = ['absent', 'overnight', 'late', 'leave', 'outing', 'skip']
     .map(k => `<option value="${k}">${STATUS_META[k].label}</option>`).join('');
-  const reasonOpts = REASON_CODES.map(([c, l]) => `<option value="${c}">${c === '0' ? '' : c + '호. '}${escapeHtml(l)}</option>`).join('');
+  const reasonOpts = REASON_CODES.map(([c, l]) => `<option value="${c}">${NON_ARTICLE_REASONS.has(c) ? '' : c + '호. '}${escapeHtml(l)}</option>`).join('');
   const timeOpts = '<option value="">—</option>' + timeOptions([currentConfig?.morningStart, currentConfig?.afternoonStart, currentConfig?.afternoonEnd], lunchWindow())
     .map(t => `<option value="${t}">${t}</option>`).join('');
   return `
@@ -2263,7 +2265,7 @@ function renderLeaveList() {
       <td>${escapeHtml(STATUS_META[l.type]?.label || l.type || '')}</td>
       <td style="white-space:nowrap;">${period}${sessLabel[l.sessions] || ''}</td>
       <td style="white-space:nowrap;">${leaveTimeText(l) ? escapeHtml(leaveTimeText(l)) + '<br>' : ''}${l.hours != null ? `<span class="hint" style="margin:0;">${l.hours}h</span>` : (leaveTimeText(l) ? '' : '-')}</td>
-      <td style="font-size:0.78rem;">${l.reasonCode && l.reasonCode !== '0' ? l.reasonCode + '호 ' : ''}${escapeHtml(reasonShortLabel(l.reasonCode))}</td>
+      <td style="font-size:0.78rem;">${l.reasonCode && !NON_ARTICLE_REASONS.has(String(l.reasonCode)) ? l.reasonCode + '호 ' : ''}${escapeHtml(reasonShortLabel(l.reasonCode))}</td>
       <td>${decisionChip(l.decision)}</td>
       <td style="font-size:0.78rem;color:#64748b;max-width:200px;">${escapeHtml(l.memo || '')}</td>
       <td style="white-space:nowrap;">
