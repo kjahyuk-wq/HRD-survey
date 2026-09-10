@@ -41,7 +41,14 @@ let excludedHolidays = [];
 let dailySessions = 1;
 let allLeaves = [];          // 허가원 대장 (courses/{id}/leave_requests)
 let editingLeaveId = null;   // 허가원 수정 중인 문서 id
-const todayStr = toDateStr(new Date());
+// 오늘 날짜 — 기기 시간대와 무관하게 한국 시간(Asia/Seoul) 기준
+function todayKst() {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' })
+    .formatToParts(new Date());
+  const get = t => parts.find(x => x.type === t)?.value;
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+const todayStr = todayKst();
 
 // ── 관리자 인증 ──────────────────────────────
 const ADMIN_EMAIL = 'kjahyuk@korea.kr';
@@ -962,7 +969,9 @@ function renderDateTabBar() {
   ).join('');
 
   if (!currentDateTab || !dates.includes(currentDateTab)) {
-    switchDateTab(dates[0]);
+    // 기본 탭 = 오늘(한국시간). 오늘이 수업일이 아니면 오늘 이전 가장 가까운 수업일, 그것도 없으면 첫 수업일
+    const past = dates.filter(d => d <= todayStr);
+    switchDateTab(dates.includes(todayStr) ? todayStr : (past.length ? past[past.length - 1] : dates[0]));
   } else {
     renderAttendanceTable(currentDateTab);
   }
