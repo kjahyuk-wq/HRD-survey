@@ -61,11 +61,20 @@ if (isLocal) {
 } else if (RECAPTCHA_SITE_KEY) {
   // 운영: App Check 활성화 (Cloud Function 호출의 어뷰징 방어)
   try {
+    // 행정망 모드(?proxy=1)에서는 www.google.com/recaptcha 가 차단되어 reCAPTCHA 토큰을
+    // 영영 못 받고, Auth 요청이 30초 대기 후 auth/network-request-failed 로 실패한다.
+    // → 디버그 토큰 방식으로 전환. 콘솔에 찍히는 토큰을 Firebase 콘솔 > App Check >
+    //   앱 > "디버그 토큰 관리" 에 한 번 등록하면 그 PC/브라우저에서 계속 유효.
+    //   (루트 만족도 사이트와 같은 웹 앱·같은 origin 이라 토큰 등록은 한 번이면 됨)
+    if (FORCE_LONG_POLL) {
+      self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+      console.info('[firebase] App Check 디버그 토큰 모드 (행정망). 아래 "App Check debug token" 을 Firebase 콘솔에 등록하세요.');
+    }
     initializeAppCheck(app, {
       provider: new ReCaptchaV3Provider(RECAPTCHA_SITE_KEY),
       isTokenAutoRefreshEnabled: true,
     });
-    console.info('[firebase] App Check 활성화');
+    console.info('[firebase] App Check 활성화' + (FORCE_LONG_POLL ? ' (디버그 토큰)' : ''));
   } catch (e) {
     console.warn('[firebase] App Check 초기화 실패', e);
   }
