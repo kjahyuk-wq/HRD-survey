@@ -286,7 +286,7 @@ export async function exportResultsExcel() {
   }, 400);
 }
 
-function generateCategoryChart(courseName, labels, values) {
+export function generateCategoryChart(courseName, labels, values) {
   const W = 875, H = 677;
   const canvas = document.createElement('canvas');
   canvas.width = W; canvas.height = H;

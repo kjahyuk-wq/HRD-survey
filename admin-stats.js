@@ -101,7 +101,7 @@ function renderStatsCourseOptions(courses) {
   sel.innerHTML = '<option value="">-- 교육과정을 선택하세요 --</option>' +
     courses.map(({ id, name, startDate, endDate, active, type }) => {
       const label = buildCourseLabel(name, startDate, endDate, active);
-      return `<option value="${escapeAttr(id)}" data-name="${escapeAttr(name)}" data-type="${type}">${escapeHtml(label)}</option>`;
+      return `<option value="${escapeAttr(id)}" data-name="${escapeAttr(name)}" data-type="${type}" data-start="${escapeAttr(startDate || '')}" data-end="${escapeAttr(endDate || '')}">${escapeHtml(label)}</option>`;
     }).join('');
   if (prev) sel.value = prev;
 }
@@ -228,6 +228,9 @@ export async function loadStats() {
   state.lastCourseName  = courseName;
   state.lastCourseLabel = courseLabel;
   state.lastCourseType  = courseType;
+  state.lastCourseId    = courseId;
+  state.lastCourseStart = opt?.dataset.start || '';
+  state.lastCourseEnd   = opt?.dataset.end || '';
 
   const roundSel = document.getElementById('stats-round-select');
   const groupSel = document.getElementById('stats-group-select');
@@ -402,6 +405,7 @@ export function renderStats(stats, students, responses) {
   // 과정 타입별 문항 정의 — loadStats 가 state.lastCourseType 을 먼저 채운다
   const cfg = getSurveyConfig(state.lastCourseType);
   const totalStudents = students.length;
+  state.lastStudentCount = totalStudents;
   const completedStudents = students.filter(s => s.completed).length;
   const rate = totalStudents > 0 ? Math.round(completedStudents / totalStudents * 100) : 0;
   const notCompleted = students.filter(s => !s.completed);

@@ -6,6 +6,7 @@ import { loadCourseList, addCourse, toggleCourseActive, deleteCourse, togglePane
 import { loadStudents, addStudent, deleteStudent, toggleSelectAll, updateBulkDeleteBtn, deleteSelectedStudents, handleExcelUpload, uploadExcelStudents, startEditStudent, saveEditStudent, cancelEditStudent, resetStudentElectives } from './admin-students.js';
 import { populateStatsSelect, loadStats } from './admin-stats.js';
 import { exportStatsExcel, exportResultsExcel } from './admin-excel.js';
+import { openSurveyReport } from './admin-report.js';
 import { populatePreviewSelect, loadPreviewInstructors } from './admin-preview.js';
 import { addRound, startEditRound, saveEditRound, cancelEditRound, toggleRoundActive, deleteRound, toggleRoundInstructors, addRoundInstructor, deleteRoundInstructor, moveRoundInstructor, startEditRoundInstructor, saveEditRoundInstructor, cancelEditRoundInstructor, handleRoundInstExcelUpload, uploadRoundExcelInstructors, toggleRoundInstSelectAll, updateRoundInstBulkDeleteBtn, deleteSelectedRoundInstructors } from './admin-rounds.js';
 
@@ -124,6 +125,7 @@ window.cancelEditInstructor = cancelEditInstructor;
 window.loadStats = loadStats;
 window.exportStatsExcel = exportStatsExcel;
 window.exportResultsExcel = exportResultsExcel;
+window.openSurveyReport = openSurveyReport;
 window.loadPreviewInstructors = loadPreviewInstructors;
 window.addRound = addRound;
 window.startEditRound = startEditRound;
