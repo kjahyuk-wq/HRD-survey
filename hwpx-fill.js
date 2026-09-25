@@ -5,9 +5,10 @@
 //   {{key}}          단순 치환. 값에 줄바꿈(\n)이 있으면 <hp:lineBreak/> 로 변환
 //   {{~key}}         서식 치환. 값 안의 **굵게** 구간을 같은 문단의 {{~bold}} 런 서식으로 분리
 //                    ({{~bold}} 런은 서식 견본용이라 채운 뒤 삭제)
-//   {{*list}}        문단 반복. data.list(문자열 배열) 항목마다 해당 문단을 복제
+//   {{*list}}        문단 반복. data.list(문자열 배열) 항목마다 해당 문단을 복제 (빈 배열이면 문단 삭제)
 //   {{#list.field}}  표 행 반복. data.list(객체 배열) 항목마다 해당 행을 복제
-//                    — 반복 행이 2개 이상이면 첫 행=윗선 견본, 마지막 행=아랫선 견본으로 보고
+//                    — 반복 행이 3개 이상이면 첫/중간/끝 견본 행을 위치대로 복제하고,
+//                      2개면 첫 행=윗선 견본, 마지막 행=아랫선 견본으로 보고
 //                      행 위치에 맞는 테두리(borderFill)를 header.xml 에 합성해 붙인다.
 // 값이 바뀐 문단은 <hp:linesegarray>(줄 배치 캐시)를 지워 한글이 열 때 다시 계산하게 한다.
 
@@ -148,6 +149,14 @@ function expandRowLoops(sectionDoc, data, fills) {
     const n = items.length;
 
     items.forEach((item, i) => {
+      // 견본 행이 3개 이상이면 첫/중간/끝 행을 그대로 복제 (서식에 중간 행 스타일이 따로 있는 경우)
+      if (tpl.length >= 3 && n > 1) {
+        const src = i === 0 ? first : i === n - 1 ? last : tpl[1];
+        const clone = src.cloneNode(true);
+        fillRow(clone, item);
+        tbl.insertBefore(clone, first);
+        return;
+      }
       const clone = first.cloneNode(true);
       if (tpl.length > 1) {
         const topRow = i === 0 ? firstCells : lastCells;           // 첫 행만 견본 윗선(이중선 등)
@@ -159,14 +168,17 @@ function expandRowLoops(sectionDoc, data, fills) {
           if (baseId) tc.setAttribute('borderFillIDRef', fills.combine(baseId, topId, botId));
         });
       }
-      fillMarkers(clone, (kind, key) => {
+      fillRow(clone, item);
+      tbl.insertBefore(clone, first);
+    });
+    function fillRow(row, item) {
+      fillMarkers(row, (kind, key) => {
         if (kind !== '#') return undefined;
         const [ln, field] = key.split('.');
         if (ln !== listName) return undefined;
         return item[field] ?? '';
       });
-      tbl.insertBefore(clone, first);
-    });
+    }
     tpl.forEach(tr => tbl.removeChild(tr));
 
     // 행 주소·행 수·표 높이 재계산
@@ -198,7 +210,8 @@ function expandParagraphLoops(sectionDoc, data) {
     const m = /\{\{\*(\w+)\}\}/.exec(ownText(p));
     if (!m) return;
     const name = m[1];
-    const items = Array.isArray(data[name]) && data[name].length ? data[name] : [''];
+    // 빈 배열이면 문단 자체를 지움 (예: 조치 문구가 없을 때 "→" 줄 생략)
+    const items = Array.isArray(data[name]) ? data[name] : [];
     items.forEach(item => {
       const clone = p.cloneNode(true);
       kids(clone, 'run').forEach(r => kids(r, 't').forEach(t => {

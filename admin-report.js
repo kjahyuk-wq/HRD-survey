@@ -8,11 +8,18 @@ import { computeStats } from './admin-stats.js';
 import { generateCategoryChart } from './admin-excel.js';
 import { fillHwpxSection, serializeXml } from './hwpx-fill.js';
 import {
-  isReportSupported, computeReportNumbers, buildReportData, chartSeries,
+  isReportSupported, computeReportNumbers, buildReportData, buildLeadershipReportData, chartSeries,
+  LEADERSHIP_EXCLUDED_KEYS,
   collectComments, formatPeriod, formatKoDate,
 } from './survey-report-data.js';
 
-const TEMPLATE_URL = 'templates/survey-report.hwpx';
+// 중견리더양성과정은 회차별 보고서 서식이 따로 있음 (평균 소수 첫째 자리, 검토결과 "→" 줄 등)
+const TEMPLATE_URLS = {
+  short: 'templates/survey-report.hwpx',
+  leadership: 'templates/survey-report-leadership.hwpx',
+};
+const DEFAULT_ACTIONS = { facility: '교육지원과에 내용 전달', instructor: '교육계획 수립시 반영' };
+const isLeadership = () => state.lastCourseType === 'leadership';
 const LS_MANAGER = 'reportManager';
 const lsGoalKey = id => `reportGoal:${id}`;
 
@@ -51,7 +58,7 @@ function reportCourseName() {
 function currentNumbers() {
   const cfg = getSurveyConfig(state.lastCourseType);
   const stats = state.lastComputedStats || computeStats(state.lastResponses, state.lastOrderedInstructorKeys, cfg);
-  return { cfg, nums: computeReportNumbers(stats, cfg) };
+  return { cfg, nums: computeReportNumbers(stats, cfg, isLeadership() ? LEADERSHIP_EXCLUDED_KEYS : []) };
 }
 
 // ── 편집 창 ──
@@ -72,6 +79,7 @@ function ensureModal() {
 
         <fieldset class="report-group">
           <legend>설문 개요</legend>
+          <label><span>보고서 제목(맨 위)</span><input id="rp-title" type="text"></label>
           <label><span>과정명</span><input id="rp-course" type="text"></label>
           <label><span>교육목표 <small>(두 줄이면 줄바꿈)</small></span><textarea id="rp-goal" rows="2"></textarea></label>
           <div class="report-row">
@@ -96,8 +104,10 @@ function ensureModal() {
         <fieldset class="report-group">
           <legend>교육생 의견(주관식) 요약 <span class="report-ai-badge">AI 초안</span> <small>한 줄에 하나씩</small></legend>
           <label><span>시설환경 · 편의시설 건의사항</span><textarea id="rp-facility" rows="3"></textarea></label>
-          <label><span>소감 및 건의사항</span><textarea id="rp-impression" rows="4"></textarea></label>
+          <label class="rp-lead-only"><span>→ 시설환경 검토결과 <small>(비우면 생략)</small></span><input id="rp-facility-action" type="text"></label>
+          <label class="rp-short-only"><span>소감 및 건의사항</span><textarea id="rp-impression" rows="4"></textarea></label>
           <label><span>전반적인 과목 및 강사 관련 건의</span><textarea id="rp-instructor" rows="3"></textarea></label>
+          <label class="rp-lead-only"><span>→ 과목·강사 검토결과 <small>(비우면 생략)</small></span><input id="rp-instructor-action" type="text"></label>
           <label><span>만족도 평가에 추가 또는 개선 의견</span><textarea id="rp-survey-improve" rows="3"></textarea></label>
         </fieldset>
 
@@ -165,6 +175,14 @@ function fillDraft(draft) {
   setVal('rp-impression', (draft.impression || []).join('\n'));
   setVal('rp-instructor', (draft.instructor || []).join('\n'));
   setVal('rp-survey-improve', (draft.surveyImprove || []).join('\n'));
+  setVal('rp-facility-action', draft.facilityAction ?? DEFAULT_ACTIONS.facility);
+  setVal('rp-instructor-action', draft.instructorAction ?? DEFAULT_ACTIONS.instructor);
+}
+
+// 중견 서식은 '소감' 칸이 없어 AI 가 소감 칸에 요약한 의견을 과목·강사 건의 칸으로 합침
+function adaptDraftForCourse(draft) {
+  if (!isLeadership()) return draft;
+  return { ...draft, instructor: [...(draft.instructor || []), ...(draft.impression || [])], impression: [] };
 }
 
 function readDraft() {
@@ -178,6 +196,8 @@ function readDraft() {
     impression: lines('rp-impression'),
     instructor: lines('rp-instructor'),
     surveyImprove: lines('rp-survey-improve'),
+    facilityAction: val('rp-facility-action').trim(),
+    instructorAction: val('rp-instructor-action').trim(),
   };
 }
 
@@ -203,12 +223,24 @@ export function openSurveyReport() {
   }
 
   const modal = ensureModal();
+  const lead = isLeadership();
+  modal.classList.toggle('is-leadership', lead);
   const n = state.lastResponses.length;
-  const endIso = state.lastCourseEnd || '';
-  setVal('rp-course', reportCourseName());
+  if (lead) {
+    // 중견: 제목 "과정명(회차명)", 과정명 줄에 전체 과정 기간, 교육기간은 이번 회차
+    const roundName = state.lastRoundName || state.lastRoundLabel || '';
+    setVal('rp-title', `${state.lastCourseName}${roundName ? `(${roundName})` : ''}`);
+    const whole = formatPeriod(state.lastCourseStart, state.lastCourseEnd, false);
+    setVal('rp-course', whole ? `${state.lastCourseName} / ${whole}` : state.lastCourseName);
+    setVal('rp-period', formatPeriod(state.lastRoundStart, state.lastRoundEnd, false));
+    setVal('rp-survey-date', formatKoDate(state.lastRoundEnd || ''));
+  } else {
+    setVal('rp-title', reportCourseName());
+    setVal('rp-course', reportCourseName());
+    setVal('rp-period', formatPeriod(state.lastCourseStart, state.lastCourseEnd));
+    setVal('rp-survey-date', formatKoDate(state.lastCourseEnd || ''));
+  }
   setVal('rp-goal', lsGet(lsGoalKey(state.lastCourseId)));
-  setVal('rp-period', formatPeriod(state.lastCourseStart, endIso));
-  setVal('rp-survey-date', formatKoDate(endIso));
   setVal('rp-target', String(state.lastStudentCount || n));
   setVal('rp-resp', String(n));
   setVal('rp-manager', lsGet(LS_MANAGER));
@@ -236,7 +268,7 @@ async function runAiDraft(isRetry) {
     const comments = collectComments(state.lastResponses);
     const call = httpsCallable(functions, 'generateSurveyReportDraft', { timeout: 300000 });
     const res = await call({
-      courseName: val('rp-course'),
+      courseName: val('rp-title'),
       goal: val('rp-goal'),
       period: val('rp-period'),
       respondents: state.lastResponses.length,
@@ -248,7 +280,7 @@ async function runAiDraft(isRetry) {
       lectures: nums.lectures.map(l => ({ subject: l.subject, name: l.name, avg: l.avg.toFixed(2) })),
       comments,
     });
-    const draft = res.data?.draft || {};
+    const draft = adaptDraftForCourse(res.data?.draft || {});
     draftCache.set(key, draft);
     // 사용자가 기다리는 동안 다른 과정으로 바꾸지 않았을 때만 화면에 반영
     if (key === reportKey()) {
@@ -284,25 +316,29 @@ async function downloadReport() {
   const btn = document.querySelector('#report-modal [data-act="download"]');
   btn.disabled = true;
   try {
-    const course = val('rp-course').trim();
+    const lead = isLeadership();
+    const title = val('rp-title').trim();
     lsSet(LS_MANAGER, val('rp-manager').trim());
     lsSet(lsGoalKey(state.lastCourseId), val('rp-goal'));
     draftCache.set(reportKey(), readDraft());
 
     const { nums } = currentNumbers();
-    const data = buildReportData(nums, {
-      courseTitle: course,
-      course,
+    const target = val('rp-target').trim(), responded = val('rp-resp').trim();
+    const meta = {
+      courseTitle: title,
+      course: val('rp-course').trim(),
       goal: val('rp-goal').trim(),
       period: val('rp-period').trim(),
       surveyDate: val('rp-survey-date').trim(),
-      targetCount: val('rp-target').trim(),
-      respCount: val('rp-resp').trim(),
+      targetCount: target,
+      respCount: responded,
+      absentCount: String(Math.max(0, (Number(target) || 0) - (Number(responded) || 0))),
       manager: val('rp-manager').trim(),
-    }, readDraft());
+    };
+    const data = lead ? buildLeadershipReportData(nums, meta, readDraft()) : buildReportData(nums, meta, readDraft());
 
     const JSZip = await loadJSZip();
-    const resp = await fetch(TEMPLATE_URL, { cache: 'no-cache' });
+    const resp = await fetch(TEMPLATE_URLS[lead ? 'leadership' : 'short'], { cache: 'no-cache' });
     if (!resp.ok) throw new Error('보고서 서식 파일을 불러오지 못했습니다.');
     const tpl = await JSZip.loadAsync(await resp.arrayBuffer());
 
@@ -312,7 +348,9 @@ async function downloadReport() {
     fillHwpxSection(section, header, data);
 
     const { labels, values } = chartSeries(nums);
-    const chartPng = dataUrlToBytes(generateCategoryChart(course, labels, values));
+    const digits = lead ? 1 : 2;   // 보고서 본문 숫자와 같은 자릿수
+    const chartPng = dataUrlToBytes(generateCategoryChart(title, labels,
+      values.map(v => Number(v.toFixed(digits))), digits));
 
     // HWPX 규칙: mimetype 이 첫 항목이고 무압축이어야 한글이 연다 → 새 zip 으로 재구성
     const out = new JSZip();
@@ -324,7 +362,7 @@ async function downloadReport() {
       if (path === 'Contents/section0.xml') content = serializeXml(section, XMLSerializer);
       else if (path === 'Contents/header.xml') content = serializeXml(header, XMLSerializer);
       else if (path === 'BinData/image1.png') content = chartPng;
-      else if (path === 'Preview/PrvText.txt') content = `${course} 학습자반응(만족도) 설문분석 결과`;
+      else if (path === 'Preview/PrvText.txt') content = `${title} 학습자반응(만족도) 설문분석 결과`;
       else content = await f.async('uint8array');
       out.file(path, content, noDirs);
     }
@@ -332,7 +370,10 @@ async function downloadReport() {
 
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = safeFileName(`학습자반응(만족도) 설문분석 결과(${course}).hwpx`);
+    // 파일명도 기존 관례대로 — 중견: "…결과보고(7~8월)", 그 외: "…결과(과정명)"
+    a.download = safeFileName(lead
+      ? `학습자반응(만족도) 설문분석 결과보고(${state.lastRoundName || title}).hwpx`
+      : `학습자반응(만족도) 설문분석 결과(${title}).hwpx`);
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 10000);
     setStatus('다운로드했습니다. 한글에서 열어 쪽 나눔을 확인한 뒤 공문에 첨부하세요.', 'ok');

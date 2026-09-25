@@ -1941,3 +1941,5 @@ body.report-modal-lock { overflow: hidden; }
   .report-row, .report-improve-row { grid-template-columns: 1fr; }
   .report-modal-foot { border-radius: 0; }
 }
+.report-modal-backdrop:not(.is-leadership) .rp-lead-only,
+.report-modal-backdrop.is-leadership .rp-short-only { display: none; }

@@ -286,13 +286,13 @@ export async function exportResultsExcel() {
   }, 400);
 }
 
-export function generateCategoryChart(courseName, labels, values) {
+export function generateCategoryChart(courseName, labels, values, decimals = 2) {
   const W = 875, H = 677;
   const canvas = document.createElement('canvas');
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext('2d');
 
-  const ml = 68, mr = 24, mt = 72, mb = 82;
+  const ml = 68, mr = 24, mt = 96, mb = 82;   // mt: 5.0점 막대 값 라벨이 제목과 겹치지 않을 만큼
   const cw = W - ml - mr, ch = H - mt - mb;
 
   ctx.fillStyle = '#ffffff';
@@ -345,7 +345,7 @@ export function generateCategoryChart(courseName, labels, values) {
     ctx.fillStyle = '#1e293b';
     ctx.font = 'bold 26px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(val.toFixed(2), x + barW / 2, y - 11);
+    ctx.fillText(val.toFixed(decimals), x + barW / 2, y - 11);
 
     ctx.fillStyle = '#1e293b';
     ctx.font = 'bold 24px sans-serif';

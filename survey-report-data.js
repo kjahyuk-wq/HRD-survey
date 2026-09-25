@@ -73,18 +73,19 @@ export function formatKoDate(iso, omitYear = false) {
   const md = `${d.getUTCMonth() + 1}. ${d.getUTCDate()}.(${DOW[d.getUTCDay()]})`;
   return omitYear ? md : `${d.getUTCFullYear()}. ${md}`;
 }
-export function formatPeriod(startIso, endIso) {
+export function formatPeriod(startIso, endIso, withDays = true) {
   const s = parseIso(startIso), e = parseIso(endIso);
   if (!s) return '';
-  if (!e || +e === +s) return `${formatKoDate(startIso)} / 1일`;
+  if (!e || +e === +s) return formatKoDate(startIso) + (withDays ? ' / 1일' : '');
   const days = Math.round((e - s) / 86400000) + 1;
   const sameYear = s.getUTCFullYear() === e.getUTCFullYear();
-  return `${formatKoDate(startIso)} ~ ${formatKoDate(endIso, sameYear)} / ${days}일`;
+  return `${formatKoDate(startIso)} ~ ${formatKoDate(endIso, sameYear)}` + (withDays ? ` / ${days}일` : '');
 }
 
 // ── 통계 → 보고서 수치 ──────────────────────────────
 // stats: admin-stats.computeStats 결과, cfg: getSurveyConfig(courseType)
-export function computeReportNumbers(stats, cfg) {
+// excludeKeys: 설문은 받았지만 보고서에는 싣지 않는 문항 (표·분야 평균·총평균·항목 수에서 모두 제외)
+export function computeReportNumbers(stats, cfg, excludeKeys = []) {
   const { avgs, dists, hasData, instRaw, instKeys } = stats;
 
   const items = cfg.scale.map((q, i) => {
@@ -92,7 +93,7 @@ export function computeReportNumbers(stats, cfg) {
     return {
       key: q.key,
       label: reportLabel(q),
-      has: hasData[i],
+      has: hasData[i] && !excludeKeys.includes(q.key),
       avg: hasData[i] ? r2(avgs[i]) : 0,
       pct: answered ? r1((dists[i][3] + dists[i][4]) / answered * 100) : 0,
     };
@@ -185,6 +186,87 @@ export function buildReportData(nums, meta, draft) {
     impression: list(draft.impression, '별도 의견 없음'),
     instructor: list(draft.instructor, '별도 건의 의견 없음'),
     surveyImprove: list(draft.surveyImprove, '별도 추가·개선 의견 없음'),
+  };
+}
+
+// ── 중견리더양성과정 서식 (평균 소수 첫째 자리, 만족이상 정수, 평균 행이 표 머리 바로 아래) ──
+// 중견 보고서는 '과정장 및 직원 교육과정 운영'(q5)을 조사는 하지만 싣지 않음 → 교육운영 4항목
+export const LEADERSHIP_EXCLUDED_KEYS = ['q5'];
+const LEAD_REPORT_LABELS = {
+  q1: '목적 달성을 위한 교육기간',
+  q6: '전반적인 과정운영 만족도',
+  q7: '향후 업무 및 개인생활 기여도',
+};
+
+// 받침 유무로 은/는
+function eunNeun(word) {
+  const c = String(word).charCodeAt(String(word).length - 1);
+  return c >= 0xAC00 && c <= 0xD7A3 && (c - 0xAC00) % 28 !== 0 ? '은' : '는';
+}
+
+// "모든 분야(교육기간, …)에서 ‘매우 만족’으로 나타남"
+// "교육기간, 교육효과는 ‘매우 만족’이며, 교육운영은 ‘만족’으로 나타남"
+function leadFieldStatus(fields) {
+  const groups = GRADE_ORDER
+    .map(g => ({ g, names: fields.filter(f => f.grade === g).map(f => f.label) }))
+    .filter(x => x.names.length);
+  if (groups.length === 1) return `모든 분야(${fields.map(f => f.label).join(', ')})에서 ‘${groups[0].g}’으로 나타남`;
+  const parts = groups.map(({ g, names }) => `${names.join(', ')}${eunNeun(names[names.length - 1])} ‘${g}’`);
+  return `${parts.slice(0, -1).join(', ')}이며, ${parts[parts.length - 1]}으로 나타남`;
+}
+
+// meta 는 buildReportData 와 같고 absentCount 추가.
+// draft 에 facilityAction / instructorAction (검토결과 "→" 줄) 추가.
+export function buildLeadershipReportData(nums, meta, draft) {
+  const { cats, lectures } = nums;
+  const f1 = v => v.toFixed(1);
+  const fInt = v => String(Math.round(v));
+  const g1 = v => gradeOf(r1(v));       // 화면에 보이는 값(소수 첫째 자리) 기준 등급
+  const hasLec = lectures.length > 0;
+  const lecAvg = r1(nums.lecAvg);
+  const overallAvg = r1(nums.overallAvg);
+
+  const fields = [
+    ...cats.map(c => ({ label: c.label, grade: g1(c.avg) })),
+    ...(hasLec ? [{ label: '강의만족도', grade: gradeOf(lecAvg) }] : []),
+  ];
+  const clean = arr => (arr || []).map(s => String(s).trim().replace(/^[○∙·\-•]\s*/, '')).filter(Boolean);
+  const withAction = (items, action) => (items.length && String(action || '').trim() ? [String(action).trim()] : []);
+  const facility = clean(draft.facility);
+  const instructor = clean(draft.instructor);
+  const improvements = (draft.improvements || [])
+    .map(x => ({ issue: String(x.issue || '').trim().replace(/^○\s*/, ''), action: String(x.action || '').trim().replace(/^[-–]\s*/, '') }))
+    .filter(x => x.issue);
+
+  return {
+    ...meta,
+    effect: String(draft.effect || '').replace(/\*\*/g, '').trim(),
+    fieldCount: String(fields.length),
+    itemCount: String(nums.itemCount),
+    overallAvg: f1(overallAvg),
+    overallGrade: gradeOf(overallAvg),
+    improve: improvements.length
+      ? improvements.map(x => ({ issue: x.issue, action: x.action || '-' }))
+      : [{ issue: '의견없음', action: '-' }],
+    ...Object.fromEntries(cats.flatMap((c, i) => [
+      [`cat${i + 1}`, c.rows.map(r => ({ label: LEAD_REPORT_LABELS[r.key] || r.label, avg: f1(r.avg), pct: fInt(r.pct) }))],
+      [`cat${i + 1}Count`, String(c.rows.length)],
+      [`cat${i + 1}Avg`, f1(c.avg)],
+      [`cat${i + 1}Pct`, fInt(c.pct)],
+    ])),
+    lec: hasLec
+      ? lectures.map(l => ({ subject: l.subject, name: l.name, avg: f1(l.avg), pct: fInt(l.pct) }))
+      : [{ subject: '-', name: '-', avg: '-', pct: '-' }],
+    lecCount: String(lectures.length),
+    lecAvg: hasLec ? f1(lecAvg) : '-',
+    lecPct: hasLec ? fInt(nums.lecPct) : '-',
+    lecGrade: hasLec ? gradeOf(lecAvg) : '-',
+    fieldStatus: leadFieldStatus(fields),
+    facility: facility.length ? facility : ['없음'],
+    facilityAction: withAction(facility, draft.facilityAction),
+    instructor: instructor.length ? instructor : ['없음'],
+    instructorAction: withAction(instructor, draft.instructorAction),
+    surveyImprove: clean(draft.surveyImprove).length ? clean(draft.surveyImprove) : ['없음'],
   };
 }
 

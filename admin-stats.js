@@ -157,7 +157,7 @@ async function populateRoundSelect(courseId) {
     sel.innerHTML += rounds.map(r => {
       const closed = r.active === false ? ' [종료]' : '';
       const label = (r.name ? `${r.number}회차 · ${r.name}` : `${r.number}회차`) + closed;
-      return `<option value="${escapeAttr(r._id)}" data-num="${r.number}" data-name="${escapeAttr(r.name || '')}">${escapeHtml(label)}</option>`;
+      return `<option value="${escapeAttr(r._id)}" data-num="${r.number}" data-name="${escapeAttr(r.name || '')}" data-start="${escapeAttr(r.startDate || '')}" data-end="${escapeAttr(r.endDate || '')}">${escapeHtml(label)}</option>`;
     }).join('');
   } catch (_) {
     sel.innerHTML = '<option value="">회차 불러오기 실패</option>';
@@ -318,6 +318,8 @@ export async function loadStats() {
       state.lastRoundLabel = rLabel;
       state.lastRoundNumber = parseInt(rOpt?.dataset.num) || 0;
       state.lastRoundName = rOpt?.dataset.name || '';
+      state.lastRoundStart = rOpt?.dataset.start || '';
+      state.lastRoundEnd = rOpt?.dataset.end || '';
       displayLabel = `${courseLabel} · ${rLabel}`;
       if (categoryFilter) {
         displayLabel += ` · ${categoryFilter}`;
