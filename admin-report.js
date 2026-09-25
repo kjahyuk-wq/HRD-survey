@@ -10,7 +10,7 @@ import { generateCategoryChart } from './admin-excel.js';
 import { fillHwpxSection, serializeXml } from './hwpx-fill.js';
 import {
   isReportSupported, computeReportNumbers, buildReportData, buildLeadershipReportData, chartSeries,
-  LEADERSHIP_EXCLUDED_KEYS, LOW_AVG, LOW_PCT, findLowItems, summarizeDemographics,
+  LEADERSHIP_EXCLUDED_KEYS, LOW_AVG, LOW_PCT, findLowItems,
   collectComments, formatPeriod, formatKoDate,
 } from './survey-report-data.js';
 
@@ -61,7 +61,7 @@ function reportCourseName() {
 function currentNumbers() {
   const cfg = getSurveyConfig(state.lastCourseType);
   const stats = state.lastComputedStats || computeStats(state.lastResponses, state.lastOrderedInstructorKeys, cfg);
-  return { cfg, stats, nums: computeReportNumbers(stats, cfg, isLeadership() ? LEADERSHIP_EXCLUDED_KEYS : []) };
+  return { cfg, nums: computeReportNumbers(stats, cfg, isLeadership() ? LEADERSHIP_EXCLUDED_KEYS : []) };
 }
 
 // ── 편집 창 ──
@@ -93,7 +93,6 @@ function ensureModal() {
             <label><span>설문대상(명)</span><input id="rp-target" type="text" inputmode="numeric"></label>
             <label><span>설문참여(명)</span><input id="rp-resp" type="text" inputmode="numeric"></label>
           </div>
-          <label class="rp-short-only"><span>응답자 구성 <small>(설문 인적사항 자동 요약 · 비우면 생략)</small></span><input id="rp-demo" type="text"></label>
           <label class="rp-lead-only report-check"><input id="rp-compare" type="checkbox" checked><span id="rp-compare-label">전 회차 대비 증감 표시</span></label>
           <label><span>과정장 / 담당자 <small>(다음에도 기억)</small></span><input id="rp-manager" type="text" placeholder="교육운영팀장: 홍길동 / 담당자: 행정7급 홍길동"></label>
         </fieldset>
@@ -293,7 +292,7 @@ async function refreshCompareLabel() {
 // ── 진입점 ──
 export function openSurveyReport() {
   if (!state.lastResponses.length) { alert('응답이 있는 과정을 먼저 선택해 주세요.'); return; }
-  const { cfg, stats, nums } = currentNumbers();
+  const { cfg, nums } = currentNumbers();
   if (!isReportSupported(cfg)) {
     alert('이 과정 유형은 결과보고서 서식(교육기간·교육운영·교육효과·시설환경)과 문항 구성이 달라 아직 지원하지 않습니다.');
     return;
@@ -321,7 +320,6 @@ export function openSurveyReport() {
   setVal('rp-target', String(state.lastStudentCount || n));
   setVal('rp-resp', String(n));
   setVal('rp-manager', lsGet(LS_MANAGER));
-  setVal('rp-demo', lead ? '' : summarizeDemographics(stats.demoRaw));
   renderRawComments(collectComments(state.lastResponses));
   renderLowItems(nums);
   if (lead) { document.getElementById('rp-compare').checked = true; refreshCompareLabel(); }
@@ -415,7 +413,6 @@ async function downloadReport() {
       respCount: responded,
       absentCount: String(Math.max(0, (Number(target) || 0) - (Number(responded) || 0))),
       manager: val('rp-manager').trim(),
-      demographics: lead ? '' : val('rp-demo').trim(),
     };
     let prev = null;
     if (lead && document.getElementById('rp-compare').checked) {

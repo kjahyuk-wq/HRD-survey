@@ -49,24 +49,6 @@ const isLow = (avg, pct) => avg < LOW_AVG || pct < LOW_PCT;
 const LOW_NOTE = '개선 필요';   // 객관식 표 비고란
 const LOW_MARK = ' ▼';          // 강의 표(비고란 없음) 평균 옆
 
-// 인적사항 선택형 문항 → "7급 43%·6급 29%, 행정직 61%, 40대 46%" (직급 상위 2, 직렬·연령 상위 1)
-// 개요 박스 한 줄에 들어가도록 문항명 없이 짧게
-const DEMO_PICK = [['q12', 2], ['q13', 1], ['q14', 1], ['nq15', 1]];
-export function summarizeDemographics(demoRaw) {
-  const parts = [];
-  DEMO_PICK.forEach(([key, top]) => {
-    const counts = demoRaw?.[key];
-    if (!counts) return;
-    const total = Object.values(counts).reduce((a, b) => a + b, 0);
-    if (!total) return;
-    const tops = Object.entries(counts).filter(([, c]) => c > 0)
-      .sort((a, b) => b[1] - a[1]).slice(0, top)
-      .map(([opt, c]) => `${opt} ${Math.round(c / total * 100)}%`);
-    parts.push(tops.join('·'));
-  });
-  return parts.join(', ');
-}
-
 function reportLabel(q) {
   return STD_REPORT_LABELS[q.key] || String(q.label).replace(/^Q\d+(-\d+)?\.\s*/, '');
 }
@@ -180,11 +162,9 @@ export function buildReportData(nums, meta, draft) {
   const catRows = c => c.rows.map(r => ({
     label: r.label, avg: f2(r.avg), pct: fPct(r.pct), note: isLow(r2(r.avg), r1(r.pct)) ? LOW_NOTE : '',
   }));
-  const demographics = String(meta.demographics || '').trim();
 
   return {
     ...meta,
-    demographics: demographics ? [demographics] : [],
     effect: String(draft.effect || '').trim(),
     fieldCount: String(cats.length + (hasLec ? 1 : 0)),
     itemCount: String(itemCount),
