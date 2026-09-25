@@ -1943,3 +1943,9 @@ body.report-modal-lock { overflow: hidden; }
 }
 .report-modal-backdrop:not(.is-leadership) .rp-lead-only,
 .report-modal-backdrop.is-leadership .rp-short-only { display: none; }
+.report-group label.report-check { flex-direction: row; align-items: center; gap: 0.45rem; font-weight: 400; }
+.report-group label.report-check input { width: auto; }
+.report-low-list { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.85rem; }
+.report-low-row { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0.35rem 0.5rem; background: #fef2f2; border-radius: 6px; }
+.report-low-row b { color: #b91c1c; margin-left: 0.3rem; }
+.report-low-none { margin: 0; color: #6b7280; font-size: 0.85rem; }

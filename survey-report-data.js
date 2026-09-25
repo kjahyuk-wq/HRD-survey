@@ -42,6 +42,31 @@ const f2 = v => v.toFixed(2);
 const fPct = v => String(r1(v));          // 100 → "100", 96.43 → "96.4"
 const mean = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
 
+// 저조 기준 — 평균 4.0점 미만 또는 만족이상 80% 미만 (보고서에 보이는 자릿수로 판정)
+export const LOW_AVG = 4.0;
+export const LOW_PCT = 80;
+const isLow = (avg, pct) => avg < LOW_AVG || pct < LOW_PCT;
+const LOW_NOTE = '개선 필요';   // 객관식 표 비고란
+const LOW_MARK = ' ▼';          // 강의 표(비고란 없음) 평균 옆
+
+// 인적사항 선택형 문항 → "7급 43%·6급 29%, 행정직 61%, 40대 46%" (직급 상위 2, 직렬·연령 상위 1)
+// 개요 박스 한 줄에 들어가도록 문항명 없이 짧게
+const DEMO_PICK = [['q12', 2], ['q13', 1], ['q14', 1], ['nq15', 1]];
+export function summarizeDemographics(demoRaw) {
+  const parts = [];
+  DEMO_PICK.forEach(([key, top]) => {
+    const counts = demoRaw?.[key];
+    if (!counts) return;
+    const total = Object.values(counts).reduce((a, b) => a + b, 0);
+    if (!total) return;
+    const tops = Object.entries(counts).filter(([, c]) => c > 0)
+      .sort((a, b) => b[1] - a[1]).slice(0, top)
+      .map(([opt, c]) => `${opt} ${Math.round(c / total * 100)}%`);
+    parts.push(tops.join('·'));
+  });
+  return parts.join(', ');
+}
+
 function reportLabel(q) {
   return STD_REPORT_LABELS[q.key] || String(q.label).replace(/^Q\d+(-\d+)?\.\s*/, '');
 }
@@ -152,10 +177,14 @@ export function buildReportData(nums, meta, draft) {
     .filter(x => x.issue);
 
   const overallGrade = gradeOf(overallAvg);
-  const catRows = c => c.rows.map(r => ({ label: r.label, avg: f2(r.avg), pct: fPct(r.pct) }));
+  const catRows = c => c.rows.map(r => ({
+    label: r.label, avg: f2(r.avg), pct: fPct(r.pct), note: isLow(r2(r.avg), r1(r.pct)) ? LOW_NOTE : '',
+  }));
+  const demographics = String(meta.demographics || '').trim();
 
   return {
     ...meta,
+    demographics: demographics ? [demographics] : [],
     effect: String(draft.effect || '').trim(),
     fieldCount: String(cats.length + (hasLec ? 1 : 0)),
     itemCount: String(itemCount),
@@ -175,7 +204,10 @@ export function buildReportData(nums, meta, draft) {
       [`cat${i + 1}Pct`, f2(c.pct)],
     ])),
     lec: hasLec
-      ? lectures.map(l => ({ subject: l.subject, name: l.name, avg: f2(l.avg), pct: fPct(l.pct) }))
+      ? lectures.map(l => ({
+        subject: l.subject, name: l.name, pct: fPct(l.pct),
+        avg: f2(l.avg) + (isLow(r2(l.avg), r1(l.pct)) ? LOW_MARK : ''),
+      }))
       : [{ subject: '-', name: '-', avg: '-', pct: '-' }],
     lecCount: String(lectures.length),
     lecAvg: hasLec ? f2(lecAvg) : '-',
@@ -215,9 +247,24 @@ function leadFieldStatus(fields) {
   return `${parts.slice(0, -1).join(', ')}이며, ${parts[parts.length - 1]}으로 나타남`;
 }
 
-// meta 는 buildReportData 와 같고 absentCount 추가.
+// 전 회차 대비 증감 "▲0.1" / "▼0.2" / "동일" (보이는 값 = 소수 첫째 자리 기준)
+function leadDiff(cur, prev) {
+  const d = Number((r1(cur) - r1(prev)).toFixed(1));
+  return d > 0 ? `▲${d.toFixed(1)}` : d < 0 ? `▼${Math.abs(d).toFixed(1)}` : '동일';
+}
+
+// "7~8월 대비 평균 만족도 4.7점 → 4.6점(▼0.1), 교육기간 ▲0.2, 교육운영 동일, …"
+function leadCompareLine(nums, prev, prevLabel) {
+  const parts = nums.cats.map((c, i) => (prev.cats[i]?.rows.length && c.rows.length ? `${c.label} ${leadDiff(c.avg, prev.cats[i].avg)}` : null));
+  if (nums.lectures.length && prev.lectures.length) parts.push(`강의만족도 ${leadDiff(nums.lecAvg, prev.lecAvg)}`);
+  const head = `${prevLabel || '전 회차'} 대비 평균 만족도 ${r1(prev.overallAvg).toFixed(1)}점 → ${r1(nums.overallAvg).toFixed(1)}점(${leadDiff(nums.overallAvg, prev.overallAvg)})`;
+  return [head, ...parts.filter(Boolean)].join(', ');
+}
+
+// meta 는 buildReportData 와 같고 absentCount 추가 (+ 비교 시 prevLabel).
 // draft 에 facilityAction / instructorAction (검토결과 "→" 줄) 추가.
-export function buildLeadershipReportData(nums, meta, draft) {
+// prev: 비교할 전 회차의 computeReportNumbers 결과 (없으면 null → 증감 표시 생략)
+export function buildLeadershipReportData(nums, meta, draft, prev = null) {
   const { cats, lectures } = nums;
   const f1 = v => v.toFixed(1);
   const fInt = v => String(Math.round(v));
@@ -225,6 +272,7 @@ export function buildLeadershipReportData(nums, meta, draft) {
   const hasLec = lectures.length > 0;
   const lecAvg = r1(nums.lecAvg);
   const overallAvg = r1(nums.overallAvg);
+  const low = (avg, pct) => isLow(r1(avg), Math.round(pct));
 
   const fields = [
     ...cats.map(c => ({ label: c.label, grade: g1(c.avg) })),
@@ -245,17 +293,24 @@ export function buildLeadershipReportData(nums, meta, draft) {
     itemCount: String(nums.itemCount),
     overallAvg: f1(overallAvg),
     overallGrade: gradeOf(overallAvg),
+    compareLine: prev ? [leadCompareLine(nums, prev, meta.prevLabel)] : [],
     improve: improvements.length
       ? improvements.map(x => ({ issue: x.issue, action: x.action || '-' }))
       : [{ issue: '의견없음', action: '-' }],
     ...Object.fromEntries(cats.flatMap((c, i) => [
-      [`cat${i + 1}`, c.rows.map(r => ({ label: LEAD_REPORT_LABELS[r.key] || r.label, avg: f1(r.avg), pct: fInt(r.pct) }))],
+      [`cat${i + 1}`, c.rows.map(r => ({
+        label: LEAD_REPORT_LABELS[r.key] || r.label, avg: f1(r.avg), pct: fInt(r.pct),
+        note: low(r.avg, r.pct) ? LOW_NOTE : '',
+      }))],
       [`cat${i + 1}Count`, String(c.rows.length)],
       [`cat${i + 1}Avg`, f1(c.avg)],
       [`cat${i + 1}Pct`, fInt(c.pct)],
     ])),
     lec: hasLec
-      ? lectures.map(l => ({ subject: l.subject, name: l.name, avg: f1(l.avg), pct: fInt(l.pct) }))
+      ? lectures.map(l => ({
+        subject: l.subject, name: l.name, pct: fInt(l.pct),
+        avg: f1(l.avg) + (low(l.avg, l.pct) ? LOW_MARK : ''),
+      }))
       : [{ subject: '-', name: '-', avg: '-', pct: '-' }],
     lecCount: String(lectures.length),
     lecAvg: hasLec ? f1(lecAvg) : '-',
@@ -268,6 +323,23 @@ export function buildLeadershipReportData(nums, meta, draft) {
     instructorAction: withAction(instructor, draft.instructorAction),
     surveyImprove: clean(draft.surveyImprove).length ? clean(draft.surveyImprove) : ['없음'],
   };
+}
+
+// 편집 창 "저조 항목" 목록 — 보고서에 보이는 자릿수로 판정
+export function findLowItems(nums, style = 'short') {
+  const lead = style === 'leadership';
+  const ra = lead ? r1 : r2;
+  const rp = lead ? Math.round : r1;
+  const out = [];
+  nums.cats.forEach(c => c.rows.forEach(r => {
+    const avg = ra(r.avg), pct = rp(r.pct);
+    if (isLow(avg, pct)) out.push({ kind: 'item', label: (lead && LEAD_REPORT_LABELS[r.key]) || r.label, avg, pct });
+  }));
+  nums.lectures.forEach(l => {
+    const avg = ra(l.avg), pct = rp(l.pct);
+    if (isLow(avg, pct)) out.push({ kind: 'lecture', label: l.subject, name: l.name, avg, pct });
+  });
+  return out;
 }
 
 // 차트(분야별 만족도 현황)용 라벨·값

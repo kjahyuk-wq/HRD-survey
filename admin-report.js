@@ -1,15 +1,16 @@
 // ── 만족도 결과보고서(HWPX) ──────────────────────────────
 // [결과보고서(한글)] 버튼 → 편집 창을 열고 AI(Cloud Function) 서술 초안을 받아 채움
 // → 담당자가 확인·수정 → templates/survey-report.hwpx 에 수치·서술을 채워 다운로드.
-import { functions } from './firebase-config.js';
+import { db, functions } from './firebase-config.js';
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-functions.js";
+import { collection, getDocs } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { state, escapeHtml, getSurveyConfig } from './admin-utils.js';
 import { computeStats } from './admin-stats.js';
 import { generateCategoryChart } from './admin-excel.js';
 import { fillHwpxSection, serializeXml } from './hwpx-fill.js';
 import {
   isReportSupported, computeReportNumbers, buildReportData, buildLeadershipReportData, chartSeries,
-  LEADERSHIP_EXCLUDED_KEYS,
+  LEADERSHIP_EXCLUDED_KEYS, LOW_AVG, LOW_PCT, findLowItems, summarizeDemographics,
   collectComments, formatPeriod, formatKoDate,
 } from './survey-report-data.js';
 
@@ -25,6 +26,8 @@ const lsGoalKey = id => `reportGoal:${id}`;
 
 // 과정(+회차)별 AI 초안 캐시 — 창을 닫았다 다시 열어도 재호출하지 않음
 const draftCache = new Map();
+// 중견 회차별 "비교할 전 회차" 캐시 — { label, nums } 또는 null
+const prevRoundCache = new Map();
 
 function lsGet(k) { try { return localStorage.getItem(k) || ''; } catch (_) { return ''; } }
 function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (_) {} }
@@ -58,7 +61,7 @@ function reportCourseName() {
 function currentNumbers() {
   const cfg = getSurveyConfig(state.lastCourseType);
   const stats = state.lastComputedStats || computeStats(state.lastResponses, state.lastOrderedInstructorKeys, cfg);
-  return { cfg, nums: computeReportNumbers(stats, cfg, isLeadership() ? LEADERSHIP_EXCLUDED_KEYS : []) };
+  return { cfg, stats, nums: computeReportNumbers(stats, cfg, isLeadership() ? LEADERSHIP_EXCLUDED_KEYS : []) };
 }
 
 // ── 편집 창 ──
@@ -90,7 +93,14 @@ function ensureModal() {
             <label><span>설문대상(명)</span><input id="rp-target" type="text" inputmode="numeric"></label>
             <label><span>설문참여(명)</span><input id="rp-resp" type="text" inputmode="numeric"></label>
           </div>
+          <label class="rp-short-only"><span>응답자 구성 <small>(설문 인적사항 자동 요약 · 비우면 생략)</small></span><input id="rp-demo" type="text"></label>
+          <label class="rp-lead-only report-check"><input id="rp-compare" type="checkbox" checked><span id="rp-compare-label">전 회차 대비 증감 표시</span></label>
           <label><span>과정장 / 담당자 <small>(다음에도 기억)</small></span><input id="rp-manager" type="text" placeholder="교육운영팀장: 홍길동 / 담당자: 행정7급 홍길동"></label>
+        </fieldset>
+
+        <fieldset class="report-group">
+          <legend>저조 항목 <small>평균 ${LOW_AVG.toFixed(1)}점 미만 또는 만족이상 ${LOW_PCT}% 미만 · 보고서 표에 '개선 필요'/▼ 표시</small></legend>
+          <div id="rp-low-list" class="report-low-list"></div>
         </fieldset>
 
         <fieldset class="report-group">
@@ -129,6 +139,7 @@ function ensureModal() {
     else if (act === 'add-improve') addImproveRow();
     else if (act === 'remove-improve') e.target.closest('.report-improve-row')?.remove();
     else if (act === 'ai') runAiDraft(true);
+    else if (act === 'add-low') addLowAsImprovement(Number(e.target.dataset.idx));
     else if (act === 'download') downloadReport();
   });
   document.addEventListener('keydown', e => {
@@ -213,10 +224,76 @@ function renderRawComments(comments) {
   }).join('');
 }
 
+// ── 저조 항목 ──
+let lowItems = [];
+function renderLowItems(nums) {
+  lowItems = findLowItems(nums, isLeadership() ? 'leadership' : 'short');
+  const box = document.getElementById('rp-low-list');
+  if (!lowItems.length) { box.innerHTML = '<p class="report-low-none">해당 항목 없음</p>'; return; }
+  box.innerHTML = lowItems.map((x, i) => `
+    <div class="report-low-row">
+      <span>${x.kind === 'lecture' ? '강의' : '항목'} · ${escapeHtml(x.label)}${x.name ? ` (${escapeHtml(x.name)})` : ''}
+        <b>${x.avg}점 / ${x.pct}%</b></span>
+      <button type="button" class="report-link-btn" data-act="add-low" data-idx="${i}">보완할 점에 추가</button>
+    </div>`).join('');
+}
+function addLowAsImprovement(i) {
+  const x = lowItems[i];
+  if (!x) return;
+  const issue = x.kind === 'lecture'
+    ? `「${x.label}」${x.name ? `(${x.name})` : ''} 강의 만족도 저조(${x.avg}점, 만족이상 ${x.pct}%)`
+    : `${x.label} 만족도 저조(${x.avg}점, 만족이상 ${x.pct}%)`;
+  addImproveRow(issue, x.kind === 'lecture' ? '차기 교육계획 수립 시 강사·과목 재검토' : '차기 교육계획 수립 시 개선 방안 검토');
+}
+
+// ── 중견: 전 회차(번호가 더 작은 회차 중 응답이 있는 가장 최근) 수치 ──
+async function loadPrevRound() {
+  const key = reportKey();
+  if (prevRoundCache.has(key)) return prevRoundCache.get(key);
+  const courseId = state.lastCourseId, curNum = state.lastRoundNumber || 0;
+  let result = null;
+  const snap = await getDocs(collection(db, 'courses', courseId, 'rounds'));
+  const prevs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    .filter(r => (r.number ?? 0) < curNum)
+    .sort((a, b) => (b.number ?? 0) - (a.number ?? 0));
+  for (const r of prevs) {
+    const resp = await getDocs(collection(db, 'courses', courseId, 'rounds', r.id, 'responses'));
+    if (!resp.size) continue;
+    const cfg = getSurveyConfig('leadership');
+    // 강사 순서는 평균 계산과 무관 → 응답에 있는 강사 전원으로 집계
+    const stats = computeStats(resp.docs.map(d => d.data()), [], cfg);
+    result = { label: r.name || `${r.number}회차`, nums: computeReportNumbers(stats, cfg, LEADERSHIP_EXCLUDED_KEYS) };
+    break;
+  }
+  prevRoundCache.set(key, result);
+  return result;
+}
+
+async function refreshCompareLabel() {
+  const label = document.getElementById('rp-compare-label');
+  const box = document.getElementById('rp-compare');
+  label.textContent = '전 회차 불러오는 중…';
+  box.disabled = true;
+  try {
+    const prev = await loadPrevRound();
+    if (prev) {
+      label.textContent = `전 회차(${prev.label}, 평균 ${prev.nums.overallAvg.toFixed(1)}점) 대비 증감 표시`;
+      box.disabled = false;
+    } else {
+      label.textContent = '비교할 전 회차 없음 (첫 회차이거나 전 회차 응답 없음)';
+      box.checked = false;
+    }
+  } catch (e) {
+    console.error('[report] 전 회차 불러오기 실패', e);
+    label.textContent = '전 회차를 불러오지 못해 증감 없이 만듭니다';
+    box.checked = false;
+  }
+}
+
 // ── 진입점 ──
 export function openSurveyReport() {
   if (!state.lastResponses.length) { alert('응답이 있는 과정을 먼저 선택해 주세요.'); return; }
-  const { cfg } = currentNumbers();
+  const { cfg, stats, nums } = currentNumbers();
   if (!isReportSupported(cfg)) {
     alert('이 과정 유형은 결과보고서 서식(교육기간·교육운영·교육효과·시설환경)과 문항 구성이 달라 아직 지원하지 않습니다.');
     return;
@@ -244,7 +321,10 @@ export function openSurveyReport() {
   setVal('rp-target', String(state.lastStudentCount || n));
   setVal('rp-resp', String(n));
   setVal('rp-manager', lsGet(LS_MANAGER));
+  setVal('rp-demo', lead ? '' : summarizeDemographics(stats.demoRaw));
   renderRawComments(collectComments(state.lastResponses));
+  renderLowItems(nums);
+  if (lead) { document.getElementById('rp-compare').checked = true; refreshCompareLabel(); }
 
   modal.classList.add('open');
   document.body.classList.add('report-modal-lock');
@@ -293,6 +373,7 @@ async function runAiDraft(isRetry) {
     const msg = code === 'not-found' || code === 'internal'
       ? 'AI 초안 기능에 연결하지 못했습니다(함수 미배포 또는 서버 오류).'
       : code === 'deadline-exceeded' ? 'AI 응답이 너무 오래 걸려 중단했습니다.'
+      : code === 'unauthenticated' ? '관리자 로그인이 풀렸습니다. 다시 로그인한 뒤 시도해 주세요.'
         : (e?.message || 'AI 초안을 만들지 못했습니다.');
     setStatus(`${msg} 서술 부분을 직접 입력해도 다운로드할 수 있습니다.`, 'error');
   } finally {
@@ -334,8 +415,16 @@ async function downloadReport() {
       respCount: responded,
       absentCount: String(Math.max(0, (Number(target) || 0) - (Number(responded) || 0))),
       manager: val('rp-manager').trim(),
+      demographics: lead ? '' : val('rp-demo').trim(),
     };
-    const data = lead ? buildLeadershipReportData(nums, meta, readDraft()) : buildReportData(nums, meta, readDraft());
+    let prev = null;
+    if (lead && document.getElementById('rp-compare').checked) {
+      prev = await loadPrevRound().catch(() => null);
+      if (prev) meta.prevLabel = prev.label;
+    }
+    const data = lead
+      ? buildLeadershipReportData(nums, meta, readDraft(), prev?.nums || null)
+      : buildReportData(nums, meta, readDraft());
 
     const JSZip = await loadJSZip();
     const resp = await fetch(TEMPLATE_URLS[lead ? 'leadership' : 'short'], { cache: 'no-cache' });
