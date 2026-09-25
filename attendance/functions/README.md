@@ -9,6 +9,7 @@
 | `loginByEmail({ name, email })` | 학생 로그인. HMAC 매칭 → custom token (uid = `stu_<hash28>`, claim `role: 'student'`) |
 | `registerAttendanceStudents({ courseId, students[] })` | 관리자 엑셀 일괄 등록. 메일 평문은 함수 스코프에서만 처리 후 폐기 |
 | `registerAttendanceStudent({ courseId, name, empNo, email })` | 관리자 단건 등록 |
+| `generateSurveyReportDraft({ courseName, categories, lectures, comments, … })` | 관리자 설문 결과 탭 → 만족도 결과보고서(한글)의 총평·보완할 점·주관식 요약 초안을 Claude API 로 생성. 시크릿 `ANTHROPIC_API_KEY` 필요 (`firebase functions:secrets:set ANTHROPIC_API_KEY`) |
 
 ## 어뷰징 방어
 
